@@ -16,7 +16,7 @@ dependencies = [
 [project.optional-dependencies]
 # Live loop (phases 2-4). Windows-only packages are marked so `pip install` works on Linux CI.
 live = [
-  "fastapi", "uvicorn", "mss", "pillow", "pyautogui", "keyboard", "ollama",
+  "fastapi", "uvicorn", "mss", "pillow", "pyautogui", "keyboard",
   "uiautomation; sys_platform == 'win32'",
 ]
 dev = ["pytest>=8"]
