@@ -85,4 +85,6 @@ def main(argv=None) -> int:
         p.set_defaults(func=_later(phase))
 
     args = ap.parse_args(argv)
+    from engine.dpi import make_dpi_aware
+    make_dpi_aware()
     return args.func(args)

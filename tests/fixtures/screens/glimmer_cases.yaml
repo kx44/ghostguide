@@ -1,0 +1,22 @@
+# Cases for tests/accuracy/glimmer_speed.py. Take each screenshot on Windows (Win+Shift+S → full screen,
+# save as PNG in this folder with the name below). Same screenshot, different check → tests both answers.
+# Screenshots stay local unless they show nothing private; commit them only if the author is happy to.
+cases:
+  # VS Code, youtube-clone folder open, index.html open in the editor (after gold step 2)
+  - {id: vs-index-open-done, image: vscode-index-open.png, title: "Name it index.html",
+     check: "index.html open in editor", expect: done}
+  - {id: vs-index-open-css-notyet, image: vscode-index-open.png, title: "Name it styles.css",
+     check: "styles.css open", expect: not_yet}
+  # VS Code after Emmet boilerplate (gold step 3): <!DOCTYPE html>, <head>, <body> visible
+  - {id: vs-boilerplate-done, image: vscode-boilerplate.png, title: "Emmet boilerplate",
+     check: "Document has <!DOCTYPE html>, <head>, <body>", expect: done}
+  # Chrome showing the unstyled card (gold step 11)
+  - {id: chrome-unstyled-done, image: chrome-unstyled-card.png, title: "Save and check",
+     check: "Browser shows title, channel name, '12K views • 1 week ago' (unstyled)", expect: done}
+  - {id: chrome-unstyled-badge-notyet, image: chrome-unstyled-card.png, title: "Save and see it",
+     check: "Browser: white '12:24' on a dark pill, bottom-right of the thumbnail area", expect: not_yet}
+  # SOLIDWORKS: revolved cup without handle (gold step 18) — geometry is what Glimmer is for
+  - {id: sw-cup-done, image: sw-revolved-cup.png, title: "Confirm the revolve",
+     check: "Revolve1 in tree; cup-shaped solid", expect: done}
+  - {id: sw-cup-handle-notyet, image: sw-revolved-cup.png, title: "Confirm the sweep",
+     check: "Sweep1 in tree; mug has a handle", expect: not_yet}
