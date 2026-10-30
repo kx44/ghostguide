@@ -95,6 +95,23 @@ svg.L { position:absolute; left:0; top:0; width:100%; height:100%; overflow:visi
       box-shadow:0 3px 0 var(--kc-edge); transition:all .12s; vertical-align:middle; }
 .kc.sm { min-width:22px; height:20px; font-size:11px; padding:0 5px; box-shadow:0 2px 0 var(--kc-edge); }
 .kc.down { transform:translateY(3px); box-shadow:none; background:var(--g); color:var(--on-g); }
+
+/* click type (11): slim outline mouse; the button lights once per click, a modifier key-cap presses with it */
+.clicktype { position:absolute; display:flex; align-items:center; gap:8px; animation:fin .25s; }
+.clicktype .mouse { overflow:visible; }
+.clicktype .mhalo { fill:none; stroke:var(--halo); stroke-width:3.6; }
+.clicktype .mbody { fill:var(--mouse-bg); stroke:var(--g); stroke-width:1.6; }
+.clicktype .msplit { stroke:var(--g); stroke-width:1.2; opacity:.55; fill:none; }
+.clicktype .mwheel { fill:var(--g); opacity:.8; }
+.clicktype .mbtn { fill:transparent; }
+.clicktype .mbtn.on.p1 { animation:click1 1.8s infinite; }
+.clicktype .mbtn.on.p2 { animation:click2 1.8s infinite; }
+.clicktype .kpress.p1 { animation:kpress1 1.8s infinite; }
+.clicktype .kpress.p2 { animation:kpress2 1.8s infinite; }
+@keyframes click1 { 0%,18% { fill:transparent; } 22%,40% { fill:var(--g); } 46%,100% { fill:transparent; } }
+@keyframes click2 { 0%,18% { fill:transparent; } 21%,28% { fill:var(--g); } 31%,34% { fill:transparent; } 37%,44% { fill:var(--g); } 48%,100% { fill:transparent; } }
+@keyframes kpress1 { 0%,14% { background:var(--kc-bg); color:var(--kc-fg); } 18%,46% { background:var(--g); color:var(--on-g); transform:translateY(2px); box-shadow:none; } 50%,100% { background:var(--kc-bg); color:var(--kc-fg); } }
+@keyframes kpress2 { 0%,14% { background:var(--kc-bg); color:var(--kc-fg); } 18%,50% { background:var(--g); color:var(--on-g); transform:translateY(2px); box-shadow:none; } 54%,100% { background:var(--kc-bg); color:var(--kc-fg); } }
 .kc.done { background:var(--ok); color:var(--on-g); border-color:var(--ok); box-shadow:none; }
 .keys { margin:12px 0 2px; display:flex; align-items:center; justify-content:center; gap:6px; }
 .keys .plus { opacity:.7; }

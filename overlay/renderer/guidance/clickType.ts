@@ -1,37 +1,33 @@
-// 11 · Click type: for the first right / double / modifier click, a small mouse next to the outline shows
-// which button and how many times (+ a key-cap for the modifier). Used alone (style click_type = outline +
-// mouse) or added to path chips.
+// 11 · Click type: for the first right / double / modifier click, a slim mouse next to the outline shows
+// which button and how many times: that button lights up once per click (twice, quickly, for a double),
+// and a modifier key-cap beside it presses in time. Used alone (style click_type = outline + mouse) or
+// added to path chips.
 import type { GuideMsg, Local } from "../../shared/messages";
 import { Bag, Ctx, Mounted, el, kc, outline, toRect } from "../dom";
+
+// Slim outline mouse (glossary style 11, chosen 30 Oct): 30×44, violet line, dark/light body per scheme,
+// thin halo underneath so it reads on any background, scroll wheel, the two buttons split by a faint line.
+const MOUSE = (button: string, count: number) => {
+  const press = `class="mbtn on p${Math.min(count, 2)}"`;
+  return `<svg class="mouse" width="30" height="44" viewBox="0 0 30 44" aria-hidden="true">
+    <rect x="2" y="2" width="26" height="40" rx="13" class="mhalo"/>
+    <rect x="2" y="2" width="26" height="40" rx="13" class="mbody"/>
+    <path ${button === "left" ? press : `class="mbtn"`} d="M15 3.5 V19 H3.5 V15 A11.5 11.5 0 0 1 15 3.5Z"/>
+    <path ${button === "right" ? press : `class="mbtn"`} d="M15 3.5 V19 H26.5 V15 A11.5 11.5 0 0 0 15 3.5Z"/>
+    <path d="M15 3 V19 M3 19 H27" class="msplit"/>
+    <rect x="13.5" y="8" width="3" height="6" rx="1.5" class="mwheel"/></svg>`;
+};
 
 export function mountClickType(ctx: Ctx, g: GuideMsg, local: Local, withOutline = true): Mounted {
   const bag = new Bag();
   const r = toRect(local.box)!;
   const ct = g.extra.click_type ?? { button: "left", count: 1, modifiers: [], label: "Click" };
   const ol = withOutline ? bag.add(outline(ctx.ov, r)) : undefined;
-  const side = r.x + r.w + 60 < ctx.W ? r.x + r.w + 12 : r.x - 46;
-  const mouse = bag.add(el(ctx.ov, "abs", `left:${side}px;top:${r.y + r.h / 2 - 24}px;animation:fade .3s`,
-    `<svg width="34" height="49" viewBox="0 0 28 40" style="overflow:visible">
-      <rect x="1.5" y="1.5" width="25" height="37" rx="12.5" style="fill:var(--mouse-bg);stroke:var(--halo)" stroke-width="5"/>
-      <rect x="1.5" y="1.5" width="25" height="37" rx="12.5" style="fill:var(--mouse-bg);stroke:var(--g)" stroke-width="2.5"/>
-      <path data-b="left" d="M14 2.5 V16 H2.5 V14 A11.5 11.5 0 0 1 14 2.5Z" style="fill:transparent"/>
-      <path data-b="right" d="M14 2.5 V16 H25.5 V14 A11.5 11.5 0 0 0 14 2.5Z" style="fill:transparent"/>
-      <path d="M14 2.5 V16 M2.5 16 H25.5" style="stroke:var(--g)" stroke-width="2"/></svg>` +
-    (ct.count > 1 ? `<span class="pill" style="left:30px;top:-8px">×${ct.count}</span>` : "") +
-    (ct.modifiers.length ? `<span style="position:absolute;left:38px;top:14px;white-space:nowrap">${ct.modifiers.map(m => kc(m, "sm")).join(" ")}</span>` : "")));
-  const part = mouse.querySelector<SVGPathElement>(`[data-b="${ct.button}"]`)!;
-  let alive = true;
-  (async () => {
-    const wait = (ms: number) => new Promise(res => setTimeout(res, ms));
-    while (alive) {
-      for (let i = 0; i < ct.count && alive; i++) {
-        part.style.fill = "var(--g)"; await wait(ct.count > 1 ? 220 : 420);
-        part.style.fill = "transparent"; await wait(ct.count > 1 ? 160 : 200);
-      }
-      await wait(700);
-    }
-  })();
-  bag.onRemove(() => { alive = false; });
+  const mods = ct.modifiers.map(m => kc(m, "sm").replace('class="kc', `class="kc kpress p${Math.min(ct.count, 2)}`)).join(" ");
+  const right = r.x + r.w + 16 + 30 + (mods ? 70 : 0) < ctx.W;
+  const x = right ? r.x + r.w + 12 : r.x - 12 - 30 - (mods ? 62 : 0);
+  bag.add(el(ctx.ov, "clicktype", `left:${x}px;top:${r.y + r.h / 2 - 22}px`,
+    MOUSE(ct.button, ct.count) + (mods ? `<span class="mods">${mods}</span>` : "")));
   return {
     anchor: r,
     mark(result) { ol?.classList.remove("ok", "bad"); ol?.classList.add(result); },
