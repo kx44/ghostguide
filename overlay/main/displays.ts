@@ -31,3 +31,11 @@ export function displayForPoint(p: Pt): Display { return screen.getDisplayNeares
 const primaryScale = () => screen.getPrimaryDisplay().scaleFactor;
 const scaleRect = (r: Rectangle, s: number): Rectangle =>
   ({ x: Math.round(r.x * s), y: Math.round(r.y * s), width: Math.round(r.width * s), height: Math.round(r.height * s) });
+
+/** Mouse position in physical px (what the engine and pins use). */
+export function cursorPhysical(): Pt {
+  const p = screen.getCursorScreenPoint();
+  if (WIN) { const d = screen.dipToScreenPoint(p); return [d.x, d.y]; }
+  const s = primaryScale();
+  return [Math.round(p.x * s), Math.round(p.y * s)];
+}

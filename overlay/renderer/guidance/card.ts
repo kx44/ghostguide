@@ -34,6 +34,7 @@ export function mountCard(ctx: Ctx, g: GuideMsg, c: Card, m: Mounted, onAction: 
     (m.cardHtml ?? "") +
     (c.suggested ? `<div class="sug">Suggested: ${esc(c.suggested)} <span>(ours; the tutorial leaves it open)</span></div>` : "") +
     (c.done_when ? `<div class="done">Done when: ${esc(c.done_when)}</div>` : "") +
+    (c.dev_hint ? `<div class="devhint">${esc(c.dev_hint)}</div>` : "") +
     (actions ? `<div class="acts">${actions}</div>` : "");
   const card = el(ctx.ov, `card hit${m.wide ? " wide" : ""}`, "visibility:hidden", html);
   card.querySelectorAll<HTMLButtonElement>("button[data-a]").forEach(b => b.addEventListener("click", () => onAction(b.dataset.a!, b)));

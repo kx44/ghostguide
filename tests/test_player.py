@@ -114,3 +114,23 @@ def test_walk_writes_replay(tmp_path):
     guides = [l["msg"] for l in lines if l["msg"]["type"] == "guide"]
     assert [g["step"]["n"] for g in guides] == list(range(1, 24))
     assert lines[-1]["msg"]["type"] == "toast" and all(a["t"] <= b["t"] for a, b in zip(lines, lines[1:]))
+
+
+def test_pin_as_you_go(tmp_path):
+    s = Session(parse_file(config.TUTORIALS / "youtube-clone-vscode.md"))
+    path = tmp_path / "pins.yaml"
+    p = Player(s, Pins(), scheme_override="dark", pins_path=path)
+    out = p.handle(HELLO)
+    assert out[1].style == "card" and "Ctrl+Alt+P" in out[1].card.dev_hint
+    out = p.handle({"type": "pin", "at": [300, 90]})
+    assert "bottom-right" in out[1].card.dev_hint and "Top-left saved" in out[-1].text
+    out = p.handle({"type": "pin", "at": [276, 112]})          # corners in any order
+    assert out[1].style == "outline" and out[1].box.model_dump() == {"x": 276, "y": 90, "w": 24, "h": 22}
+    assert out[1].card.dev_hint is None and Pins.load(path).box(1).x == 276
+    p.handle({"type": "jump", "n": 6})
+    assert p.last_guide.card.dev_hint is None                 # shortcut: no pin needed
+    p.handle({"type": "jump", "n": 1})
+    out = p.handle({"type": "unpin"})
+    assert out[1].style == "card" and Pins.load(path).box(1) is None
+    p.handle({"type": "pin", "at": [5, 5]})
+    assert "Too small" in p.handle({"type": "pin", "at": [6, 6]})[-1].text

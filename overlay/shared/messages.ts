@@ -12,7 +12,7 @@ export const TO_OVERLAY = [
   "guide", "clear", "state", "toast", "show_me", "mark", "start_check", "compile_progress",
 ] as const;
 export const FROM_OVERLAY = [
-  "hello", "show_me", "do_it", "next", "back", "skip", "hide", "resume", "jump", "import",
+  "hello", "show_me", "do_it", "next", "back", "skip", "hide", "resume", "jump", "pin", "unpin", "import",
 ] as const;
 
 export interface Box { x: number; y: number; w: number; h: number }
@@ -50,6 +50,7 @@ export interface Card {
   suggested?: string;
   actions: string[];          // show_me | do_it | next | skip_wait
   low_confidence?: boolean;
+  dev_hint?: string;          // phase 2: how to pin this step's target
 }
 
 export interface StepInfo { n: number; of: number; title: string; part?: string; source_t?: string; confidence?: string }
@@ -81,7 +82,8 @@ export type ToOverlay = GuideMsg | ClearMsg | StateMsg | ToastMsg | ShowMeMsg | 
 export interface DisplayInfo { id: number | string; x: number; y: number; w: number; h: number; scale: number; primary: boolean }
 export type FromOverlay =
   | { type: "hello"; displays: DisplayInfo[]; version?: string; replay?: boolean }
-  | { type: "show_me" | "do_it" | "next" | "back" | "skip" | "hide" | "resume" }
+  | { type: "show_me" | "do_it" | "next" | "back" | "skip" | "hide" | "resume" | "unpin" }
+  | { type: "pin"; at: Pt }
   | { type: "jump"; n: number }
   | { type: "import"; url?: string; file?: string };
 

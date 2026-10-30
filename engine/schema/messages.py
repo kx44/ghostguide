@@ -92,6 +92,7 @@ class Card(BaseModel):
     suggested: Optional[str] = None   # our value when the author left it open; labelled as ours
     actions: list[str] = Field(default_factory=list)   # show_me | do_it | next | skip_wait
     low_confidence: bool = False
+    dev_hint: Optional[str] = None    # phase 2 only: "not pinned yet, Ctrl+Alt+P…"
 
 
 # ---------------- engine → overlay ----------------
@@ -212,16 +213,26 @@ class Jump(_Msg):
     n: int
 
 
+class PinReq(_Msg):
+    """Dev (phase 2): the mouse position when Ctrl+Alt+P was pressed, physical px. Two presses = one box."""
+    type: Literal["pin"] = "pin"
+    at: tuple[int, int]
+
+
+class Unpin(_Simple):
+    type: Literal["unpin"] = "unpin"
+
+
 class Import(_Msg):     # phase 5
     type: Literal["import"] = "import"
     url: Optional[str] = None
     file: Optional[str] = None
 
 
-FromOverlay = Union[Hello, ShowMeReq, DoIt, Next, Back, Skip, Hide, Resume, Jump, Import]
+FromOverlay = Union[Hello, ShowMeReq, DoIt, Next, Back, Skip, Hide, Resume, Jump, PinReq, Unpin, Import]
 
 TO_OVERLAY_TYPES = ("guide", "clear", "state", "toast", "show_me", "mark", "start_check", "compile_progress")
-FROM_OVERLAY_TYPES = ("hello", "show_me", "do_it", "next", "back", "skip", "hide", "resume", "jump", "import")
+FROM_OVERLAY_TYPES = ("hello", "show_me", "do_it", "next", "back", "skip", "hide", "resume", "jump", "pin", "unpin", "import")
 
 
 def parse_from_overlay(raw: Union[str, bytes, dict]) -> FromOverlay:

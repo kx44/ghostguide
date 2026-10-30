@@ -10,18 +10,25 @@ from typing import Callable, Optional
 
 from pydantic import ValidationError
 
-from engine.live.locate.pinned import Pins
+from engine.live.locate.pinned import Pin, Pins
 from engine.live.plan import Planner
 from engine.live.session import Event, Session
 from engine.schema import messages as m
+
+# Steps that need no on-screen target (their card alone is the guidance), so no "not pinned" hint.
+NO_PIN_NEEDED = {"shortcut", "wait", "look"}
+LINE_ACTIONS = {"draw_line", "drag"}
 
 SchemeFn = Callable[[Optional[m.Box]], tuple[str, Optional[float]]]
 
 
 class Player:
     def __init__(self, session: Session, pins: Optional[Pins] = None, scheme_fn: Optional[SchemeFn] = None,
-                 scheme_override: Optional[str] = None, before_capture: Optional[Callable[[], None]] = None):
+                 scheme_override: Optional[str] = None, before_capture: Optional[Callable[[], None]] = None,
+                 pins_path=None):
         self.session = session
+        self.pins_path = pins_path               # where Ctrl+Alt+P pins are saved; None = keep in memory
+        self._corner: Optional[tuple[int, int]] = None   # first Ctrl+Alt+P of a pair
         self.planner = Planner(session.tutorial)
         self.pins = pins or Pins()
         self.displays: list[m.Display] = []
@@ -61,6 +68,12 @@ class Player:
             box, line = self.target(step.n)
             self.scheme = self._scheme(box)
             guide = self.planner.plan(step, box, line, self.displays, self.scheme)
+            if guide.card is not None and box is None and step.action not in NO_PIN_NEEDED:
+                first = "start point" if step.action in LINE_ACTIONS else "top-left corner"
+                second = "end point" if step.action in LINE_ACTIONS else "bottom-right corner"
+                guide.card.dev_hint = (f"Not pinned yet: hover the {first} of {step.target.label} and press "
+                                       f"Ctrl+Alt+P, then the {second} and Ctrl+Alt+P again." if self._corner is None
+                                       else f"Now hover the {second} and press Ctrl+Alt+P.")
         out.append(self.state())
         if guide is None:
             out.append(m.Clear(reason="finished" if s.finished else "hidden"))
@@ -93,6 +106,15 @@ class Player:
             box, line = self.target(s.step.n)
             sm = self.planner.show_me(s.step, box, line)
             return [sm] if sm else [m.Toast(text="No target pinned for this step, so nothing to show.", kind="warn")]
+        if t == "pin":
+            return self._pin(msg.at)
+        if t == "unpin":
+            if s.finished or s.step is None or s.step.n not in self.pins.steps:
+                return []
+            del self.pins.steps[s.step.n]
+            self._corner = None
+            self._save_pins()
+            return self.current() + [m.Toast(text=f"Pin removed from step {s.step.n}.", kind="warn")]
         if t == "do_it":
             return [m.Toast(text="Do it for me arrives in phase 4.", kind="warn")]
         if t == "import":
@@ -115,6 +137,32 @@ class Player:
         if t == "resume":
             return self._after(s.resume())
         return []
+
+    def _pin(self, at: tuple[int, int]) -> list[m._Msg]:
+        s = self.session
+        if s.finished or s.hidden or s.step is None:
+            return []
+        if self._corner is None:
+            self._corner = at
+            out = self.current()
+            what = "Start point" if s.step.action in LINE_ACTIONS else "Top-left"
+            return out + [m.Toast(text=f"{what} saved. Now the other corner, Ctrl+Alt+P.", ms=2500)]
+        (x1, y1), (x2, y2) = self._corner, at
+        self._corner = None
+        if s.step.action in LINE_ACTIONS:
+            self.pins.steps[s.step.n] = Pin(line=((x1, y1), (x2, y2)))
+        else:
+            w, h = abs(x2 - x1), abs(y2 - y1)
+            if w < 3 or h < 3:
+                return self.current() + [m.Toast(text="Too small: press Ctrl+Alt+P on two opposite corners.", kind="warn")]
+            self.pins.steps[s.step.n] = Pin(box=(min(x1, x2), min(y1, y2), w, h))
+        self._save_pins()
+        self._scheme_cache.clear()
+        return self.current() + [m.Toast(text=f"✓ Step {s.step.n} pinned. Ctrl+Alt+U removes it.")]
+
+    def _save_pins(self) -> None:
+        if self.pins_path is not None:
+            self.pins.dump(self.pins_path)
 
     def _after(self, ev: Event) -> list[m._Msg]:
         if ev.kind == "noop":

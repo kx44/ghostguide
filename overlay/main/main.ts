@@ -2,11 +2,12 @@
 // It routes each engine message to the display its target is on, converted to that window's DIPs.
 //
 //   npm start                         connect to the engine at ws://127.0.0.1:8765 (python -m engine play …)
-//   npm start -- --replay f.jsonl     play a recorded session, no engine   [--speed 2] [--loop]
+//   npm start -- --replay f.jsonl     a recorded session, no engine: step by step, waits for Next
+//                                     [--timed [--speed 2] [--loop]] plays it on its timestamps instead
 import { BrowserWindow, Display, app, ipcMain, screen } from "electron";
 import { join } from "node:path";
 import type { FromOverlay, Local, Routed, StateMsg, ToOverlay } from "../shared/messages";
-import { Link, connectEngine, replayFile } from "./bridge";
+import { Link, connectEngine, replaySteps, replayTimed } from "./bridge";
 import { displayForPoint, displayForRect, physicalDisplays, toDipPoint, toDipRect } from "./displays";
 import { registerHotkeys, unregisterHotkeys } from "./hotkeys";
 
@@ -15,6 +16,7 @@ const arg = (name: string) => { const i = argv.indexOf(name); return i >= 0 ? ar
 const REPLAY = arg("--replay");
 const SPEED = Number(arg("--speed") ?? 1);
 const LOOP = argv.includes("--loop");
+const TIMED = argv.includes("--timed");
 const ENGINE = arg("--engine") ?? `ws://127.0.0.1:${arg("--port") ?? 8765}`;
 
 interface Win { win: BrowserWindow; display: Display; ready: boolean; queue: Routed[] }
@@ -66,6 +68,7 @@ const localPt = (d: Display, p: [number, number]): [number, number] => [Math.rou
 const primaryWin = () => wins.get(screen.getPrimaryDisplay().id) ?? [...wins.values()][0];
 
 function route(msg: ToOverlay) {
+  if (process.env.GHOST_DEBUG) console.log("route", msg.type, wins.size);
   switch (msg.type) {
     case "guide": {
       let d: Display | undefined, local: Local = {};
@@ -131,7 +134,7 @@ app.whenReady().then(() => {
 
   let wasUp: boolean | undefined;
   link = REPLAY
-    ? replayFile(REPLAY, route, SPEED, LOOP)
+    ? (TIMED ? replayTimed(REPLAY, route, SPEED, LOOP) : replaySteps(REPLAY, route))
     : connectEngine(ENGINE, route, hello, up => {
         if (up === wasUp) return;
         wasUp = up;

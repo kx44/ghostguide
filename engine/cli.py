@@ -71,12 +71,12 @@ def _load_play(args):
     if args.restart:
         session.save()
     override = None if args.scheme == "auto" else args.scheme
-    player = Player(session, pins, scheme_fn=pick_scheme, scheme_override=override)
+    player = Player(session, pins, scheme_fn=pick_scheme, scheme_override=override, pins_path=pins_path)
     pinned = len(pins.steps)
     print(f"{tut.meta.title}: {session.of} steps, {pinned} pinned ({pins_path})"
           + (f", resuming at step {session.current}" if restored else ""))
     if not pinned:
-        print("  no pins: every step shows its card only. Make pins with `python -m engine pin " + args.tutorial + "`")
+        print("  no pins yet: each card says how to pin its target as you go (hover, Ctrl+Alt+P twice)")
     return player
 
 
