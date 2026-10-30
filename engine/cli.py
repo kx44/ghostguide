@@ -71,11 +71,18 @@ def _load_play(args):
     if args.restart:
         session.save()
     override = None if args.scheme == "auto" else args.scheme
-    player = Player(session, pins, scheme_fn=pick_scheme, scheme_override=override, pins_path=pins_path)
+    locator = None
+    if getattr(args, "locate", "pins") == "auto" and not getattr(args, "walk", None) and sys.platform == "win32" and "visual studio code" in tut.meta.app.casefold():
+        from engine.live.locate.vscode import VSCodeLocator
+        locator = VSCodeLocator(args.window or "Visual Studio Code")
+    player = Player(session, pins, scheme_fn=pick_scheme, scheme_override=override, pins_path=pins_path,
+                    locator=locator)
     pinned = len(pins.steps)
     print(f"{tut.meta.title}: {session.of} steps, {pinned} pinned ({pins_path})"
           + (f", resuming at step {session.current}" if restored else ""))
-    if not pinned:
+    if locator is not None:
+        print(f"  finding targets live in the '{locator.window}' window (UIA); a pin overrides a step")
+    elif not pinned:
         print("  no pins yet: each card says how to pin its target as you go (hover, Ctrl+Alt+P twice)")
     return player
 
@@ -210,6 +217,9 @@ def main(argv=None) -> int:
     pl.add_argument("--scheme", choices=("auto", "light", "dark"), default="auto",
                     help="auto = from the pixels around the target (Windows), else the Windows theme")
     pl.add_argument("--restart", action="store_true", help="ignore saved progress, start at step 1")
+    pl.add_argument("--locate", choices=("auto", "pins"), default="auto",
+                    help="auto = find VS Code targets live with UIA (Windows), pins = hand pins only")
+    pl.add_argument("--window", help='part of the app window title, e.g. "youtube-clone - Visual Studio Code"')
     pl.add_argument("--console", action="store_true", help="no overlay: drive it from the terminal")
     pl.add_argument("--walk", metavar="OUT.jsonl", help="write a replay file that steps through the whole tutorial")
     pl.add_argument("--every", type=int, default=3500, help="--walk: ms per step")

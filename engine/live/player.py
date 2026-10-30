@@ -2,11 +2,12 @@
 the list of messages to send back. `engine/server.py` carries them over the WebSocket; tests and the
 console mode call this directly.
 
-Phase 2 finds targets from pinned boxes only (locate/pinned.py). Phase 3 swaps in the resolver.
+Phase 2 finds targets from pinned boxes (locate/pinned.py), else from a locator such as the VS Code UIA
+rules (locate/vscode.py); a pin always wins. Phase 3 swaps in the resolver.
 """
 from __future__ import annotations
 
-from typing import Callable, Optional
+from typing import Callable, Optional, Protocol
 
 from pydantic import ValidationError
 
@@ -22,11 +23,18 @@ LINE_ACTIONS = {"draw_line", "drag"}
 SchemeFn = Callable[[Optional[m.Box]], tuple[str, Optional[float]]]
 
 
+class Locator(Protocol):
+    last_how: str                                # which rule hit, or why nothing did
+
+    def locate(self, step) -> tuple[Optional[m.Box], Optional[m.Line]]: ...
+
+
 class Player:
     def __init__(self, session: Session, pins: Optional[Pins] = None, scheme_fn: Optional[SchemeFn] = None,
                  scheme_override: Optional[str] = None, before_capture: Optional[Callable[[], None]] = None,
-                 pins_path=None):
+                 pins_path=None, locator: Optional[Locator] = None):
         self.session = session
+        self.locator = locator                   # finds targets live; re-asked by refresh() while a step shows
         self.pins_path = pins_path               # where Ctrl+Alt+P pins are saved; None = keep in memory
         self._corner: Optional[tuple[int, int]] = None   # first Ctrl+Alt+P of a pair
         self.planner = Planner(session.tutorial)
@@ -41,14 +49,22 @@ class Player:
 
     # ---------- what's on screen now ----------
     def target(self, n: int) -> tuple[Optional[m.Box], Optional[m.Line]]:
-        return self.pins.box(n), self.pins.line(n)
+        box, line = self.pins.box(n), self.pins.line(n)
+        if box is None and line is None and self.locator is not None:
+            try:
+                box, line = self.locator.locate(self.session.tutorial.steps[n - 1])
+            except Exception as e:    # UIA hiccups (window closing, element gone) must not end the session
+                self.locator.last_how = f"locator error: {e}"
+                box, line = None, None
+        return box, line
 
-    def _scheme(self, box: Optional[m.Box]) -> str:
+    def _scheme(self, box: Optional[m.Box], n: Optional[int] = None) -> str:
         if self.scheme_override:
             return self.scheme_override
         if self._scheme_fn is None:
             return self.scheme
-        key = (box.x, box.y, box.w, box.h) if box else None
+        # A located box moves with the caret; the app behind it doesn't change within a step, so measure once.
+        key = ("step", n) if self.locator is not None and n is not None else (box.x, box.y, box.w, box.h) if box else None
         if key in self._scheme_cache:
             return self._scheme_cache[key]
         if box is not None and self.before_capture:
@@ -66,12 +82,13 @@ class Player:
             step = s.step
             assert step is not None
             box, line = self.target(step.n)
-            self.scheme = self._scheme(box)
+            self.scheme = self._scheme(box, step.n)
             guide = self.planner.plan(step, box, line, self.displays, self.scheme)
             if guide.card is not None and box is None and step.action not in NO_PIN_NEEDED:
                 first = "start point" if step.action in LINE_ACTIONS else "top-left corner"
                 second = "end point" if step.action in LINE_ACTIONS else "bottom-right corner"
-                guide.card.dev_hint = (f"Not pinned yet: hover the {first} of {step.target.label} and press "
+                found = f"Not found ({self.locator.last_how}). " if self.locator is not None else "Not pinned yet: "
+                guide.card.dev_hint = (f"{found}Hover the {first} of {step.target.label} and press "
                                        f"Ctrl+Alt+P, then the {second} and Ctrl+Alt+P again." if self._corner is None
                                        else f"Now hover the {second} and press Ctrl+Alt+P.")
         out.append(self.state())
@@ -80,6 +97,19 @@ class Player:
         else:
             out.append(guide)
         self.last_guide = guide
+        return out
+
+    def refresh(self) -> list[m._Msg]:
+        """Re-locate the current step (the server calls this every second): the guide again when its
+        target moved, appeared or went away, else nothing."""
+        s = self.session
+        if self.locator is None or s.finished or s.hidden or s.step is None or s.step.n in self.pins.steps:
+            return []
+        before = self.last_guide
+        out = self.current()
+        g = self.last_guide
+        if before is not None and g is not None and (before.step.n, before.box, before.line) == (g.step.n, g.box, g.line):
+            return []
         return out
 
     def state(self) -> m.State:

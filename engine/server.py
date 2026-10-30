@@ -18,6 +18,7 @@ from engine.schema import messages as m
 
 DEFAULT_PORT = 8765
 CAPTURE_SETTLE_S = 0.08    # overlay clears, compositor shows the app, then we grab the ring
+POLL_S = 1.0               # how often a live locator re-finds the current step's target
 
 
 class Recorder:
@@ -51,6 +52,7 @@ async def serve(player: Player, port: int = DEFAULT_PORT, record: Optional[Path]
     clients: set = set()
     rec = Recorder(record)
     loop = asyncio.get_running_loop()
+    busy = asyncio.Lock()      # one player call at a time: overlay messages and the locator poll
 
     async def send_all(msgs: list[m._Msg]) -> None:
         for msg in msgs:
@@ -78,7 +80,8 @@ async def serve(player: Player, port: int = DEFAULT_PORT, record: Optional[Path]
                     kind = json.loads(raw).get("type", "?")
                 except ValueError:
                     kind = "?"
-                out = await asyncio.to_thread(player.handle, raw)
+                async with busy:
+                    out = await asyncio.to_thread(player.handle, raw)
                 s = player.session
                 where = "finished" if s.finished else f"step {s.current}/{s.of}" + (" (hidden)" if s.hidden else "")
                 log(f"  ← {kind:8s} → {where}")
@@ -87,9 +90,26 @@ async def serve(player: Player, port: int = DEFAULT_PORT, record: Optional[Path]
             clients.discard(ws)
             log("overlay disconnected")
 
+    async def poll():
+        last = None
+        while True:
+            await asyncio.sleep(POLL_S)
+            if not clients:
+                continue
+            async with busy:
+                out = await asyncio.to_thread(player.refresh)
+            how = getattr(player.locator, "last_how", None)
+            if how != last:
+                log(f"  locate step {player.session.current}: {how}")
+                last = how
+            await send_all(out)
+
     async with ws_serve(handler, "127.0.0.1", port, max_size=2 ** 20):
         log(f"engine listening on ws://127.0.0.1:{port} · {player.session.tutorial.meta.title}")
+        poller = asyncio.create_task(poll()) if player.locator is not None else None
         try:
             await asyncio.Future()
         finally:
+            if poller:
+                poller.cancel()
             rec.close()
