@@ -1,9 +1,11 @@
-"""python -m engine validate|compile|play|eval|record"""
+"""python -m engine validate|record|spend|play|pin (compile/eval in phase 5)"""
 from __future__ import annotations
 
 import argparse
 import glob
+import json
 import sys
+from pathlib import Path
 
 from engine import config
 
@@ -54,6 +56,127 @@ def cmd_spend(args) -> int:
     return 0
 
 
+def _load_play(args):
+    from engine.basefile.parse import parse_file
+    from engine.live.locate.pinned import Pins, default_path
+    from engine.live.player import Player
+    from engine.live.scheme import pick_scheme
+    from engine.live.session import Session
+
+    tut = parse_file(args.tutorial)
+    pins_path = Path(args.pins) if args.pins else default_path(args.tutorial)
+    pins = Pins.load(pins_path)
+    session = Session(tut, save_path=config.CACHE / "sessions" / (Path(args.tutorial).stem + ".json"))
+    restored = False if args.restart else session.restore()
+    if args.restart:
+        session.save()
+    override = None if args.scheme == "auto" else args.scheme
+    player = Player(session, pins, scheme_fn=pick_scheme, scheme_override=override)
+    pinned = len(pins.steps)
+    print(f"{tut.meta.title}: {session.of} steps, {pinned} pinned ({pins_path})"
+          + (f", resuming at step {session.current}" if restored else ""))
+    if not pinned:
+        print("  no pins: every step shows its card only. Make pins with `python -m engine pin " + args.tutorial + "`")
+    return player
+
+
+def _describe(msg) -> str:
+    d = msg.to_wire()
+    t = d["type"]
+    if t == "guide":
+        st, card = d["step"], d.get("card") or {}
+        where = f" box={d['box']}" if d.get("box") else (" line" if d.get("line") else " (no target)")
+        extra = {k: v for k, v in d.get("extra", {}).items() if k not in ("action", "label")}
+        line = f"[{st['n']}/{st['of']}] {d['style']:<12} {d['scheme']:<5}{where} · {st['title']}"
+        if card.get("detail"):
+            line += f"\n      {card['detail']}"
+        if extra:
+            line += f"\n      extra: {json.dumps(extra, ensure_ascii=False)[:140]}"
+        return line
+    if t == "state":
+        marks = "".join({"done": "✓", "skipped": "»", "pending": "·"}[s] for s in d["statuses"])
+        return f"state: {marks}" + (" HIDDEN" if d["hidden"] else "") + (" FINISHED" if d["finished"] else "")
+    return f"{t}: {json.dumps({k: v for k, v in d.items() if k != 'type'}, ensure_ascii=False)}"
+
+
+CONSOLE_KEYS = {"n": "next", "b": "back", "s": "skip", "m": "show_me", "d": "do_it"}
+
+
+def cmd_play(args) -> int:
+    player = _load_play(args)
+    if args.walk:
+        return _walk(player, Path(args.walk), args.every, args.displays)
+    if args.console:
+        return _console(player)
+    import asyncio
+
+    from engine.server import serve
+    print("start the overlay: cd overlay && npm start   (Ctrl+C here to stop)")
+    try:
+        asyncio.run(serve(player, port=args.port, record=Path(args.record) if args.record else None))
+    except KeyboardInterrupt:
+        pass
+    return 0
+
+
+def _console(player) -> int:
+    """Drive the session from the terminal, no overlay: n next, b back, s skip, h hide/resume,
+    j N jump, m show me, q quit. Prints what the overlay would be sent."""
+    for msg in player.handle({"type": "hello"}):
+        print(_describe(msg))
+    print("keys: n next · b back · s skip · h hide/resume · j N jump · m show me · q quit")
+    while True:
+        try:
+            cmd = input("> ").strip().lower()
+        except EOFError:
+            break
+        if cmd in ("q", "quit"):
+            break
+        if cmd in CONSOLE_KEYS:
+            msg = {"type": CONSOLE_KEYS[cmd]}
+        elif cmd == "h":
+            msg = {"type": "resume" if player.session.hidden else "hide"}
+        elif cmd.startswith("j"):
+            try:
+                msg = {"type": "jump", "n": int(cmd[1:].strip())}
+            except ValueError:
+                print("j needs a step number, e.g. j 5")
+                continue
+        else:
+            continue
+        for out in player.handle(msg):
+            print(_describe(out))
+    return 0
+
+
+def _walk(player, out: Path, every_ms: int, displays: str) -> int:
+    """Write a replay file for the overlay: hello, then Next every `every_ms` until the end, with a
+    Show me on each step that has a target. Timestamps are simulated, so this runs instantly."""
+    from engine.server import Recorder
+
+    w, h = (int(v) for v in displays.lower().split("x"))
+    rec = Recorder(out)
+    t = 0
+    hello = {"type": "hello", "displays": [{"id": 0, "x": 0, "y": 0, "w": w, "h": h, "primary": True}]}
+    for msg in player.handle(hello):
+        rec.write(msg, t)
+    while not player.session.finished:
+        if player.last_guide is not None and (player.last_guide.box or player.last_guide.line):
+            for msg in player.handle({"type": "show_me"}):
+                rec.write(msg, t + every_ms // 3)
+        t += every_ms
+        for msg in player.handle({"type": "next"}):
+            rec.write(msg, t)
+    rec.close()
+    print(f"wrote {out} ({t / 1000:.0f} s of playback)")
+    return 0
+
+
+def cmd_pin(args) -> int:
+    from engine.live.pinning import pin_interactive
+    return pin_interactive(args.tutorial, args.pins, args.start, args.end)
+
+
 def _later(phase: int):
     def run(args) -> int:
         print(f"`{args.cmd}` arrives in phase {phase} (see 05 Architecture, Build phases).", file=sys.stderr)
@@ -79,12 +202,38 @@ def main(argv=None) -> int:
     s = sub.add_parser("spend", help="show logged model spend against the budget cap")
     s.set_defaults(func=cmd_spend)
 
-    for name, phase in (("play", 2), ("compile", 5), ("eval", 5)):
+    pl = sub.add_parser("play", help="play a tutorial on screen: engine side (start the overlay too)")
+    pl.add_argument("tutorial")
+    pl.add_argument("--pins", help="pinned boxes (default cache/pins/<tutorial>.yaml)")
+    pl.add_argument("--port", type=int, default=8765)
+    pl.add_argument("--record", help="also write every message sent to this .jsonl (overlay --replay format)")
+    pl.add_argument("--scheme", choices=("auto", "light", "dark"), default="auto",
+                    help="auto = from the pixels around the target (Windows), else the Windows theme")
+    pl.add_argument("--restart", action="store_true", help="ignore saved progress, start at step 1")
+    pl.add_argument("--console", action="store_true", help="no overlay: drive it from the terminal")
+    pl.add_argument("--walk", metavar="OUT.jsonl", help="write a replay file that steps through the whole tutorial")
+    pl.add_argument("--every", type=int, default=3500, help="--walk: ms per step")
+    pl.add_argument("--displays", default="1920x1080", help="--walk: screen size to report")
+    pl.set_defaults(func=cmd_play)
+
+    pn = sub.add_parser("pin", help="dev: pin each step's target box by hovering it (Windows)")
+    pn.add_argument("tutorial")
+    pn.add_argument("--pins", help="output (default cache/pins/<tutorial>.yaml); existing pins are kept")
+    pn.add_argument("--from", dest="start", type=int, default=1)
+    pn.add_argument("--to", dest="end", type=int, default=None)
+    pn.set_defaults(func=cmd_pin)
+
+    for name, phase in (("compile", 5), ("eval", 5)):
         p = sub.add_parser(name, help=f"phase {phase}")
         p.add_argument("rest", nargs="*")
         p.set_defaults(func=_later(phase))
 
     args = ap.parse_args(argv)
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors="replace")   # ✓ » on a cp1252 console
+        except (AttributeError, ValueError):
+            pass
     from engine.dpi import make_dpi_aware
     make_dpi_aware()
     return args.func(args)

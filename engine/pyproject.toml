@@ -11,6 +11,7 @@ dependencies = [
   "pydantic>=2.6",
   "pyyaml>=6",
   "httpx>=0.27",
+  "websockets>=13",
 ]
 
 [project.optional-dependencies]
@@ -25,4 +26,4 @@ dev = ["pytest>=8"]
 # From the repo root:  pip install -e "engine[dev]"   (or just run `python -m engine` from the root)
 [tool.setuptools]
 package-dir = {"engine" = "."}
-packages = ["engine", "engine.schema", "engine.basefile", "engine.models"]
+packages = ["engine", "engine.schema", "engine.basefile", "engine.models", "engine.live", "engine.live.locate"]

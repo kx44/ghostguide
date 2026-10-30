@@ -1,0 +1,194 @@
+"""The one state machine that owns "where you are" (live step 1, 8a, 8b): next, back, skip, jump,
+hide / resume with catch-up. Overlay, hotkeys and (later) voice all go through here, so they agree.
+
+No screen, no models: the step check is passed in as `checker` (phase 3 plugs in live/verify.py).
+Progress is saved after every change so a restart lands on the step you stopped at.
+"""
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Callable, Literal, Optional
+
+from engine.schema.tutorial import Step, Tutorial
+
+Status = Literal["pending", "done", "skipped"]
+CheckResult = Literal["done", "not_yet", "wrong", "unknown"]
+Checker = Callable[[Step], CheckResult]
+
+# Catch-up never runs through more steps than this in one resume, so a checker that wrongly
+# says "done" for everything can't race to the end.
+MAX_CATCH_UP = 50
+
+
+@dataclass
+class Event:
+    """What a session change means for the user, so the server can toast it."""
+    kind: Literal["moved", "skipped", "finished", "hidden", "resumed", "caught_up", "noop"]
+    text: str = ""
+    steps: list[int] = field(default_factory=list)
+
+
+class Session:
+    def __init__(self, tutorial: Tutorial, save_path: Optional[Path] = None, checker: Optional[Checker] = None):
+        self.tutorial = tutorial
+        self.of = len(tutorial.steps)
+        if self.of == 0:
+            raise ValueError("tutorial has no steps")
+        self.current = 1                       # 1-based; of + 1 once finished
+        self.statuses: list[Status] = ["pending"] * self.of
+        self.hidden = False
+        self.save_path = save_path
+        self.checker = checker
+        self.history: list[tuple[str, int]] = []   # (op, step) for debugging and tests
+
+    # ---------- reading ----------
+    @property
+    def finished(self) -> bool:
+        return self.current > self.of
+
+    @property
+    def step(self) -> Optional[Step]:
+        return None if self.finished else self.tutorial.step(self.current)
+
+    def status(self, n: int) -> Status:
+        return self.statuses[n - 1]
+
+    # ---------- moving ----------
+    def next(self) -> Event:
+        """You say this step is done (Next button, hotkey), or a check said so."""
+        if self.finished:
+            return Event("noop")
+        n = self.current
+        self.statuses[n - 1] = "done"
+        return self._advance(n, "next")
+
+    def skip(self) -> Event:
+        """Marks skipped, never done: skipping must not pretend the step was checked (8b)."""
+        if self.finished:
+            return Event("noop")
+        n = self.current
+        self.statuses[n - 1] = "skipped"
+        ev = self._advance(n, "skip")
+        if ev.kind == "finished":
+            return ev
+        return Event("skipped", f"Skipped step {n}. It stays marked in the step list.", [n])
+
+    def back(self) -> Event:
+        if self.current <= 1:
+            return Event("noop")
+        self.current -= 1
+        self._log("back")
+        return Event("moved", steps=[self.current])
+
+    def jump(self, n: int) -> Event:
+        if not 1 <= n <= self.of:
+            raise ValueError(f"step {n} is outside 1..{self.of}")
+        if n == self.current:
+            return Event("noop")
+        self.current = n
+        self._log("jump")
+        return Event("moved", steps=[n])
+
+    def restart(self) -> None:
+        self.current = 1
+        self.statuses = ["pending"] * self.of
+        self.hidden = False
+        self._log("restart")
+
+    def _advance(self, n: int, op: str) -> Event:
+        self.current = n + 1
+        self._log(op)
+        if self.finished:
+            skipped = [i + 1 for i, s in enumerate(self.statuses) if s == "skipped"]
+            tail = f" ({len(skipped)} skipped)" if skipped else ""
+            return Event("finished", f"✓ Tutorial complete{tail}", skipped)
+        return Event("moved", steps=[self.current])
+
+    # ---------- hide / resume (8a) ----------
+    def hide(self) -> Event:
+        if self.hidden:
+            return Event("noop")
+        self.hidden = True
+        self._log("hide")
+        return Event("hidden")
+
+    def resume(self) -> Event:
+        """Shows the overlay again and catches up: while the current step checks as done, mark it done
+        and move on, stopping at the first step you haven't done (or the first one the checker can't tell)."""
+        if not self.hidden:
+            return Event("noop")
+        self.hidden = False
+        self._log("resume")
+        caught = self.catch_up()
+        if caught:
+            if self.finished:
+                return Event("finished", "✓ You finished it while hidden", caught)
+            s = "s" if len(caught) > 1 else ""
+            return Event("caught_up", f"✓ Caught up: step{s} {_ranges(caught)} done. You're on step {self.current}.", caught)
+        return Event("resumed")
+
+    def catch_up(self) -> list[int]:
+        done: list[int] = []
+        if self.checker is None:
+            return done
+        while not self.finished and len(done) < MAX_CATCH_UP:
+            step = self.step
+            assert step is not None
+            if self.checker(step) != "done":
+                break
+            self.statuses[self.current - 1] = "done"
+            done.append(self.current)
+            self.current += 1
+        if done:
+            self._log("catch_up")
+        return done
+
+    # ---------- persistence ----------
+    def _log(self, op: str) -> None:
+        self.history.append((op, self.current))
+        self.save()
+
+    def to_dict(self) -> dict:
+        return {"tutorial": self.tutorial.meta.title, "of": self.of, "current": self.current,
+                "statuses": self.statuses}
+
+    def save(self) -> None:
+        if self.save_path is None:
+            return
+        self.save_path.parent.mkdir(parents=True, exist_ok=True)
+        self.save_path.write_text(json.dumps(self.to_dict(), indent=1), encoding="utf-8")
+
+    def restore(self) -> bool:
+        """Loads saved progress if it matches this tutorial (same title and step count)."""
+        if self.save_path is None or not self.save_path.exists():
+            return False
+        try:
+            data = json.loads(self.save_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return False
+        if data.get("tutorial") != self.tutorial.meta.title or data.get("of") != self.of:
+            return False
+        statuses = data.get("statuses", [])
+        if len(statuses) != self.of or any(s not in ("pending", "done", "skipped") for s in statuses):
+            return False
+        self.statuses = list(statuses)
+        self.current = max(1, min(int(data.get("current", 1)), self.of + 1))
+        return True
+
+
+def _ranges(ns: list[int]) -> str:
+    """[3, 4, 5, 8] → '3–5, 8'."""
+    out, start, prev = [], None, None
+    for n in ns:
+        if start is None:
+            start = prev = n
+        elif n == prev + 1:
+            prev = n
+        else:
+            out.append(f"{start}–{prev}" if prev != start else str(start))
+            start = prev = n
+    if start is not None:
+        out.append(f"{start}–{prev}" if prev != start else str(start))
+    return ", ".join(out)
