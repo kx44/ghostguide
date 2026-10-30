@@ -529,12 +529,12 @@ def main(argv=None) -> int:
             img = grab()
             els = ov_elements()
             row = {"n": n, "action": step.action, "style": g and g["style"], "scheme": g and g["scheme"],
-                   "box": g and g.get("box")}
+                   "box": g and g.get("box"), "insert": g and g["extra"].get("insert"), "scroll": g and g["extra"].get("scroll")}
             b = g and g.get("box")
             if b:
                 vb = violet_bbox(img, (b["x"] - 40, b["y"] - 40, b["x"] + b["w"] + 40, b["y"] + b["h"] + 40))
                 row["violet"] = vb
-                if g["style"] == "code_card" and g["extra"].get("insert") == "before":
+                if g["style"] == "code_card" and (g["extra"].get("insert") in ("before", "end") or g["extra"].get("scroll")):
                     row["bar_share"] = round(bar_on_box(img, b), 2)          # a bar between the lines, not a box
                     row["lands"] = row["bar_share"] >= 0.8
                 elif g["style"] in ("outline", "click_type", "code_card"):

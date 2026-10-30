@@ -231,9 +231,21 @@ def close_all_tabs(win, title: str, tries: int = 12) -> None:
         time.sleep(0.6)
 
 
+def engine_running(port: int = 8765) -> bool:
+    import socket
+    with socket.socket() as s:
+        s.settimeout(0.3)
+        return s.connect_ex(("127.0.0.1", port)) == 0
+
+
 def setup(folder: Path, fresh: bool):
-    """Scratch folder in the start state (when fresh) and its VS Code window in front, Explorer up."""
+    """Scratch folder in the start state (when fresh) and its VS Code window in front, Explorer up.
+    Refuses to start while an engine is already running: that's someone's manual session (scripts\\dev.bat)
+    in the same folder, and a reset would pull their files out from under them (it happened once)."""
     import uiautomation as auto
+    if engine_running():
+        raise SystemExit("An engine is already running on port 8765 (a manual scripts\\dev.bat session?). "
+                         "Close it first. Nothing was reset or touched.")
     if fresh:
         reset(folder)
     title = window_title(folder)

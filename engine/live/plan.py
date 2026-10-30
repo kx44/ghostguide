@@ -13,6 +13,8 @@ Rules (Guidance glossary + 04 Base format):
 """
 from __future__ import annotations
 
+import re
+
 from typing import Optional
 
 from engine.schema.messages import Box, Card, Display, Guide, Line, ShowMe, StepInfo
@@ -181,8 +183,14 @@ class Planner:
 
 
 def _where(step: Step) -> Optional[str]:
-    """"index.html, inside <body>" → "in index.html, inside <body>" (the outline shows the spot too)."""
+    """"index.html, inside <body>" → "in index.html, inside <body>" (the outline shows the spot too);
+    "styles.css, end" → "at the end of styles.css (Ctrl+End jumps there)", and the same for top / Ctrl+Home."""
     w = (step.target.where or "").strip()
+    m = re.fullmatch(r"([\w.-]+\.\w+)\s*,\s*(?:at the )?(end|bottom|top|start)", w, re.I)
+    if m:
+        f, spot = m.group(1), m.group(2).casefold()
+        return (f"at the end of {f} (Ctrl+End jumps there)" if spot in ("end", "bottom")
+                else f"at the top of {f} (Ctrl+Home jumps there)")
     return f"in {w}" if w else None
 
 

@@ -4,6 +4,8 @@
 //   insert "before" it already has code: the new lines go between it and the line above, so a bar marks
 //                   that gap instead of boxing a line that stays (boxing </article> read as "change this")
 //   insert "col"    inside a line: outline the line + a thin caret at the column
+//   insert "end"    appending to the file: a bar right under the last code, tagged "end of file"
+//                   ("↓ Ctrl+End" when the end is scrolled out of view)
 // The code box shows the code around the spot in purple (the line before, or the text either side of a
 // mid-line insert) so the user sees where it goes; Copy copies only the new text.
 import type { GuideMsg, Local } from "../../shared/messages";
@@ -28,11 +30,19 @@ export function mountCodeCard(ctx: Ctx, g: GuideMsg, local: Local): Mounted {
   const value = x.value ?? "";
   const multi = !!x.multiline || value.length > 40;
   let mark: HTMLElement | undefined;
-  if (r && x.insert === "before") {
+  if (r && (x.insert === "before" || x.insert === "end" || x.scroll)) {
     mark = bag.add(el(ctx.ov, "insbar", ""));
     mark.style.left = `${r.x}px`;
     mark.style.top = `${r.y + 1}px`;
     mark.style.width = `${r.w}px`;
+    const tag = x.scroll ? `${x.scroll === "down" ? "↓" : "↑"} ${x.insert === "end" ? "Ctrl+End" : "scroll"}`
+      : x.insert === "end" ? "end of file" : "";
+    if (tag) {
+      const t = bag.add(el(ctx.ov, "instag", "", esc(tag)));
+      t.style.left = `${r.x + r.w}px`;           // right end of the bar, just under it: clear of the code above
+      t.style.transform = "translateX(-100%)";
+      t.style.top = `${r.y + 7}px`;
+    }
   } else if (r) {
     mark = bag.add(outline(ctx.ov, r));
   }

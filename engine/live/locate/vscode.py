@@ -88,6 +88,11 @@ class Editor:
     def lines(self) -> list[str]:
         return self.text.split("\n")
 
+    def scrolled_away(self, n: int) -> Optional[str]:
+        """"down" / "up" when line n is outside the visible editor (line_box then points at that edge)."""
+        y = self.caret_top + (n - self.caret_line) * self.line_h
+        return "down" if y > self.bottom - self.line_h else "up" if y < self.top else None
+
     def line_box(self, n: int) -> Box:
         """Box around line n, clamped into the viewport (so a line scrolled away points at the edge it's past)."""
         y = self.caret_top + (n - self.caret_line) * self.line_h
@@ -286,6 +291,9 @@ def locate_in(step: Step, els: list[dict], editor: Optional[Editor]) -> tuple[Op
         n = target_line(editor.text, t.where, editor.caret_line if editor.focused else None)
         if n is None or not editor.scroll_known:
             return None, None, "click into the editor so its caret and scroll can be read"
+        lines = editor.lines
+        if all(not ln.strip() for ln in lines[max(0, n - 2):]) and any(ln.strip() for ln in lines):
+            n = _last_code_line(lines) + 2      # appending at the end: mark the gap right under the last code
         return editor.line_box(n), None, f"editor line {n}" + ("" if editor.focused else " (editor not focused)")
     if t.kind == "tab":
         b = editor_tab(els, t.label)
@@ -310,7 +318,8 @@ def insert_col(text: str, where: Optional[str], n: int) -> Optional[int]:
 
 
 def insert_context(text: str, n: int, col: Optional[int]) -> dict:
-    """How the text goes in at line n, for the overlay: `insert` = "col" (inside the line), "before" (line n
+    """How the text goes in at line n, for the overlay: `insert` = "end" (appending after the last code: a bar
+    under it, tagged "end of file"), "col" (inside the line), "before" (line n
     already has code: the new lines go between n-1 and n, so a bar marks the gap rather than boxing a line
     that stays), or "line" (line n is empty or past the end: type on it). `context_before` / `context_after`
     are the code around the spot, shown in the card's code box (in purple, not copied)."""
@@ -320,7 +329,9 @@ def insert_context(text: str, n: int, col: Optional[int]) -> dict:
         line = cur.expandtabs(4)
         return {"insert": "col", "context_before": line[:col].lstrip(), "context_after": line[col:].rstrip()}
     prev = next((lines[i].strip() for i in range(min(n - 2, len(lines) - 1), -1, -1) if lines[i].strip()), "")
-    out = {"insert": "before" if cur.strip() else "line"}
+    rest = lines[max(0, n - 1):]
+    end = not any(ln.strip() for ln in rest) and any(ln.strip() for ln in lines[:max(0, n - 1)])
+    out = {"insert": "end" if end else "before" if cur.strip() else "line"}
     if prev:
         out["context_before"] = prev
     return out
@@ -454,6 +465,9 @@ class VSCodeLocator:
             n = int(self.last_how.split()[2])
             col = insert_col(ed.text, step.target.where, n)
             self.last_extra = {**editor_extra(ed, bg, col), **insert_context(ed.text, n, col)}
+            away = ed.scrolled_away(n)
+            if away:
+                self.last_extra["scroll"] = away
         self.last_seconds = time.perf_counter() - t0
         return box, line
 

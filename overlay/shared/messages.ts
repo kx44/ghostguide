@@ -42,7 +42,8 @@ export interface GuideExtra {
   backing?: string;    // …its background colour, for a solid backing over the code already there
   line_h?: number;     // …its line height (physical px), so multi-line code lines up with its lines
   col?: number;        // …a mid-line insert starts at this character column
-  insert?: "line" | "before" | "col";   // type on the line / new lines go before it (bar between lines) / mid-line
+  insert?: "line" | "before" | "col" | "end";   // type on the line / new lines go before it / mid-line / after the last code
+  scroll?: "up" | "down";   // the spot is scrolled out of the editor's view
   context_before?: string;  // code just before the spot, shown in the code box in purple (not copied)
   context_after?: string;   // code just after it, for a mid-line insert
   [k: string]: unknown;

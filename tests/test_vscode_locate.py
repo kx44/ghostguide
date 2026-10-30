@@ -237,7 +237,21 @@ def test_insert_context_marks_the_gap_and_shows_the_code_around_it():
     assert insert_context(doc, n, None) == {"insert": "before", "context_before": '<article class="video-container">'}
     blank = "<body>\n    \n</body>"
     assert insert_context(blank, 2, None) == {"insert": "line", "context_before": "<body>"}
-    assert insert_context("a {\n}\n", 3, None) == {"insert": "line", "context_before": "}"}      # end of file
+    assert insert_context("a {\n}\n", 3, None) == {"insert": "end", "context_before": "}"}       # end of file
     line = '  <a href="#" class="thumbnail">'
     c = insert_context(line, 1, len(line) - 1)
     assert c == {"insert": "col", "context_before": '<a href="#" class="thumbnail"', "context_after": ">"}
+
+
+def test_end_of_file_marks_the_gap_under_the_last_code():
+    css = "a {\n}\n\nb {\n  c: d;\n}\n"
+    ed = Editor(file="styles.css", text=css, caret_line=1, caret_top=200, line_h=30, left=100, right=900, top=200, bottom=900)
+    box, _, how = locate_in(STEP[18], [], ed)                    # "styles.css, end"
+    assert how == "editor line 7" and box.y == 200 + 6 * 30 - 2  # right under line 6 "}"
+    assert ed.scrolled_away(7) is None and ed.scrolled_away(40) == "down"
+
+
+def test_card_says_ctrl_end_for_end_of_file():
+    from engine.live.plan import Planner
+    g = Planner(TUT).plan(STEP[18], None)
+    assert g.card.detail.startswith("Copy this, or type it, at the end of styles.css (Ctrl+End jumps there)")
