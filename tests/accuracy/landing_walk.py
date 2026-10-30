@@ -198,6 +198,39 @@ def click(x: int, y: int, right: bool = False) -> None:
     (auto.RightClick if right else auto.Click)(x, y)
 
 
+def dismiss_save_prompt(title: str) -> bool:
+    """VS Code's "Do you want to save the changes…?" for a tab whose file the reset moved away: Don't Save."""
+    for e in dump(title):
+        if e.get("type") == "Button" and (e.get("name") or "").replace("’", "'") in ("Don't Save", "Don't save"):
+            r = e["rect"]
+            click(r[0] + r[2] // 2, r[1] + r[3] // 2)
+            time.sleep(0.6)
+            return True
+    return False
+
+
+def close_all_tabs(win, title: str, tries: int = 12) -> None:
+    """Close every editor tab with its own Close button; never types (typing blind once went into a file)."""
+    for _ in range(tries):
+        dismiss_save_prompt(title)
+        els = dump(title)
+        tabs = [e for e in els if e.get("type") == "TabItem" and re.search(r"\.\w+$", e.get("name") or "")
+                and e.get("rect") and e["rect"][1] < 200 and e["rect"][0] > 600]          # editor tab bar only
+        if not tabs:
+            return
+        t = tabs[0]["rect"]
+        close = [e for e in els if e.get("type") == "Button" and (e.get("name") or "").startswith("Close")
+                 and t[0] <= e["rect"][0] <= t[0] + t[2] and t[1] <= e["rect"][1] <= t[1] + t[3]]
+        bring_front(win)
+        if close:
+            r = close[0]["rect"]
+            click(r[0] + r[2] // 2, r[1] + r[3] // 2)
+        else:                                    # the close button only shows on hover: hover the tab first
+            click(t[0] + t[2] // 2, t[1] + t[3] // 2)
+            time.sleep(0.3)
+        time.sleep(0.6)
+
+
 def setup(folder: Path, fresh: bool):
     """Scratch folder in the start state (when fresh) and its VS Code window in front, Explorer up."""
     import uiautomation as auto
@@ -211,14 +244,7 @@ def setup(folder: Path, fresh: bool):
         auto.SendKeys("{Ctrl}k")
         auto.SendKeys("w")
         time.sleep(1.0)
-        if any(e.get("type") == "TabItem" and re.search(r"\.\w+$", e.get("name") or "") for e in dump(title)):
-            bring_front(win)                     # the chord went to a panel: use the command palette
-            auto.SendKeys("{F1}")
-            time.sleep(0.6)
-            auto.SendKeys("View: Close All Editors", interval=0.01)
-            time.sleep(0.6)
-            auto.SendKeys("{Enter}")
-            time.sleep(1.0)
+        close_all_tabs(win, title)           # whatever the chord missed (it can land in a panel)
     for _ in range(20):          # the Explorer must be up before step 1
         if any((e.get("name") or "").startswith("Explorer Section:") for e in dump(title)):
             break

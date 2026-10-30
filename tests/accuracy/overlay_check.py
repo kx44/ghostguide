@@ -42,7 +42,7 @@ OUT = config.CACHE / "screenshots" / "overlay"
 LOGS = config.LOGS
 OVERLAY = "GhostGuide overlay"
 VIOLET = (167, 139, 250)
-VK = {"right": 0x27, "left": 0x25, "s": 0x53, "h": 0x48, "m": 0x4D}
+VK = {"right": 0x27, "left": 0x25, "s": 0x53, "h": 0x48, "g": 0x47}
 u32 = ctypes.windll.user32 if sys.platform == "win32" else None
 
 FOCUS_PROBE = r'''
@@ -402,11 +402,12 @@ def main(argv=None) -> int:
         time.sleep(0.4); k = rec.mark(); hotkey("s"); r3 = wait_step(rec, 6, k)
         record("hotkeys Ctrl+Alt+→ / ← / S with VS Code focused", all((r1, r2, r3)), next=bool(r1), back=bool(r2), skip=bool(r3))
         k = rec.mark()
-        hotkey("m")
-        sm = rec.wait(lambda m: m["type"] == "show_me", 3, k)
+        hotkey("g")
+        # answered either way: a Show me, or (no target on this step) the "nothing to show" toast
+        sm = rec.wait(lambda m: m["type"] == "show_me" or (m["type"] == "toast" and "nothing to show" in m["text"]), 3, k)
         ov_log = (LOGS / "overlay_check-overlay.log").read_text(encoding="utf-8", errors="replace")
         taken = [ln for ln in ov_log.splitlines() if "hotkeys taken" in ln]
-        record("hotkey Ctrl+Alt+M (Show me)", bool(sm), registered_by_another_app=taken[0] if taken else None)
+        record("hotkey Ctrl+Alt+G (Show me)", bool(sm), registered_by_another_app=taken[0] if taken else None)
 
         # ---- focus: typing never leaves the app, plain H / S never move the step ----
         probe_out = LOGS / "overlay_check-focus.txt"
@@ -499,11 +500,11 @@ def main(argv=None) -> int:
                 if not row["copy_ok"]:
                     row["copy_detail"] = {"pressed": pressed, "got": got[:60], "want": want[:60]}
             act(step, Box(**b) if b else None, win, FOLDER, title, loc, row, OUT)
-            if n == 12:                                   # restart mid-walk: resumes on the same step
+            if n == 14:            # restart mid-walk (after a tab click: nothing short-lived like the filename box open)
                 kill(eng)
                 time.sleep(2.0)
                 eng, rec = start_engine(restart=False, tag="c")
-                row["resumed_same_step"] = bool(wait_step(rec, 12, 0, 20))
+                row["resumed_same_step"] = bool(wait_step(rec, 14, 0, 20))
                 record("engine restarted mid-way resumes on the same step", row["resumed_same_step"])
             if n == 13:
                 k = rec.mark()

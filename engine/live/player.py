@@ -162,7 +162,7 @@ class Player:
                 return []
             box, line = self.target(s.step.n)
             sm = self.planner.show_me(s.step, box, line)
-            return [sm] if sm else [m.Toast(text="No target pinned for this step, so nothing to show.", kind="warn")]
+            return [sm] if sm else [m.Toast(text="This step has no target on screen, so there's nothing to show.", kind="warn")]
         if t == "pin":
             return self._pin(msg.at)
         if t == "unpin":
