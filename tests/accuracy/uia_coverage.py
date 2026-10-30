@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import time
 from datetime import datetime
@@ -33,8 +34,8 @@ from engine.basefile.parse import parse_file
 from engine.schema.tutorial import Step, UiaCheck
 
 APPS = {
-    "vscode": {"window": "Visual Studio Code", "tutorial": "tutorials/youtube-clone-vscode.md"},
-    "solidworks": {"window": "SOLIDWORKS", "tutorial": "tutorials/mug-solidworks.md"},
+    "vscode": {"window": "Visual Studio Code", "also": ["Google Chrome"], "tutorial": "tutorials/youtube-clone-vscode.md"},
+    "solidworks": {"window": "SOLIDWORKS", "also": [], "tutorial": "tutorials/mug-solidworks.md"},
 }
 # Target kind → UIA control types that count as a match. Canvas-like kinds are drawn, not exposed.
 KIND_TYPES = {
@@ -53,13 +54,26 @@ def _norm(s: Optional[str]) -> str:
     return " ".join((s or "").replace("…", "...").split()).casefold()
 
 
+# VS Code appends key hints to UIA names: "Toggle Panel (Ctrl+J)", "Split Editor Right (Ctrl+\) [Alt] Split Editor Down".
+_HINTS = re.compile(r"\s*(\[alt\].*|\((ctrl|alt|shift|win|f\d+)[^)]*\))\s*$")
+
+
+def _base_name(name: str) -> str:
+    prev = None
+    while prev != name:
+        prev, name = name, _HINTS.sub("", name)
+    return name
+
+
 def _on_screen(el: dict) -> bool:
     r = el.get("rect")
     return bool(r) and r[2] > 0 and r[3] > 0 and not el.get("offscreen", False)
 
 
-def match_target(step: Step, elements: Iterable[dict]) -> dict:
-    """Best UIA element for the step's target. quality: exact > alias > contains > none, or n/a for canvas."""
+def match_target(step: Step, elements: Iterable[dict], window: Optional[str] = None) -> dict:
+    """Best UIA element for the step's target. quality: exact > alias > contains > none, or n/a for canvas.
+    window: only elements whose top-level title contains it (window-kind targets look everywhere).
+    "contains" needs whole words and a matching control type, so "Editor" ≠ "Open Editors Section"."""
     kind = step.target.kind
     if kind in NOT_UIA:
         return {"quality": "n/a", "reason": f"{kind} targets are drawn, not UIA controls"}
@@ -69,7 +83,9 @@ def match_target(step: Step, elements: Iterable[dict]) -> dict:
     for el in elements:
         if not _on_screen(el):
             continue
-        name = _norm(el.get("name"))
+        if window and kind != "window" and window.casefold() not in (el.get("window") or "").casefold():
+            continue
+        name = _base_name(_norm(el.get("name")))
         if not name:
             continue
         type_ok = el.get("type") in types
@@ -77,7 +93,8 @@ def match_target(step: Step, elements: Iterable[dict]) -> dict:
             q = "exact"
         elif name in names[1:]:
             q = "alias"
-        elif any(n and (n in name) for n in names) and len(name) <= 4 * max(len(n) for n in names):
+        elif type_ok and len(name) <= 4 * max(len(n) for n in names) and any(
+                n and re.search(rf"(?<!\w){re.escape(n)}(?!\w)", name) for n in names):
             q = "contains"
         else:
             continue
@@ -133,14 +150,17 @@ def summarise(rows: list[dict]) -> dict:
 
 
 # ---------- Windows UIA layer --------------------------------------------------------------------
-def dump_elements(window_title: str, max_depth: int = 60, max_elements: int = 30000) -> list[dict]:
-    """Every UIA element under top-level windows whose title contains window_title, plus Chrome for VS Code steps."""
+def dump_elements(window_title: str, also: Iterable[str] = (), max_depth: int = 60,
+                  max_elements: int = 30000) -> list[dict]:
+    """Every UIA element under top-level windows whose title contains window_title or one of `also`
+    (Chrome for the VS Code tutorial's browser steps)."""
     import uiautomation as auto
 
+    wanted = [window_title.casefold()] + [a.casefold() for a in also]
     out: list[dict] = []
     for top in auto.GetRootControl().GetChildren():
         title = top.Name or ""
-        if window_title.casefold() not in title.casefold() and "chrome" not in title.casefold():
+        if not any(w in title.casefold() for w in wanted):
             continue
         for ctrl, _depth in auto.WalkControl(top, includeTop=True, maxDepth=max_depth):
             if len(out) >= max_elements:
@@ -161,12 +181,12 @@ def dump_elements(window_title: str, max_depth: int = 60, max_elements: int = 30
     return out
 
 
-def probe_step(step: Step, window: str, phase: str) -> tuple[dict, float]:
+def probe_step(step: Step, app: dict, phase: str) -> tuple[dict, float]:
     t0 = time.perf_counter()
-    els = dump_elements(window)
+    els = dump_elements(app["window"], app["also"])
     secs = time.perf_counter() - t0
     if phase == "target":
-        return match_target(step, els), secs
+        return match_target(step, els, app["window"]), secs
     checks = step.verify.uia_checks() if step.verify else []
     return {"checks": [eval_uia_check(c, els) for c in checks]}, secs
 
@@ -181,6 +201,7 @@ def main(argv=None) -> int:
     ap.add_argument("--from", dest="start", type=int, default=1)
     ap.add_argument("--to", dest="end", type=int, default=None)
     ap.add_argument("--out", default=None)
+    ap.add_argument("--window", help='window title part, e.g. "youtube-clone - Visual Studio Code" when several are open')
     args = ap.parse_args(argv)
 
     if sys.platform != "win32":
@@ -189,7 +210,9 @@ def main(argv=None) -> int:
     from engine.dpi import make_dpi_aware
     print(f"DPI awareness: {make_dpi_aware()}")
 
-    app = APPS[args.app]
+    app = dict(APPS[args.app])
+    if args.window:
+        app["window"] = args.window
     tut = parse_file(config.ROOT / (args.tutorial or app["tutorial"]))
     steps = [s for s in tut.steps if args.start <= s.n <= (args.end or len(tut.steps))]
     out = Path(args.out or config.LOGS / f"uia_coverage-{args.app}.json")
@@ -198,17 +221,23 @@ def main(argv=None) -> int:
 
     if args.snapshot:
         t0 = time.perf_counter()
-        els = dump_elements(app["window"])
+        els = dump_elements(app["window"], app["also"])
         print(f"{len(els)} elements in {time.perf_counter() - t0:.1f}s")
         (out.with_suffix(".elements.json")).write_text(json.dumps(els, indent=1, ensure_ascii=False), encoding="utf-8")
         for s in steps:
             rows.append({"n": s.n, "title": s.title, "label": s.target.label, "kind": s.target.kind,
-                         "target": match_target(s, els)})
+                         "target": match_target(s, els, app["window"])})
     else:
         print(f"Walking {tut.meta.title}: steps {steps[0].n}-{steps[-1].n}. Start state:\n  {tut.meta.start_state}\n")
         for s in steps:
             print(f"--- Step {s.n} — {s.title}  [{s.action} → {s.target.label} ({s.target.kind})]")
-            target, t_secs = probe_step(s, app["window"], "target")
+            if s.target.where:
+                print(f"    where: {s.target.where}")
+            for k, v in s.params.items():
+                v = str(v).rstrip("\n")
+                print(f"    {k}:" + ("\n" + "\n".join("      " + line for line in v.splitlines()) if "\n" in v else f" {v}"))
+            print(f"    done when: {s.check}")
+            target, t_secs = probe_step(s, app, "target")
             print(f"    target: {target.get('quality')} {target.get('name') or ''} {target.get('type') or ''} {target.get('rect') or ''} ({t_secs:.1f}s)")
             row = {"n": s.n, "title": s.title, "label": s.target.label, "kind": s.target.kind,
                    "target": target, "target_seconds": round(t_secs, 2)}
@@ -219,7 +248,7 @@ def main(argv=None) -> int:
             if ans == "s":
                 row["skipped"] = True
             elif s.verify and s.verify.uia_checks():
-                res, v_secs = probe_step(s, app["window"], "verify")
+                res, v_secs = probe_step(s, app, "verify")
                 row["verify"] = all(res["checks"])
                 row["verify_detail"] = res["checks"]
                 print(f"    verify: {'TRUE' if row['verify'] else 'false'} {res['checks']} ({v_secs:.1f}s)")

@@ -34,6 +34,23 @@ def test_match_target_quality():
     assert match_target(MUG.step(16), ELEMENTS)["quality"] == "none"
 
 
+def test_match_target_rejects_near_misses():
+    vs = "x - Visual Studio Code"
+    els = [{"window": vs, "name": "Open Editors Section", "type": "Button", "rect": [0, 0, 9, 9]},
+           {"window": "the largest hack - YouTube - Google Chrome", "name": "Save", "type": "Button",
+            "rect": [0, 0, 9, 9]},
+           {"window": vs, "name": "Toggle Panel (Ctrl+J)", "type": "Button", "rect": [0, 0, 9, 9]},
+           {"window": vs, "name": "Split Editor Right (Ctrl+\\) [Alt] Split Editor Down", "type": "Button",
+            "rect": [0, 0, 9, 9]}]
+    assert match_target(VS.step(3), els, "Visual Studio Code")["quality"] == "none"   # Editor ≠ Editors, wrong type
+    assert match_target(VS.step(6), els, "Visual Studio Code")["quality"] == "none"   # Save only in another window
+    assert match_target(VS.step(6), els)["quality"] == "exact"                        # unless unscoped
+    step = VS.step(1).model_copy(update={"target": VS.step(1).target.model_copy(update={"label": "Toggle Panel"})})
+    assert match_target(step, els)["quality"] == "exact"                              # key hint stripped
+    step = step.model_copy(update={"target": step.target.model_copy(update={"label": "Split Editor Right"})})
+    assert match_target(step, els)["quality"] == "exact"
+
+
 def test_verify_hints_against_elements():
     def holds(step):
         return all(eval_uia_check(c, ELEMENTS) for c in step.verify.uia_checks())

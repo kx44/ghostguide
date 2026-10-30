@@ -77,21 +77,24 @@ def downscale(png: bytes, max_side: Optional[int]) -> bytes:
     return buf.getvalue()
 
 
-def ask_ollama(host: str, model: str, prompt: str, png: bytes, timeout: float) -> dict:
+def ask_ollama(host: str, model: str, prompt: str, png: bytes, timeout: float, think: Optional[str] = "low") -> dict:
+    """think: Glimmer always reasons first (it can't be switched off); "low" keeps the trace short. None = omit."""
     import httpx
 
+    body = {"model": model, "stream": False, "format": "json", "options": {"temperature": 0},
+            "messages": [{"role": "user", "content": prompt, "images": [base64.b64encode(png).decode()]}]}
+    if think:
+        body["think"] = think
     t0 = time.perf_counter()
-    r = httpx.post(f"{host.rstrip('/')}/api/chat", timeout=timeout, json={
-        "model": model, "stream": False, "format": "json", "options": {"temperature": 0},
-        "messages": [{"role": "user", "content": prompt, "images": [base64.b64encode(png).decode()]}],
-    })
+    r = httpx.post(f"{host.rstrip('/')}/api/chat", timeout=timeout, json=body)
     r.raise_for_status()
     data = r.json()
     secs = time.perf_counter() - t0
     tok_s = None
     if data.get("eval_count") and data.get("eval_duration"):
         tok_s = data["eval_count"] / (data["eval_duration"] / 1e9)
-    return {"text": data.get("message", {}).get("content", ""), "seconds": secs,
+    msg = data.get("message", {})
+    return {"text": msg.get("content", ""), "thinking_chars": len(msg.get("thinking") or ""), "seconds": secs,
             "load_seconds": (data.get("load_duration") or 0) / 1e9, "tokens_per_s": tok_s}
 
 
@@ -113,6 +116,7 @@ def main(argv=None) -> int:
     ap.add_argument("--repeats", type=int, default=3, help="warm runs per case and size")
     ap.add_argument("--target-s", type=float, default=3.0)
     ap.add_argument("--timeout", type=float, default=300)
+    ap.add_argument("--think", default="low", help='Ollama "think" level (low/medium/high); "" to omit')
     args = ap.parse_args(argv)
 
     cases = load_cases(Path(args.cases))
@@ -130,7 +134,7 @@ def main(argv=None) -> int:
     # Cold start: first call loads the weights.
     first = cases[0]
     cold = ask_ollama(args.host, args.model, build_prompt(first["title"], first["check"]),
-                      downscale(first["path"].read_bytes(), sizes[0]), args.timeout)
+                      downscale(first["path"].read_bytes(), sizes[0]), args.timeout, args.think or None)
     print(f"cold call {cold['seconds']:.1f}s (load {cold['load_seconds']:.1f}s)")
 
     results, by_size = [], {}
@@ -140,12 +144,13 @@ def main(argv=None) -> int:
             png = downscale(c["path"].read_bytes(), size)
             prompt = build_prompt(c["title"], c["check"])
             for i in range(args.repeats):
-                a = ask_ollama(args.host, args.model, prompt, png, args.timeout)
+                a = ask_ollama(args.host, args.model, prompt, png, args.timeout, args.think or None)
                 verdict = parse_verdict(a["text"])
                 ok = verdict == c["expect"]
                 lat.append(a["seconds"])
                 results.append({"case": c["id"], "size": size or "full", "run": i + 1, "seconds": round(a["seconds"], 2),
                                 "tokens_per_s": a["tokens_per_s"] and round(a["tokens_per_s"], 1),
+                                "thinking_chars": a["thinking_chars"],
                                 "verdict": verdict, "expect": c["expect"], "ok": ok, "reply": a["text"][:300]})
                 print(f"  [{size or 'full'}] {c['id']:<28} {a['seconds']:5.1f}s  {verdict:<8} {'ok' if ok else 'MISS (want ' + c['expect'] + ')'}")
         by_size[str(size or "full")] = {
@@ -158,7 +163,7 @@ def main(argv=None) -> int:
     main_size = str(sizes[0] or "full")
     verdict = ("PASS" if by_size[main_size]["median_s"] <= args.target_s and by_size[main_size]["accuracy"] == 1.0
                else "SLOW" if by_size[main_size]["median_s"] > args.target_s else "INACCURATE")
-    summary = {"model": args.model, "cold_seconds": round(cold["seconds"], 1), "by_size": by_size,
+    summary = {"model": args.model, "think": args.think or None, "cold_seconds": round(cold["seconds"], 1), "by_size": by_size,
                "target_s": args.target_s, "verdict": verdict, "missing_screenshots": missing}
     out = config.LOGS / "glimmer_speed.json"
     out.parent.mkdir(parents=True, exist_ok=True)
