@@ -20,6 +20,7 @@ action: click
 target: {label: New, kind: button, where: "top toolbar, left", shortcut: Ctrl+N}
 why: "Starts a blank document."
 check: "New SOLIDWORKS Document dialog open"
+verify: {uia: {name: New SOLIDWORKS Document, type: Window}}
 source: {anchor: "#step-1"}
 confidence: inferred   # source just says "start a new part"
 ```
@@ -30,6 +31,7 @@ target: {label: Part, kind: button, where: "New SOLIDWORKS Document dialog"}
 params: {click_type: double}
 why: "The mug is a single solid part."
 check: "Empty part window; FeatureManager shows Front/Top/Right Plane"
+verify: {uia: [{name: New SOLIDWORKS Document, type: Window, exists: false}, {name_contains: "Part", type: Window, window: SOLIDWORKS}]}
 source: {anchor: "#step-1"}
 confidence: inferred
 ```
@@ -154,6 +156,7 @@ confidence: inferred   # "bottom edges left to the designer"
 action: click
 target: {label: Exit Sketch, kind: button, where: "confirmation corner, top-right of graphics area"}
 check: "Sketch1 in tree, not in edit mode"
+verify: {uia: {name: Sketch1, type: TreeItem, window: SOLIDWORKS}}
 source: {anchor: "#step-3"}
 confidence: high
 ```
@@ -182,6 +185,7 @@ confidence: high   # 360 is the default, so often already set
 action: click
 target: {label: OK (green check), kind: button, where: "top of PropertyManager"}
 check: "Revolve1 in tree; cup-shaped solid. Error → open profile, back to step 13"
+verify: {uia: {name: Revolve1, type: TreeItem, window: SOLIDWORKS}}
 source: {anchor: "#step-4"}
 confidence: high
 repeat_of: 12
@@ -249,6 +253,7 @@ confidence: high
 action: click
 target: {label: Exit Sketch, kind: button, where: "confirmation corner"}
 check: "Sketch2 in tree"
+verify: {uia: {name: Sketch2, type: TreeItem, window: SOLIDWORKS}}
 source: {anchor: "#step-5"}
 repeat_of: 15
 ```
@@ -288,6 +293,7 @@ action: click
 target: {label: OK (green check), kind: button, where: "top of PropertyManager"}
 params: {click_type: right, note: "source right-clicks first, then clicks the check"}
 check: "Plane1 in tree"
+verify: {uia: {name: Plane1, type: TreeItem, window: SOLIDWORKS}}
 source: {anchor: "#step-6"}
 repeat_of: 12
 ```
@@ -298,6 +304,7 @@ target: {label: Plane1, kind: tree_item, where: "FeatureManager design tree"}
 params: {value: "MugEdge", then_key: Enter, how: "slow double-click or F2 to rename"}
 why: "A clear name makes the sweep easier to set up."
 check: "Tree shows MugEdge"
+verify: {uia: {name: MugEdge, type: TreeItem, window: SOLIDWORKS}}
 source: {anchor: "#step-6"}
 confidence: high
 ```
@@ -344,6 +351,7 @@ confidence: high
 action: click
 target: {label: Exit Sketch, kind: button, where: "confirmation corner"}
 check: "Sketch3 in tree"
+verify: {uia: {name: Sketch3, type: TreeItem, window: SOLIDWORKS}}
 source: {anchor: "#step-7"}
 repeat_of: 15
 ```
@@ -382,6 +390,7 @@ confidence: high
 action: click
 target: {label: OK (green check), kind: button, where: "top of PropertyManager"}
 check: "Sweep1 in tree; mug has a handle"
+verify: {uia: {name: Sweep1, type: TreeItem, window: SOLIDWORKS}}
 source: {anchor: "#step-8"}
 repeat_of: 12
 ```
@@ -417,6 +426,7 @@ target: {label: Radius, kind: field, where: "Fillet PropertyManager"}
 params: {suggested: {value: "1"}, then: "OK (green check)"}
 why: "Real parts have small fillets from manufacturing."
 check: "Fillet1 in tree; no sharp edges on rim"
+verify: {uia: {name: Fillet1, type: TreeItem, window: SOLIDWORKS}}
 source: {anchor: "#step-10"}
 confidence: high
 ```

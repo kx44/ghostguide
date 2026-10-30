@@ -33,6 +33,7 @@ action: type
 target: {label: filename box, kind: field, where: "Explorer, new file row"}
 params: {value: "index.html", then_key: Enter}
 check: "index.html open in editor"
+verify: {uia: {name_contains: index.html, type: TabItem}}
 source: {t: "01:39-01:44"}
 confidence: high
 ```
@@ -43,6 +44,7 @@ target: {label: Editor, kind: field, where: "index.html, line 1"}
 params: {value: "!", then_key: Tab}
 why: "Emmet expands ! into a full HTML skeleton."
 check: "Document has <!DOCTYPE html>, <head>, <body>"
+verify: {uia: {type: Edit, window: Visual Studio Code, value_contains: "<!DOCTYPE html>"}}
 source: {t: "01:44-01:49"}
 confidence: high
 ```
@@ -60,6 +62,7 @@ params:
     </div>
 why: "videos = whole area, video-section = a group between grey lines, video-container = one card."
 check: "Markup present inside <body>"
+verify: {uia: {type: Edit, window: Visual Studio Code, value_contains: "class=\"video-container\""}}
 source: {t: "01:49-02:31"}
 confidence: high
 ```
@@ -74,6 +77,7 @@ params:
     </a>
 why: "Placeholder 250×150 image; href=\"#\" since nothing is really linked."
 check: "Thumbnail markup inside the article"
+verify: {uia: {type: Edit, window: Visual Studio Code, value_contains: "class=\"thumbnail-image\""}}
 source: {t: "02:37-03:34"}
 confidence: high
 ```
@@ -83,6 +87,7 @@ action: shortcut
 target: {label: Save, kind: button, where: "File menu"}
 params: {keys: [Ctrl, S]}
 check: "Tab shows no unsaved dot"
+verify: {file: {path: index.html, contains: "class=\"thumbnail-image\""}}
 source: {t: "03:40"}
 confidence: high
 ```
@@ -94,6 +99,7 @@ target: {label: Open with Live Server, kind: menu_item, where: "Explorer, right-
 params: {click_type: right}
 why: "Live Server reloads the browser on every save."
 check: "New browser tab at 127.0.0.1:5501/index.html"
+verify: {uia: {type: Edit, name: Address and search bar, value_contains: "127.0.0.1:5501"}}
 source: {t: "03:43-03:46"}
 confidence: low   # frames show the new tab opening but not how; server was already running
 ```
@@ -120,6 +126,7 @@ params:
     </div>
 why: "Two columns: channel icon left, details right. 36×36 is YouTube's icon size."
 check: "Markup present; after save, a small icon under the thumbnail"
+verify: {uia: {type: Edit, window: Visual Studio Code, value_contains: "class=\"channel-icon\""}}
 source: {t: "03:58-04:48"}
 confidence: high
 ```
@@ -140,6 +147,7 @@ params:
     </div>
 why: "Title and channel are links because they're clickable on YouTube."
 check: "Markup present"
+verify: {uia: {type: Edit, window: Visual Studio Code, value_contains: "class=\"video-details\""}}
 source: {t: "04:54-06:21"}
 confidence: high
 simplified: "Author copies the • from YouTube via DevTools (05:50-06:15); we ghost-type it directly."
@@ -150,6 +158,7 @@ action: shortcut
 target: {label: Save, kind: button, where: "File menu"}
 params: {keys: [Ctrl, S]}
 check: "Browser shows title, channel name, '12K views • 1 week ago' (unstyled)"
+verify: {file: {path: index.html, contains: "class=\"video-details\""}}
 source: {t: "06:15-06:26"}
 repeat_of: 6
 ```
@@ -170,6 +179,7 @@ action: type
 target: {label: filename box, kind: field, where: "Explorer, new file row"}
 params: {value: "styles.css", then_key: Enter}
 check: "styles.css open"
+verify: {uia: {name_contains: styles.css, type: TabItem}}
 source: {t: "06:33-06:39"}
 repeat_of: 2
 ```
@@ -178,6 +188,7 @@ repeat_of: 2
 action: click
 target: {label: index.html, kind: tab, where: "editor tab bar"}
 check: "index.html active"
+verify: {uia: {name_contains: index.html, type: TabItem, selected: true}}
 source: {t: "06:39"}
 confidence: inferred
 ```
@@ -191,6 +202,7 @@ params:
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
 why: "Google uses Roboto on its pages."
 check: "Both <link> tags in <head>"
+verify: {uia: {type: Edit, window: Visual Studio Code, value_contains: "href=\"styles.css\""}}
 source: {t: "06:39-06:56"}
 confidence: high   # URL read off screen at 07:00
 ```
@@ -199,6 +211,7 @@ confidence: high   # URL read off screen at 07:00
 action: click
 target: {label: styles.css, kind: tab, where: "editor tab bar"}
 check: "styles.css active"
+verify: {uia: {name_contains: styles.css, type: TabItem, selected: true}}
 source: {t: "06:56"}
 repeat_of: 14
 ```
@@ -218,6 +231,7 @@ params:
     }
 why: "Selects every element and pseudo-element; Roboto with fallbacks."
 check: "After save: page uses Roboto, no gap at page edges"
+verify: {uia: {type: Edit, window: Visual Studio Code, value_contains: "box-sizing: border-box"}}
 source: {t: "07:02-07:45"}
 confidence: high
 ```
@@ -239,6 +253,7 @@ params:
     }
 why: "position: relative lets the duration badge sit in the thumbnail's corner."
 check: "Rules present"
+verify: {uia: {type: Edit, window: Visual Studio Code, value_contains: "position: relative"}}
 source: {t: "07:45-08:29"}
 confidence: high
 ```
@@ -247,6 +262,7 @@ confidence: high
 action: click
 target: {label: index.html, kind: tab, where: "editor tab bar"}
 check: "index.html active"
+verify: {uia: {name_contains: index.html, type: TabItem, selected: true}}
 source: {t: "08:29"}
 repeat_of: 14
 ```
@@ -257,6 +273,7 @@ target: {label: Editor, kind: field, where: "index.html, in <a href=\"#\" class=
 params: {value: ' data-duration="12:24"'}
 why: "A data attribute CSS can read with attr()."
 check: 'Thumbnail link has data-duration="12:24"'
+verify: {uia: {type: Edit, window: Visual Studio Code, value_contains: "data-duration=\"12:24\""}}
 source: {t: "08:29-08:46"}
 confidence: high
 ```
@@ -265,6 +282,7 @@ confidence: high
 action: click
 target: {label: styles.css, kind: tab, where: "editor tab bar"}
 check: "styles.css active"
+verify: {uia: {name_contains: styles.css, type: TabItem, selected: true}}
 source: {t: "08:46"}
 repeat_of: 14
 ```
@@ -288,6 +306,7 @@ params:
     }
 why: "Pulls 12:24 from the HTML into a dark, slightly see-through pill."
 check: "Rule present"
+verify: {uia: {type: Edit, window: Visual Studio Code, value_contains: "attr(data-duration)"}}
 source: {t: "08:46-10:25"}
 confidence: high
 ```
@@ -297,6 +316,7 @@ action: shortcut
 target: {label: Save, kind: button, where: "File menu"}
 params: {keys: [Ctrl, S], then: "look at browser"}
 check: "Browser: white '12:24' on a dark pill, bottom-right of the (full-width) thumbnail area"
+verify: {file: [{path: styles.css, contains: "attr(data-duration)"}, {path: index.html, contains: "data-duration=\"12:24\""}]}
 source: {t: "10:19-10:25"}
 repeat_of: 6
 ```
