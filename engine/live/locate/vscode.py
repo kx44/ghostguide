@@ -294,6 +294,37 @@ def locate_in(step: Step, els: list[dict], editor: Optional[Editor]) -> tuple[Op
     return b, None, "named control" if b else "not found"
 
 
+def insert_col(text: str, where: Optional[str], n: int) -> Optional[int]:
+    """Column (0-based, tabs as 4) where a step types into the middle of line n rather than on a line of its
+    own: "… after class attribute" means just before the tag's closing `>`. None for whole-line inserts."""
+    if not where or "attribute" not in where.casefold():
+        return None
+    lines = text.split("\n")
+    if not 1 <= n <= len(lines):
+        return None
+    line = lines[n - 1].expandtabs(4)
+    i = line.rfind(">")
+    if i > 0 and line[i - 1] == "/":
+        i -= 1                                          # self-closing: before "/>"
+    return i if i >= 0 else None
+
+
+def editor_extra(ed: Optional[Editor], bg: Optional[str], col: Optional[int] = None) -> dict:
+    """What the overlay needs to draw ghost code inside the editor: its visible area (code column to the
+    minimap, physical px) to clip to, its background colour for a solid backing over the code already
+    there, the line height so multi-line code lines up with the editor's lines, and for a mid-line insert
+    the column to start at."""
+    if ed is None:
+        return {}
+    out = {"clip": {"x": ed.left - 6, "y": ed.top, "w": ed.right - ed.left + 6, "h": ed.bottom - ed.top},
+           "line_h": round(ed.line_h, 2)}
+    if bg:
+        out["backing"] = bg
+    if col is not None:
+        out["col"] = col
+    return out
+
+
 # ---------- gutter pitch (pure) -----------------------------------------------------------------
 def pitch_from_rows(ink: list[float], approx: float) -> Optional[float]:
     """Line pitch from a per-row ink profile of the line-number gutter: the autocorrelation peaks at every
@@ -386,40 +417,49 @@ class VSCodeLocator:
 
     def __init__(self, window: str = "Visual Studio Code"):
         self.window = window
-        self._pitch: dict[tuple, float] = {}
+        self._gutter: dict[tuple, tuple[Optional[float], Optional[str]]] = {}   # geometry → (pitch, bg colour)
         self.last_how = ""
         self.last_seconds = 0.0
+        self.last_extra: dict = {}         # for editor lines: what ghost text needs to sit in the editor
 
     def locate(self, step: Step) -> tuple[Optional[Box], Optional[Line]]:
         t0 = time.perf_counter()
         els = dump(self.window)
         ed = editor_from(els)
+        bg = None
         if ed is not None:
-            ed.line_h = self._line_pitch(ed)
+            pitch, bg = self._gutter_info(ed)
+            ed.line_h = pitch or ed.line_h
         box, line, self.last_how = locate_in(step, els, ed)
+        self.last_extra = {}
+        if box is not None and ed is not None and self.last_how.startswith("editor line"):
+            n = int(self.last_how.split()[2])
+            self.last_extra = editor_extra(ed, bg, insert_col(ed.text, step.target.where, n))
         self.last_seconds = time.perf_counter() - t0
         return box, line
 
-    def _line_pitch(self, ed: Editor) -> float:
+    def _gutter_info(self, ed: Editor) -> tuple[Optional[float], Optional[str]]:
         key = (ed.left, ed.top, ed.bottom, int(ed.line_h))
-        if key not in self._pitch:
-            p = None
+        if key not in self._gutter:
             try:
-                p = self._measure(ed)
+                self._gutter[key] = self._measure(ed)
             except Exception:
-                pass
-            self._pitch[key] = p or ed.line_h
-        return self._pitch[key]
+                self._gutter[key] = (None, None)
+        return self._gutter[key]
 
     @staticmethod
-    def _measure(ed: Editor) -> Optional[float]:
+    def _measure(ed: Editor) -> tuple[Optional[float], Optional[str]]:
+        """Line pitch and the editor's background colour, both from one grab of the line-number gutter
+        (the gutter has the editor's background in the usual themes; the median pixel is background)."""
         from PIL import ImageGrab
 
         gutter_w = max(30, int(ed.line_h * 2.2))
         x1 = ed.left - 8
-        img = ImageGrab.grab(bbox=(x1 - gutter_w, ed.top, x1, ed.bottom), all_screens=True).convert("L")
+        rgb = ImageGrab.grab(bbox=(x1 - gutter_w, ed.top, x1, ed.bottom), all_screens=True).convert("RGB")
+        img = rgb.convert("L")
         w, h = img.size
-        px = img.load()
-        bg = sorted(px[i, j] for i in range(0, w, 3) for j in range(0, h, 3))[(w // 3) * (h // 3) // 2]
+        px, cpx = img.load(), rgb.load()
+        samples = sorted(((px[i, j], cpx[i, j]) for i in range(0, w, 3) for j in range(0, h, 3)))
+        bg, colour = samples[len(samples) // 2]
         ink = [sum(abs(px[i, j] - bg) for i in range(w)) / w for j in range(h)]
-        return pitch_from_rows(ink, ed.line_h)
+        return pitch_from_rows(ink, ed.line_h), "#%02x%02x%02x" % colour

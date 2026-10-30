@@ -38,6 +38,10 @@ export interface GuideExtra {
   edge_point?: Pt;
   direction?: "left" | "right" | "up" | "down";
   original_style?: Style;
+  clip?: Box;          // ghost text in an editor: its visible area (physical px), to clip to
+  backing?: string;    // …its background colour, for a solid backing over the code already there
+  line_h?: number;     // …its line height (physical px), so multi-line code lines up with its lines
+  col?: number;        // …a mid-line insert starts at this character column
   [k: string]: unknown;
 }
 
@@ -90,6 +94,7 @@ export type FromOverlay =
 // What main.ts hands a display's renderer: the message plus the same geometry in that window's DIPs.
 export interface Local {
   box?: Box;
+  clip?: Box;          // ghost text: the editor's visible area (from extra.clip), this window's DIPs
   line?: LineSpec;
   edge_point?: Pt;
   to?: Pt;

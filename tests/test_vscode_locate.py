@@ -197,3 +197,34 @@ def test_pin_beats_locator():
     out = p.handle({"type": "hello"})
     assert out[1].box.x == 9 and loc.calls == 0
     assert p.refresh() == []
+
+
+def test_editor_line_carries_clip_backing_and_line_height_to_ghost_text():
+    from engine.live.locate.vscode import editor_extra
+    ed = editor_from(_els())
+    ed.line_h = 34.2
+    x = editor_extra(ed, "#1f1f1f")
+    assert x == {"clip": {"x": 750, "y": 161, "w": ed.right - 756 + 6, "h": 713}, "line_h": 34.2, "backing": "#1f1f1f"}
+    assert "backing" not in editor_extra(ed, None) and editor_extra(None, "#000") == {}
+
+    class Loc(FakeLocator):
+        last_extra = x
+    loc = Loc()
+    loc.box = True
+    p = Player(Session(TUT), Pins(), scheme_override="dark", locator=loc)
+    p.handle({"type": "hello"})
+    p.handle({"type": "jump", "n": 4})                 # type into the editor: ghost text
+    out = p.refresh()
+    assert out[-1].style == "ghost_text" and out[-1].extra["backing"] == "#1f1f1f" and out[-1].extra["clip"]["y"] == 161
+    p.handle({"type": "jump", "n": 1})                 # a click step keeps its extra clean
+    out = p.refresh()
+    assert "backing" not in out[-1].extra
+
+
+def test_insert_col_for_mid_line_inserts():
+    from engine.live.locate.vscode import insert_col
+    n = target_line(HTML, STEP[20].target.where)
+    col = insert_col(HTML, STEP[20].target.where, n)
+    assert HTML.split("\n")[n - 1][col:] == ">"            # just before the tag's closing >
+    assert insert_col('  <img src="x" />', "in <img> after class attribute", 1) == len('  <img src="x" ')
+    assert insert_col(HTML, STEP[4].target.where, 8) is None

@@ -87,6 +87,10 @@ function route(msg: ToOverlay) {
         d = d ?? displayForRect(r);
         local.box = localRect(d, r.x, r.y, r.width, r.height);
       }
+      if (msg.extra.clip && d) {
+        const c = toDipRect(msg.extra.clip);
+        local.clip = localRect(d, c.x, c.y, c.width, c.height);
+      }
       const target = (d && wins.get(d.id)) || (guideDisplay !== undefined && wins.get(guideDisplay)) || primaryWin();
       guideDisplay = target.display.id;
       for (const w of wins.values()) deliver(w, w === target ? msg : { type: "clear" }, w === target ? local : {});

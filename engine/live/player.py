@@ -38,6 +38,7 @@ class Player:
         # locate_current() outside its lock and apply_located() with the result, so buttons answer at once.
         self.locator = locator
         self._located: dict[int, tuple[Optional[m.Box], Optional[m.Line]]] = {}
+        self._located_extra: dict[int, dict] = {}   # e.g. editor clip + backing colour for ghost text
         self.pins_path = pins_path               # where Ctrl+Alt+P pins are saved; None = keep in memory
         self._corner: Optional[tuple[int, int]] = None   # first Ctrl+Alt+P of a pair
         self.planner = Planner(session.tutorial)
@@ -84,6 +85,8 @@ class Player:
             box, line = self.target(step.n)
             self.scheme = self._scheme(box, step.n)
             guide = self.planner.plan(step, box, line, self.displays, self.scheme)
+            if guide.style == "ghost_text" and step.n not in self.pins.steps:
+                guide.extra.update(self._located_extra.get(step.n, {}))
             if guide.card is not None and box is None and step.action not in NO_PIN_NEEDED:
                 first = "start point" if step.action in LINE_ACTIONS else "top-left corner"
                 second = "end point" if step.action in LINE_ACTIONS else "bottom-right corner"
@@ -100,8 +103,8 @@ class Player:
         self.last_guide = guide
         return out
 
-    def locate_current(self) -> Optional[tuple[int, Optional[m.Box], Optional[m.Line]]]:
-        """Ask the locator about the current step: (step, box, line), or None when there's nothing to ask.
+    def locate_current(self) -> Optional[tuple]:
+        """Ask the locator about the current step: (step, box, line, extra), or None when there's nothing to ask.
         Reads the session but changes nothing, so the server runs it outside its lock."""
         s = self.session
         if self.locator is None or s.finished or s.hidden or s.step is None or s.step.n in self.pins.steps:
@@ -112,16 +115,17 @@ class Player:
         except Exception as e:      # UIA hiccups (window closing, element gone) must not end the session
             self.locator.last_how = f"locator error: {e}"
             box, line = None, None
-        return step.n, box, line
+        return step.n, box, line, dict(getattr(self.locator, "last_extra", None) or {})
 
     def apply_located(self, found) -> list[m._Msg]:
         """Store a locate_current() result; the guide again when the target moved, appeared or went away
         on the step still showing, else nothing (the user may have moved on meanwhile)."""
         if found is None:
             return []
-        n, box, line = found
+        n, box, line = found[:3]
         first = n not in self._located
         self._located[n] = (box, line)
+        self._located_extra[n] = found[3] if len(found) > 3 else {}
         s = self.session
         if s.finished or s.hidden or s.step is None or s.step.n != n:
             return []
