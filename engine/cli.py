@@ -129,7 +129,7 @@ def cmd_play(args) -> int:
 def _console(player) -> int:
     """Drive the session from the terminal, no overlay: n next, b back, s skip, h hide/resume,
     j N jump, m show me, q quit. Prints what the overlay would be sent."""
-    for msg in player.handle({"type": "hello"}):
+    for msg in player.handle({"type": "hello"}) + player.refresh():
         print(_describe(msg))
     print("keys: n next · b back · s skip · h hide/resume · j N jump · m show me · q quit")
     while True:
@@ -151,7 +151,7 @@ def _console(player) -> int:
                 continue
         else:
             continue
-        for out in player.handle(msg):
+        for out in player.handle(msg) + player.refresh():     # refresh: the live locator, if any
             print(_describe(out))
     return 0
 

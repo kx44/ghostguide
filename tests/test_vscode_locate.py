@@ -106,8 +106,8 @@ def test_line_box_clamps_into_viewport():
 
 
 def test_new_file_estimated_then_exact():
-    box, exact = new_file_box(_els())
-    assert not exact and box.w == round(51 * 0.79) and box.x + 4 * box.w + 4 == 94 + 523
+    box, exact = new_file_box(_els())             # header [94, 211, 523, 51]; hovered button was [443, 218, 37, 37]
+    assert not exact and (box.x, box.y, box.w, box.h) == (443, 218, 37, 37)
     box, exact = new_file_box(_els(more=[{"type": "Button", "name": "New File...", "rect": [450, 216, 41, 40]}]))
     assert exact and box.x == 450
 
@@ -164,12 +164,30 @@ def test_player_uses_locator_and_refresh_sends_only_changes():
     loc = FakeLocator()
     p = Player(Session(TUT), Pins(), scheme_override="dark", locator=loc)
     out = p.handle({"type": "hello"})
+    assert out[1].box is None and out[1].card.dev_hint.startswith("Looking for it")
+    out = p.refresh()                            # first answer for the step: sent even with nothing found
     assert out[1].box is None and "Not found (not found)" in out[1].card.dev_hint
     assert p.refresh() == []                     # nothing moved
     loc.box = True
     out = p.refresh()
     assert out and out[1].box.x == 1
     assert p.refresh() == []
+
+
+def test_navigation_never_waits_for_the_locator():
+    loc = FakeLocator()
+    loc.box = True
+    p = Player(Session(TUT), Pins(), scheme_override="dark", locator=loc)
+    p.handle({"type": "hello"})
+    p.refresh()
+    calls = loc.calls
+    out = p.handle({"type": "next"})             # answers from what's known: step 2's target isn't yet
+    assert loc.calls == calls and out[-1].step.n == 2 and out[-1].box is None
+    found = p.locate_current()                   # the server's poll, outside its lock
+    p.handle({"type": "back"})                   # the user moved on meanwhile
+    assert p.apply_located(found) == []          # a late answer for step 2 doesn't redraw step 1
+    out = p.handle({"type": "next"})
+    assert out[-1].box.x == 1                    # but it's remembered for step 2
 
 
 def test_pin_beats_locator():

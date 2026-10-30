@@ -101,5 +101,7 @@ export interface Routed { msg: ToOverlay; local: Local; primary: boolean; displa
 export interface GhostBridge {
   on(cb: (r: Routed) => void): void;
   send(msg: FromOverlay): void;
-  setInteractive(on: boolean): void;
+  /** Where this window's cards and buttons are (window DIPs); main makes only these clickable. */
+  setHitRects(rects: HitRect[]): void;
 }
+export interface HitRect { x: number; y: number; w: number; h: number }

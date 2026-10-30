@@ -6,7 +6,7 @@
 //                                     [--timed [--speed 2] [--loop]] plays it on its timestamps instead
 import { BrowserWindow, Display, app, ipcMain, screen } from "electron";
 import { join } from "node:path";
-import type { FromOverlay, Local, Routed, StateMsg, ToOverlay } from "../shared/messages";
+import type { FromOverlay, HitRect, Local, Routed, StateMsg, ToOverlay } from "../shared/messages";
 import { Link, connectEngine, replaySteps, replayTimed } from "./bridge";
 import { displayForPoint, displayForRect, physicalDisplays, toDipPoint, toDipRect } from "./displays";
 import { registerHotkeys, unregisterHotkeys } from "./hotkeys";
@@ -18,8 +18,9 @@ const SPEED = Number(arg("--speed") ?? 1);
 const LOOP = argv.includes("--loop");
 const TIMED = argv.includes("--timed");
 const ENGINE = arg("--engine") ?? `ws://127.0.0.1:${arg("--port") ?? 8765}`;
+const HIT_POLL_MS = 30;          // cursor check for click-through (see ghost:hits)
 
-interface Win { win: BrowserWindow; display: Display; ready: boolean; queue: Routed[] }
+interface Win { win: BrowserWindow; display: Display; ready: boolean; queue: Routed[]; hits: HitRect[]; clickable: boolean }
 const wins = new Map<number, Win>();
 let link: Link | undefined;
 let lastState: StateMsg | undefined;
@@ -40,7 +41,7 @@ function makeWindow(d: Display): Win {
   win.setIgnoreMouseEvents(true, { forward: true });
   win.setVisibleOnAllWorkspaces(true);
   win.setBounds(d.bounds);                        // Windows can shrink a frameless window on a scaled display
-  const w: Win = { win, display: d, ready: false, queue: [] };
+  const w: Win = { win, display: d, ready: false, queue: [], hits: [], clickable: false };
   win.loadFile(join(__dirname, "..", "renderer", "index.html"));
   win.once("ready-to-show", () => win.showInactive());
   win.webContents.on("render-process-gone", (_e, det) => console.error("overlay renderer gone:", det.reason));
@@ -128,9 +129,19 @@ app.whenReady().then(() => {
     for (const r of w.queue.splice(0)) w.win.webContents.send("ghost:msg", r);
   });
   ipcMain.on("ghost:send", (_e, msg: FromOverlay) => link?.send(msg));
-  ipcMain.on("ghost:interactive", (e, on: boolean) => {
-    BrowserWindow.fromWebContents(e.sender)?.setIgnoreMouseEvents(!on, { forward: true });
+  ipcMain.on("ghost:hits", (e, rects: HitRect[]) => {
+    const w = [...wins.values()].find(x => x.win.webContents === e.sender);
+    if (w) w.hits = rects;
   });
+  // Clickable only while the cursor is over a card or button of that window; click-through everywhere else.
+  setInterval(() => {
+    const p = screen.getCursorScreenPoint();
+    for (const w of wins.values()) {
+      const x = p.x - w.display.bounds.x, y = p.y - w.display.bounds.y;
+      const over = w.hits.some(r => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h);
+      if (over !== w.clickable) { w.clickable = over; w.win.setIgnoreMouseEvents(!over, { forward: true }); }
+    }
+  }, HIT_POLL_MS);
 
   let wasUp: boolean | undefined;
   link = REPLAY
@@ -146,7 +157,12 @@ app.whenReady().then(() => {
       });
 
   const failed = registerHotkeys(() => !!lastState?.hidden, m => link?.send(m), () => app.quit());
-  if (failed.length) console.warn("hotkeys taken by another app:", failed.join(", "));
+  if (failed.length) {
+    console.warn("hotkeys taken by another app:", failed.join(", "));
+    const keys = failed.map(a => a.replace("Control", "Ctrl").replace("Right", "→").replace("Left", "←")).join(", ");
+    setTimeout(() => route({ type: "toast", text: `${keys} is used by another app; use the card or bar buttons instead.`,
+                             kind: "warn", ms: 6000 }), 1500);
+  }
 
   const rebuild = () => { buildWindows(); hello(); };
   screen.on("display-added", rebuild);

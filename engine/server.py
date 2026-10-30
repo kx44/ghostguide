@@ -52,7 +52,8 @@ async def serve(player: Player, port: int = DEFAULT_PORT, record: Optional[Path]
     clients: set = set()
     rec = Recorder(record)
     loop = asyncio.get_running_loop()
-    busy = asyncio.Lock()      # one player call at a time: overlay messages and the locator poll
+    busy = asyncio.Lock()      # one player call at a time; the slow locator walk itself runs outside it
+    poke = asyncio.Event()     # set after each overlay message: locate the (new) step now, not in a second
 
     async def send_all(msgs: list[m._Msg]) -> None:
         for msg in msgs:
@@ -86,6 +87,7 @@ async def serve(player: Player, port: int = DEFAULT_PORT, record: Optional[Path]
                 where = "finished" if s.finished else f"step {s.current}/{s.of}" + (" (hidden)" if s.hidden else "")
                 log(f"  ← {kind:8s} → {where}")
                 await send_all(out)
+                poke.set()
         finally:
             clients.discard(ws)
             log("overlay disconnected")
@@ -93,14 +95,20 @@ async def serve(player: Player, port: int = DEFAULT_PORT, record: Optional[Path]
     async def poll():
         last = None
         while True:
-            await asyncio.sleep(POLL_S)
+            try:
+                await asyncio.wait_for(poke.wait(), POLL_S)
+            except asyncio.TimeoutError:
+                pass
+            poke.clear()
             if not clients:
                 continue
+            t0 = time.monotonic()
+            found = await asyncio.to_thread(player.locate_current)      # slow; buttons keep working meanwhile
             async with busy:
-                out = await asyncio.to_thread(player.refresh)
+                out = await asyncio.to_thread(player.apply_located, found)
             how = getattr(player.locator, "last_how", None)
             if how != last:
-                log(f"  locate step {player.session.current}: {how}")
+                log(f"  locate step {found[0] if found else '-'}: {how} ({time.monotonic() - t0:.1f}s)")
                 last = how
             await send_all(out)
 

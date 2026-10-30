@@ -121,14 +121,19 @@ function onMessage(r: Routed) {
   }
 }
 
-// Clicks pass through everywhere except our own cards and buttons (`.hit`): main.ts turns mouse events on
-// for this window only while the pointer is over one. The window never takes focus, so typing stays in the app.
-let interactive = false;
-document.addEventListener("mousemove", e => {
-  const over = !!(e.target as Element | null)?.closest?.(".hit");
-  if (over !== interactive) { interactive = over; bridge.setInteractive(over); }
-});
-document.addEventListener("mouseleave", () => { if (interactive) { interactive = false; bridge.setInteractive(false); } });
+// Clicks pass through everywhere except our own cards and buttons (`.hit`). This page reports where those
+// are and main.ts watches the cursor, turning mouse events on for this window only while it's over one.
+// (Turning them on from forwarded mousemove events here didn't work on Windows: a click-through window
+// gets no moves.) The window never takes focus, so typing stays in the app.
+let lastHits = "";
+function reportHits() {
+  const rects = [...document.querySelectorAll<HTMLElement>(".hit")].map(e => e.getBoundingClientRect())
+    .filter(r => r.width > 0 && r.height > 0)
+    .map(r => ({ x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) }));
+  const key = JSON.stringify(rects);
+  if (key !== lastHits) { lastHits = key; bridge.setHitRects(rects); }
+}
+setInterval(reportHits, 100);     // cheap, and catches cards that move, animate in or get removed
 
 window.addEventListener("resize", () => { if (lastGuide && !pending) drawGuide(lastGuide.g, lastGuide.local); });
 

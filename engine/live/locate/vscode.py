@@ -32,7 +32,8 @@ from engine.schema.tutorial import Step
 # VS Code appends key hints to UIA names: "Toggle Panel (Ctrl+J)", "Split Editor Right (Ctrl+\) [Alt] …".
 _HINTS = re.compile(r"\s*(\[alt\].*|\((ctrl|alt|shift|win|f\d+)[^)]*\))\s*$", re.I)
 _LN = re.compile(r"^Ln (\d+), Col (\d+)")
-ICON_RATIO = 0.79        # header action icon size / header height (41 / 52 at 180 %)
+ICON_RATIO = 0.725       # header action button / header height (37 / 51 at 180 %, measured hovered)
+ICON_PAD_RATIO = 0.51    # gap right of the last action button / header height (26 / 51)
 NEW_FILE_ICONS = 4       # New File, New Folder, Refresh, Collapse; New File is the leftmost
 MINIMAP_PX = 120         # keep the line box clear of the minimap
 MIN_LINE_PX = 10         # a textarea shorter than this is parked (editor not focused), not on the caret line
@@ -228,7 +229,9 @@ def new_file_box(els: list[dict]) -> tuple[Optional[Box], bool]:
         return None, False
     x, y, w, h = hdr[0]["rect"]
     icon = int(round(h * ICON_RATIO))
-    return Box(x=x + w - NEW_FILE_ICONS * icon - 4, y=y + (h - icon) // 2, w=icon, h=icon), False
+    # Same box the hovered button will have, so hovering doesn't move the outline (or the card next to it).
+    return Box(x=x + w - NEW_FILE_ICONS * icon - int(round(h * ICON_PAD_RATIO)), y=y + (h - icon) // 2,
+               w=icon, h=icon), False
 
 
 def filename_box(els: list[dict]) -> Optional[Box]:

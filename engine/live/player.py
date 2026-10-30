@@ -34,7 +34,10 @@ class Player:
                  scheme_override: Optional[str] = None, before_capture: Optional[Callable[[], None]] = None,
                  pins_path=None, locator: Optional[Locator] = None):
         self.session = session
-        self.locator = locator                   # finds targets live; re-asked by refresh() while a step shows
+        # Finds targets live. Slow (a UIA walk), so it never runs inside handle(): the server calls
+        # locate_current() outside its lock and apply_located() with the result, so buttons answer at once.
+        self.locator = locator
+        self._located: dict[int, tuple[Optional[m.Box], Optional[m.Line]]] = {}
         self.pins_path = pins_path               # where Ctrl+Alt+P pins are saved; None = keep in memory
         self._corner: Optional[tuple[int, int]] = None   # first Ctrl+Alt+P of a pair
         self.planner = Planner(session.tutorial)
@@ -49,13 +52,10 @@ class Player:
 
     # ---------- what's on screen now ----------
     def target(self, n: int) -> tuple[Optional[m.Box], Optional[m.Line]]:
+        """Pin first, else where the locator last found it (nothing yet = card only until it reports)."""
         box, line = self.pins.box(n), self.pins.line(n)
-        if box is None and line is None and self.locator is not None:
-            try:
-                box, line = self.locator.locate(self.session.tutorial.steps[n - 1])
-            except Exception as e:    # UIA hiccups (window closing, element gone) must not end the session
-                self.locator.last_how = f"locator error: {e}"
-                box, line = None, None
+        if box is None and line is None:
+            box, line = self._located.get(n, (None, None))
         return box, line
 
     def _scheme(self, box: Optional[m.Box], n: Optional[int] = None) -> str:
@@ -87,7 +87,8 @@ class Player:
             if guide.card is not None and box is None and step.action not in NO_PIN_NEEDED:
                 first = "start point" if step.action in LINE_ACTIONS else "top-left corner"
                 second = "end point" if step.action in LINE_ACTIONS else "bottom-right corner"
-                found = f"Not found ({self.locator.last_how}). " if self.locator is not None else "Not pinned yet: "
+                found = ("Not pinned yet: " if self.locator is None else
+                         f"Not found ({self.locator.last_how}). " if step.n in self._located else "Looking for it… ")
                 guide.card.dev_hint = (f"{found}Hover the {first} of {step.target.label} and press "
                                        f"Ctrl+Alt+P, then the {second} and Ctrl+Alt+P again." if self._corner is None
                                        else f"Now hover the {second} and press Ctrl+Alt+P.")
@@ -99,18 +100,40 @@ class Player:
         self.last_guide = guide
         return out
 
-    def refresh(self) -> list[m._Msg]:
-        """Re-locate the current step (the server calls this every second): the guide again when its
-        target moved, appeared or went away, else nothing."""
+    def locate_current(self) -> Optional[tuple[int, Optional[m.Box], Optional[m.Line]]]:
+        """Ask the locator about the current step: (step, box, line), or None when there's nothing to ask.
+        Reads the session but changes nothing, so the server runs it outside its lock."""
         s = self.session
         if self.locator is None or s.finished or s.hidden or s.step is None or s.step.n in self.pins.steps:
+            return None
+        step = s.step
+        try:
+            box, line = self.locator.locate(step)
+        except Exception as e:      # UIA hiccups (window closing, element gone) must not end the session
+            self.locator.last_how = f"locator error: {e}"
+            box, line = None, None
+        return step.n, box, line
+
+    def apply_located(self, found) -> list[m._Msg]:
+        """Store a locate_current() result; the guide again when the target moved, appeared or went away
+        on the step still showing, else nothing (the user may have moved on meanwhile)."""
+        if found is None:
             return []
-        before = self.last_guide
-        out = self.current()
+        n, box, line = found
+        first = n not in self._located
+        self._located[n] = (box, line)
+        s = self.session
+        if s.finished or s.hidden or s.step is None or s.step.n != n:
+            return []
         g = self.last_guide
-        if before is not None and g is not None and (before.step.n, before.box, before.line) == (g.step.n, g.box, g.line):
+        if not first and g is not None and g.step.n == n and g.line == line and _near(g.box, box):
+            self._located[n] = (g.box, g.line)    # keep what's drawn: a pixel of jitter mustn't move the card
             return []
-        return out
+        return self.current()
+
+    def refresh(self) -> list[m._Msg]:
+        """locate_current + apply_located in one go (tests, console mode)."""
+        return self.apply_located(self.locate_current())
 
     def state(self) -> m.State:
         s = self.session
@@ -202,3 +225,12 @@ class Player:
             out.append(m.Toast(text=ev.text, kind="warn" if ev.kind == "skipped" else "ok",
                                ms=3000 if ev.kind in ("finished", "caught_up") else 2000))
         return out
+
+
+JITTER_PX = 4    # a located box that moved this little is the same target
+
+
+def _near(a: Optional[m.Box], b: Optional[m.Box]) -> bool:
+    if a is None or b is None:
+        return a is b
+    return all(abs(p - q) <= JITTER_PX for p, q in ((a.x, b.x), (a.y, b.y), (a.w, b.w), (a.h, b.h)))

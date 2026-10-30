@@ -189,6 +189,109 @@ def check(step, title: str, wait_s: float = 4.0) -> bool | None:
         time.sleep(0.5)
 
 
+def click(x: int, y: int, right: bool = False) -> None:
+    """Move, settle, then click, as a hand does. The overlay decides click-through from where the cursor
+    is (checked every 30 ms), so a jump-and-click in the same instant could land on it instead."""
+    import uiautomation as auto
+    auto.MoveTo(x, y, moveSpeed=4)
+    time.sleep(0.12)
+    (auto.RightClick if right else auto.Click)(x, y)
+
+
+def setup(folder: Path, fresh: bool):
+    """Scratch folder in the start state (when fresh) and its VS Code window in front, Explorer up."""
+    import uiautomation as auto
+    if fresh:
+        reset(folder)
+    title = window_title(folder)
+    win = open_vscode(folder)
+    if fresh:
+        # VS Code restores last session's tabs, now pointing at moved files: close every editor.
+        bring_front(win)
+        auto.SendKeys("{Ctrl}k")
+        auto.SendKeys("w")
+        time.sleep(1.0)
+        if any(e.get("type") == "TabItem" and re.search(r"\.\w+$", e.get("name") or "") for e in dump(title)):
+            bring_front(win)                     # the chord went to a panel: use the command palette
+            auto.SendKeys("{F1}")
+            time.sleep(0.6)
+            auto.SendKeys("View: Close All Editors", interval=0.01)
+            time.sleep(0.6)
+            auto.SendKeys("{Enter}")
+            time.sleep(1.0)
+    for _ in range(20):          # the Explorer must be up before step 1
+        if any((e.get("name") or "").startswith("Explorer Section:") for e in dump(title)):
+            break
+        time.sleep(0.5)
+    return win, title
+
+
+def prepare(step, win, title: str) -> None:
+    """What a person does before looking for the target: New File only shows while the header is hovered."""
+    import uiautomation as auto
+    bring_front(win)
+    time.sleep(0.3)
+    if norm_label(step.target.label).startswith("new file"):
+        hdr = [e for e in dump(title) if e.get("type") == "Button" and (e.get("name") or "").startswith("Explorer Section:")]
+        if hdr:
+            x, y, w, h = hdr[0]["rect"]
+            auto.MoveTo(x + w // 3, y + h // 2, moveSpeed=2)
+            time.sleep(0.7)
+
+
+def click_into_editor(win, title: str, fname: str) -> None:
+    """Click into the file's editor, as whoever types there would. Upper left: a card with no target yet
+    sits bottom-centre on screen, and a click there would land on it."""
+    body = [e["rect"] for e in dump(title) if e.get("type") == "Group" and e.get("name") == fname]
+    if body:
+        x, y, w, h = body[0]
+        bring_front(win)
+        click(x + 220, y + 50)
+        time.sleep(0.5)
+
+
+def act(step, box, win, folder: Path, title: str, loc, row: dict, out: Path) -> None:
+    """Do the step so the next one starts from the right state (see the module doc)."""
+    import uiautomation as auto
+    t = step.target
+    bring_front(win)
+    if step.action == "click" and box is not None:
+        click(*box.center)
+        time.sleep(0.8)
+    elif step.action == "type" and t.kind == "field" and "filename" in t.label.lower() and box is not None:
+        auto.SendKeys(str(step.params["value"]), interval=0.02)
+        auto.SendKeys("{Enter}")
+        time.sleep(1.2)
+    elif step.action == "type" and t.label == "Editor":
+        fname = (t.where or "").split(",")[0].strip()
+        write_code(folder, step, fname)
+        time.sleep(0.6)
+        bring_front(win)          # VS Code re-reads changed files when its window is active
+        # whoever just typed has focus in the editor; Monaco only refreshes its UIA text while focused
+        click_into_editor(win, title, fname)
+    elif step.action == "shortcut":
+        auto.SendKeys("{Ctrl}s")
+        time.sleep(0.6)
+    elif step.action == "menu_path" and box is not None:
+        click(*box.center, right=True)
+        time.sleep(0.9)
+        mbox, _ = loc.locate(step)
+        snap(win, mbox, f"{step.n} menu: {loc.last_how}", out / f"step{step.n:02d}b.png")
+        row["menu"] = {"how": loc.last_how, "box": mbox.model_dump() if mbox else None}
+        print(f"     menu → {loc.last_how}")
+        if mbox is not None and "menu item" in loc.last_how:
+            bring_front(win)
+            click(*mbox.center)
+        else:
+            auto.SendKeys("{Esc}")
+        time.sleep(2.5)
+        bring_front(win)
+    elif step.action == "wait":
+        time.sleep(1.0)
+    else:
+        row["skipped_action"] = True
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--folder", default=str(FOLDER))
@@ -201,24 +304,9 @@ def main(argv=None) -> int:
         return 2
     from engine.dpi import make_dpi_aware
     print(f"DPI awareness: {make_dpi_aware()}")
-    import uiautomation as auto
 
     folder = Path(args.folder)
-    fresh = not args.no_reset and args.start == 1
-    if fresh:
-        reset(folder)
-    title = window_title(folder)
-    win = open_vscode(folder)
-    if fresh:
-        # VS Code restores last session's tabs, now pointing at moved files: close every editor.
-        bring_front(win)
-        auto.SendKeys("{Ctrl}k")
-        auto.SendKeys("w")
-        time.sleep(1.0)
-    for _ in range(20):          # the Explorer must be up before step 1
-        if any((e.get("name") or "").startswith("Explorer Section:") for e in dump(title)):
-            break
-        time.sleep(0.5)
+    win, title = setup(folder, fresh=not args.no_reset and args.start == 1)
     loc = VSCodeLocator(title)
     tut = parse_file(TUTORIAL)
     OUT.mkdir(parents=True, exist_ok=True)
@@ -226,74 +314,19 @@ def main(argv=None) -> int:
     for step in tut.steps:
         if step.n < args.start or (args.end and step.n > args.end):
             continue
-        bring_front(win)
-        time.sleep(0.3)
-        t = step.target
-        if norm_label(t.label).startswith("new file"):
-            hdr = [e for e in dump(title) if e.get("type") == "Button" and (e.get("name") or "").startswith("Explorer Section:")]
-            if hdr:
-                x, y, w, h = hdr[0]["rect"]
-                auto.MoveTo(x + w // 3, y + h // 2, moveSpeed=2)
-                time.sleep(0.7)
+        prepare(step, win, title)
         box, line = loc.locate(step)
         how = loc.last_how
         if how.startswith("click into the editor"):
-            # as a person would before typing: click in the editor (below the code, so the caret goes to the end)
-            body = [e["rect"] for e in dump(title) if e.get("type") == "Group" and e.get("name") == (t.where or "").split(",")[0].strip()]
-            if body:
-                x, y, w, h = body[0]
-                bring_front(win)
-                auto.Click(x + w // 2, y + h - 30)
-                time.sleep(0.6)
-                box, line = loc.locate(step)
-                how = loc.last_how + " (after clicking into the editor)"
+            click_into_editor(win, title, (step.target.where or "").split(",")[0].strip())
+            box, line = loc.locate(step)
+            how = loc.last_how + " (after clicking into the editor)"
         path = OUT / f"step{step.n:02d}.png"
-        snap(win, box, f"{step.n} {t.label}: {how}", path)
-        print(f"[{step.n:2d}] {step.action:9s} {t.label!r:26s} → {how}  {box.model_dump() if box else ''} ({loc.last_seconds:.1f}s)")
-        row = {"n": step.n, "action": step.action, "label": t.label, "how": how,
+        snap(win, box, f"{step.n} {step.target.label}: {how}", path)
+        print(f"[{step.n:2d}] {step.action:9s} {step.target.label!r:26s} → {how}  {box.model_dump() if box else ''} ({loc.last_seconds:.1f}s)")
+        row = {"n": step.n, "action": step.action, "label": step.target.label, "how": how,
                "box": box.model_dump() if box else None, "seconds": round(loc.last_seconds, 2), "shot": str(path)}
-
-        # do the step
-        bring_front(win)
-        if step.action == "click" and box is not None:
-            auto.Click(*box.center)
-            time.sleep(0.8)
-        elif step.action == "type" and t.kind == "field" and "filename" in t.label.lower() and box is not None:
-            auto.SendKeys(str(step.params["value"]), interval=0.02)
-            auto.SendKeys("{Enter}")
-            time.sleep(1.2)
-        elif step.action == "type" and t.label == "Editor":
-            fname = (t.where or "").split(",")[0].strip()
-            write_code(folder, step, fname)
-            time.sleep(0.6)
-            bring_front(win)          # VS Code re-reads changed files when its window is active
-            # whoever just typed has focus in the editor; Monaco only refreshes its UIA text while focused
-            body = [e["rect"] for e in dump(title) if e.get("type") == "Group" and e.get("name") == fname]
-            if body:
-                x, y, w, h = body[0]
-                auto.Click(x + w // 2, y + h - 30)
-                time.sleep(0.4)
-        elif step.action == "shortcut":
-            auto.SendKeys("{Ctrl}s")
-            time.sleep(0.6)
-        elif step.action == "menu_path" and box is not None:
-            auto.RightClick(*box.center)
-            time.sleep(0.9)
-            mbox, _ = loc.locate(step)
-            snap(win, mbox, f"{step.n} menu: {loc.last_how}", OUT / f"step{step.n:02d}b.png")
-            row["menu"] = {"how": loc.last_how, "box": mbox.model_dump() if mbox else None}
-            print(f"     menu → {loc.last_how}")
-            if mbox is not None and "menu item" in loc.last_how:
-                bring_front(win)
-                auto.Click(*mbox.center)
-            else:
-                auto.SendKeys("{Esc}")
-            time.sleep(2.5)
-            bring_front(win)
-        elif step.action == "wait":
-            time.sleep(1.0)
-        else:
-            row["skipped_action"] = True
+        act(step, box, win, folder, title, loc, row, OUT)
         row["verify"] = check(step, title)
         if row["verify"] is not None:
             print(f"     verify: {'ok' if row['verify'] else 'FAILED'}")
