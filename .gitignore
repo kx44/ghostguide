@@ -1,0 +1,23 @@
+# Source videos and big binaries
+sources/
+tools/.bin/
+tutorials/source/
+
+# Secrets
+.env
+
+# Generated
+cache/
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.pytest_cache/
+node_modules/
+overlay/out/
+dist/
+
+# Editor / OS
+.obsidian/workspace.json
+.vscode/
+Thumbs.db
