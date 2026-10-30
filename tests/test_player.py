@@ -109,7 +109,7 @@ def test_walk_writes_replay(tmp_path):
     out = tmp_path / "walk.jsonl"
     assert main(["play", "tutorials/youtube-clone-vscode.md", "--pins", "tests/fixtures/pins/youtube-clone-vscode.yaml",
                  "--scheme", "dark", "--restart", "--walk", str(out), "--every", "1000"]) == 0
-    lines = [json.loads(l) for l in out.read_text().splitlines()]
+    lines = [json.loads(l) for l in out.read_text(encoding="utf-8").splitlines()]
     assert lines[0]["t"] == 0 and lines[0]["msg"]["type"] == "state"
     guides = [l["msg"] for l in lines if l["msg"]["type"] == "guide"]
     assert [g["step"]["n"] for g in guides] == list(range(1, 24))
