@@ -65,6 +65,20 @@ svg.L { position:absolute; left:0; top:0; width:100%; height:100%; overflow:visi
 .card .alt { margin-top:8px; font-size:12px; color:var(--card-mute); }
 .card pre.code { margin:8px 0 0; padding:6px 8px; max-height:140px; overflow:hidden; border-radius:6px; border:1px solid var(--card-line);
                  font:12px/1.4 Consolas, "Cascadia Mono", monospace; white-space:pre; color:var(--card-fg); opacity:.9; }
+/* code card (5): the text to type, with Copy */
+.card .codebox { margin-top:8px; border:1px solid var(--card-line); border-radius:7px; overflow:hidden; }
+.card .codebox.flash { animation:copyflash .6s ease-out; }
+.card .codehd { display:flex; align-items:center; justify-content:space-between; padding:3px 4px 3px 9px; font-size:11px;
+                color:var(--card-mute); border-bottom:1px solid var(--card-line); }
+.card .copy { font:inherit; font-size:11px; padding:2px 9px; border-radius:6px; border:1px solid var(--card-line); background:transparent;
+              color:var(--card-fg); cursor:pointer; transition:background .15s, color .15s, border-color .15s; }
+.card .copy:hover { background:var(--card-acc); color:var(--card-bg); border-color:var(--card-acc); }
+.card .copy.done { background:var(--card-ok); color:var(--card-bg); border-color:var(--card-ok); }
+.card .codebox pre { margin:0; padding:7px 9px; max-height:220px; overflow:auto; font:12px/1.45 Consolas, "Cascadia Mono", monospace;
+                     white-space:pre; color:var(--card-fg); }
+@keyframes copyflash { 0% { box-shadow:0 0 0 0 var(--card-ok); border-color:var(--card-ok); } 100% { box-shadow:0 0 0 6px transparent; } }
+.inscaret { position:absolute; width:2px; background:var(--g); box-shadow:0 0 0 1px var(--halo); border-radius:1px; animation:fade .25s; }
+
 .chips { display:flex; flex-wrap:wrap; align-items:center; gap:4px; margin-bottom:8px; font-size:12px; color:var(--card-mute); }
 .chip { padding:1px 7px; border-radius:5px; border:1px solid var(--card-line); opacity:.6; }
 .chip.cur { opacity:1; border-color:var(--card-acc); color:var(--card-acc); }

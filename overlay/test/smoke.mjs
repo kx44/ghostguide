@@ -59,7 +59,7 @@ for (const scheme of ["light", "dark"]) {
   page.on("console", m => { if (m.type() === "error") errors.push(`${scheme} console: ${m.text()}`); });
   await page.addInitScript(() => {
     window.__sent = [];
-    window.ghost = { on(cb) { window.__push = cb; }, send(m) { window.__sent.push(m); }, setHitRects() {} };
+    window.ghost = { on(cb) { window.__push = cb; }, send(m) { window.__sent.push(m); }, setHitRects() {}, copy() {} };
   });
   await page.goto(page_url);
   await page.addStyleTag({ content: fakeApp(scheme) });

@@ -17,7 +17,8 @@ Style = Literal[
     "ghost_line",     # 2  cursor action, first time: animated ghost line + tooltip
     "beacon",         # 3  button, repeat
     "static_line",    # 4  cursor action, repeat
-    "ghost_text",     # 5  type a value
+    "code_card",      # 5  type a value: outline where it goes + the text in the card, with Copy
+    "ghost_text",     # 5 (KIV) the value as faint text in place; messy over existing code, so unused
     "keycaps",        # 6  keyboard shortcut
     "mask",           # 7  pick in the model
     "path_chips",     # 8  hidden: menu path

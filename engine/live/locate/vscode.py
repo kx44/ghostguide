@@ -351,7 +351,8 @@ def pitch_from_rows(ink: list[float], approx: float) -> Optional[float]:
             return None
         a, b, c = vals[lag - 1], vals[lag], vals[lag + 1]
         d = a - 2 * b + c
-        return lag + (0.5 * (a - c) / d if d < 0 else 0.0)        # parabola through the top 3
+        # parabola through the top 3; a flat top makes d tiny and the shift huge, so keep it within ±½ px
+        return lag + (max(-0.5, min(0.5, 0.5 * (a - c) / d)) if d < 0 else 0.0)
 
     p = peak(approx, approx * 0.2)
     if p is None:
@@ -363,7 +364,7 @@ def pitch_from_rows(ink: list[float], approx: float) -> Optional[float]:
             break
         p = q / k
         k += 1
-    return p if k >= 3 else None
+    return p if k >= 3 and 0.75 * approx <= p <= 1.25 * approx else None
 
 
 # ---------- Windows layer -----------------------------------------------------------------------

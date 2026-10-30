@@ -4,7 +4,7 @@
 //   npm start                         connect to the engine at ws://127.0.0.1:8765 (python -m engine play …)
 //   npm start -- --replay f.jsonl     a recorded session, no engine: step by step, waits for Next
 //                                     [--timed [--speed 2] [--loop]] plays it on its timestamps instead
-import { BrowserWindow, Display, app, ipcMain, screen } from "electron";
+import { BrowserWindow, Display, app, clipboard, ipcMain, screen } from "electron";
 import { join } from "node:path";
 import type { FromOverlay, HitRect, Local, Routed, StateMsg, ToOverlay } from "../shared/messages";
 import { Link, connectEngine, replaySteps, replayTimed } from "./bridge";
@@ -133,6 +133,7 @@ app.whenReady().then(() => {
     for (const r of w.queue.splice(0)) w.win.webContents.send("ghost:msg", r);
   });
   ipcMain.on("ghost:send", (_e, msg: FromOverlay) => link?.send(msg));
+  ipcMain.on("ghost:copy", (_e, text: string) => { if (typeof text === "string") clipboard.writeText(text); });
   ipcMain.on("ghost:hits", (e, rects: HitRect[]) => {
     const w = [...wins.values()].find(x => x.win.webContents === e.sender);
     if (w) w.hits = rects;

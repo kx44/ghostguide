@@ -19,7 +19,7 @@ def test_action_to_style_vscode():
     p = Planner(VS)
     styles = {s.n: p.style(s) for s in VS.steps}
     assert styles[1] == "outline"           # New File, first time
-    assert styles[2] == "ghost_text" and styles[6] == "keycaps"
+    assert styles[2] == "code_card" and styles[6] == "keycaps"
     assert styles[7] == "path_chips" and styles[8] == "signal_card"
     assert styles[14] == "outline" and styles[19] == "beacon"   # index.html tab again → repeat
     assert styles[16] == "beacon" and styles[21] == "beacon"    # gold file: repeat_of 14
@@ -44,14 +44,15 @@ def test_click_type_parsing():
     assert click_type({}) is None and click_type({"click_type": "left"}) is None
 
 
-def test_ghost_text_and_card():
+def test_code_card_and_card():
     g = plan(VS, 2)
-    assert g.style == "ghost_text" and g.extra["value"] == "index.html" and g.extra["then_key"] == "Enter"
+    assert g.style == "code_card" and g.extra["value"] == "index.html" and g.extra["then_key"] == "Enter"
     assert g.card.detail == "Type “index.html”, then press Enter."
     assert g.card.meta == "Step 2 of 23 · Visual Studio Code" and "show_me" in g.card.actions
     assert "do_it" not in g.card.actions       # phase 4
     g4 = plan(VS, 4)
-    assert g4.extra["multiline"] and "faint code" in g4.card.detail
+    assert g4.extra["multiline"] and g4.card.detail == "Copy this, or type it, in index.html, inside <body>."
+    assert plan(VS, 4, box=None).style == "code_card"     # no target yet: the card still carries the code
 
 
 def test_keycaps_and_menu_path_extras():

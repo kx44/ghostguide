@@ -5,6 +5,7 @@ import { Ctx, Mounted, toRect } from "./dom";
 import { mountBeacon } from "./guidance/beacon";
 import { fallbackHtml, mountCard } from "./guidance/card";
 import { mountClickType } from "./guidance/clickType";
+import { mountCodeCard } from "./guidance/codeCard";
 import { mountGhostLine } from "./guidance/ghostLine";
 import { mountGhostText } from "./guidance/ghostText";
 import { mountKeycaps } from "./guidance/keycaps";
@@ -27,7 +28,8 @@ const STYLE: Record<Style, Mount> = {
   ghost_line: (c, g, l) => mountGhostLine(c, g, l, true),
   beacon: mountBeacon,
   static_line: (c, g, l) => mountGhostLine(c, g, l, false),
-  ghost_text: mountGhostText,
+  code_card: mountCodeCard,
+  ghost_text: mountGhostText,     // KIV: unused (code_card replaced it), kept for later
   keycaps: mountKeycaps,
   mask: mountMask,
   path_chips: mountPathChips,

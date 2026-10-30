@@ -215,7 +215,7 @@ def test_editor_line_carries_clip_backing_and_line_height_to_ghost_text():
     p.handle({"type": "hello"})
     p.handle({"type": "jump", "n": 4})                 # type into the editor: ghost text
     out = p.refresh()
-    assert out[-1].style == "ghost_text" and out[-1].extra["backing"] == "#1f1f1f" and out[-1].extra["clip"]["y"] == 161
+    assert out[-1].style == "code_card" and out[-1].extra["backing"] == "#1f1f1f" and out[-1].extra["clip"]["y"] == 161
     p.handle({"type": "jump", "n": 1})                 # a click step keeps its extra clean
     out = p.refresh()
     assert "backing" not in out[-1].extra

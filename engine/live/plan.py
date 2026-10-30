@@ -3,7 +3,7 @@ the same and costs nothing. Input: the step, where its target is (box / line, or
 displays; output: the `guide` message for the overlay.
 
 Rules (Guidance glossary + 04 Base format):
-- action → style: click 1 (repeat 3) · draw_line/drag 2 (repeat 4) · type 5 · shortcut 6 · pick 7 ·
+- action → style: click 1 (repeat 3) · draw_line/drag 2 (repeat 4) · type 5 (code card) · shortcut 6 · pick 7 ·
   menu_path 8 · switch_app 10 · wait 12 · look = card only.
 - First time vs repeat is decided from tutorial order (`repeat_of`, or the same action on the same
   label earlier), never from what happened at runtime.
@@ -18,7 +18,7 @@ from typing import Optional
 from engine.schema.messages import Box, Card, Display, Guide, Line, ShowMe, StepInfo
 from engine.schema.tutorial import Step, Tutorial
 
-_FIRST = {"click": "outline", "draw_line": "ghost_line", "drag": "ghost_line", "type": "ghost_text",
+_FIRST = {"click": "outline", "draw_line": "ghost_line", "drag": "ghost_line", "type": "code_card",
           "shortcut": "keycaps", "pick": "mask", "menu_path": "path_chips", "switch_app": "taskbar",
           "wait": "signal_card", "look": "card"}
 _REPEAT = {"outline": "beacon", "ghost_line": "static_line"}
@@ -173,6 +173,12 @@ class Planner:
         return ShowMe(to=box.center, click=click)
 
 
+def _where(step: Step) -> Optional[str]:
+    """"index.html, inside <body>" → "in index.html, inside <body>" (the outline shows the spot too)."""
+    w = (step.target.where or "").strip()
+    return f"in {w}" if w else None
+
+
 def _detail(step: Step, style: str) -> Optional[str]:
     p, label = step.params, step.target.label
     a = step.action
@@ -185,7 +191,8 @@ def _detail(step: Step, style: str) -> Optional[str]:
             return f"Type the value in {label}{then}."
         v = str(v)
         if "\n" in v.rstrip("\n") or len(v) > 40:
-            return f"Type the faint code in {label}{then}."
+            where = _where(step)
+            return f"Copy this, or type it, {where}{then}." if where else f"Copy this, or type it, in {label}{then}."
         return f"Type “{v}”{then}."
     if a == "shortcut":
         keys = p.get("keys") or []

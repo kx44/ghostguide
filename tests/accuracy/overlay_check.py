@@ -208,7 +208,7 @@ def lands(style: str, b: dict, vb) -> bool:
         return False
     cx, cy = b["x"] + b["w"] / 2, b["y"] + b["h"] / 2
     vcx, vcy = (vb[0] + vb[2]) / 2, (vb[1] + vb[3]) / 2
-    if style in ("outline", "click_type"):
+    if style in ("outline", "click_type", "code_card"):
         return abs(vcx - cx) <= 12 and abs(vcy - cy) <= 12
     if style == "beacon":
         return abs(vcx - (b["x"] + b["w"])) <= 16 and abs(vcy - b["y"]) <= 16
@@ -217,8 +217,25 @@ def lands(style: str, b: dict, vb) -> bool:
     return vb[0] <= cx <= vb[2] and vb[1] <= cy <= vb[3]
 
 
+def outline_on_box(img, b: dict, tol=40) -> float:
+    """Share of the expected outline border (4 px outside the box, ±3 px) that is violet. Testing the border
+    itself, not 'any violet nearby', so the app's own purple syntax colours can't fake or spoil it."""
+    px = img.convert("RGB").load()
+    W, H = img.size
+    x0, y0, x1, y1 = b["x"] - 4, b["y"] - 4, b["x"] + b["w"] + 4, b["y"] + b["h"] + 4
+
+    def violet_near(x, y):
+        return any(0 <= x + dx < W and 0 <= y + dy < H and all(abs(c - v) < tol for c, v in zip(px[x + dx, y + dy], VIOLET))
+                   for dx in (-3, -2, -1, 0, 1, 2, 3) for dy in (-3, -2, -1, 0, 1, 2, 3) if dx == 0 or dy == 0)
+    pts = [(x, y) for x in range(x0 + 8, x1 - 8, 6) for y in (y0, y1)] + \
+          [(x, y) for y in range(y0 + 8, y1 - 8, 6) for x in (x0, x1)]
+    return sum(violet_near(x, y) for x, y in pts) / max(1, len(pts))
+
+
 def violet_bbox(img, region, tol=38):
     x0, y0, x1, y1 = (max(0, region[0]), max(0, region[1]), min(img.width, region[2]), min(img.height, region[3]))
+    if x1 <= x0 or y1 <= y0:                              # box off the screen
+        return None
     crop = img.crop((x0, y0, x1, y1)).convert("RGB")
     px = crop.load()
     xs, ys = [], []
@@ -245,6 +262,7 @@ def main(argv=None) -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     LOGS.mkdir(parents=True, exist_ok=True)
     results: dict[str, dict] = {}
+    walk: list[dict] = []
 
     def record(name: str, ok, **detail):
         results[name] = {"ok": ok, **detail}
@@ -433,7 +451,7 @@ def main(argv=None) -> int:
         eng, rec = start_engine(restart=True, tag="b")
         up = wait_step(rec, 1, 0, 20)
         record("engine down: overlay says 'Waiting for the engine', reconnects by itself", bool(waiting) and bool(up))
-        walk = []
+        walk.clear()
         for step in tut.steps:
             n = step.n
             st = rec.last("state")
@@ -458,7 +476,11 @@ def main(argv=None) -> int:
             if b:
                 vb = violet_bbox(img, (b["x"] - 40, b["y"] - 40, b["x"] + b["w"] + 40, b["y"] + b["h"] + 40))
                 row["violet"] = vb
-                row["lands"] = lands(g["style"], b, vb)
+                if g["style"] in ("outline", "click_type", "code_card"):
+                    row["outline_share"] = round(outline_on_box(img, b), 2)
+                    row["lands"] = row["outline_share"] >= 0.8
+                else:
+                    row["lands"] = lands(g["style"], b, vb)
                 c = card_rect(els, g)
                 row["card_covers_target"] = bool(c and _intersects(c, [b["x"], b["y"], b["w"], b["h"]]))
             d = ImageDraw.Draw(img)
@@ -467,6 +489,15 @@ def main(argv=None) -> int:
             img.save(OUT / f"step{n:02d}.png")
             print(f"  step {n:2d} {step.action:9s} style={row['style']} scheme={row['scheme']} box={'yes' if b else 'no'}"
                   + (f" lands={row.get('lands')} card_covers={row.get('card_covers_target')}" if b else ""))
+            if row["style"] == "code_card":           # Copy puts exactly the step's text on the clipboard
+                auto.SetClipboardText("")
+                pressed = press(lambda: next((e for e in ov_elements() if e["type"] == "Button" and e["name"] == "Copy"), None))
+                time.sleep(0.4)
+                want = str(step.params.get("value", "")).rstrip("\n")
+                got = (auto.GetClipboardText() or "").replace("\r\n", "\n")      # Windows clipboard uses CRLF
+                row["copy_ok"] = pressed and got == want and bool(find("Copied ✓"))
+                if not row["copy_ok"]:
+                    row["copy_detail"] = {"pressed": pressed, "got": got[:60], "want": want[:60]}
             act(step, Box(**b) if b else None, win, FOLDER, title, loc, row, OUT)
             if n == 12:                                   # restart mid-walk: resumes on the same step
                 kill(eng)
@@ -492,6 +523,9 @@ def main(argv=None) -> int:
                off=[w["n"] for w in targets if not w.get("lands")], with_target=len(targets))
         record("walk: card never covers the target", not any(w.get("card_covers_target") for w in targets),
                covered=[w["n"] for w in targets if w.get("card_covers_target")])
+        cards = [w for w in walk if w.get("style") == "code_card"]
+        record("walk: code card Copy puts the step's text on the clipboard", bool(cards) and all(w.get("copy_ok") for w in cards),
+               failed=[w["n"] for w in cards if not w.get("copy_ok")], code_cards=len(cards))
         record("walk: scheme dark over VS Code", all(w.get("scheme") == "dark" for w in walk if w.get("scheme")),
                light=[w["n"] for w in walk if w.get("scheme") == "light"])
         no_target = [w["n"] for w in walk if not w.get("box") and w["action"] not in ("shortcut", "wait")]
@@ -504,7 +538,8 @@ def main(argv=None) -> int:
         kill(eng)
 
     (OUT / "overlay.json").write_text(json.dumps({"run_at": datetime.now().isoformat(timespec="seconds"),
-                                                  "results": results}, indent=2, ensure_ascii=False), encoding="utf-8")
+                                                  "results": results, "walk": walk}, indent=2, ensure_ascii=False),
+                                     encoding="utf-8")
     failed = [k for k, v in results.items() if v["ok"] is False]
     print(f"\n{len(results) - len(failed)} of {len(results)} ok" + (f"; failed: {failed}" if failed else ""))
     print(f"screenshots: {OUT}")

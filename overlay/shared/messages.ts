@@ -2,7 +2,7 @@
 // lists below in sync). All coordinates are physical screen pixels; main.ts converts them to DIPs.
 
 export const STYLES = [
-  "outline", "ghost_line", "beacon", "static_line", "ghost_text", "keycaps", "mask",
+  "outline", "ghost_line", "beacon", "static_line", "code_card", "ghost_text", "keycaps", "mask",
   "path_chips", "offscreen", "taskbar", "click_type", "signal_card", "card",
 ] as const;
 export type Style = (typeof STYLES)[number];
@@ -108,5 +108,7 @@ export interface GhostBridge {
   send(msg: FromOverlay): void;
   /** Where this window's cards and buttons are (window DIPs); main makes only these clickable. */
   setHitRects(rects: HitRect[]): void;
+  /** Put text on the clipboard (main process: this window never has focus, so the page can't). */
+  copy(text: string): void;
 }
 export interface HitRect { x: number; y: number; w: number; h: number }

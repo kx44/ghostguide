@@ -6,5 +6,6 @@ const ghost: GhostBridge = {
   on(cb: (r: Routed) => void) { ipcRenderer.on("ghost:msg", (_e, r: Routed) => cb(r)); ipcRenderer.send("ghost:ready"); },
   send(msg: FromOverlay) { ipcRenderer.send("ghost:send", msg); },
   setHitRects(rects: HitRect[]) { ipcRenderer.send("ghost:hits", rects); },
+  copy(text: string) { ipcRenderer.send("ghost:copy", text); },
 };
 contextBridge.exposeInMainWorld("ghost", ghost);

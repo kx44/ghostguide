@@ -2,6 +2,7 @@
 import type { Card, GuideMsg } from "../../shared/messages";
 import { Ctx, Mounted, Side, el, esc, kc } from "../dom";
 import { placeCard } from "../place";
+import { codeBoxHtml } from "./codeCard";
 import { keycapsHtml } from "./keycaps";
 import { chipsHtml } from "./pathChips";
 
@@ -13,7 +14,7 @@ export function fallbackHtml(g: GuideMsg): { top: string; body: string } {
   const top = x.path?.length ? chipsHtml(x.path, x.path_done ?? 0) : "";
   let h = "";
   if (x.keys?.length) h += keycapsHtml(x.keys);
-  if (x.value && (x.multiline || x.value.length > 40)) h += `<pre class="code">${esc(x.value)}</pre>`;
+  if (x.value && x.action === "type") h += codeBoxHtml(x.value, x.multiline || x.value.length > 40 ? "Code" : "Text");
   if (x.action === "switch_app") h += `<div class="alt">Or press ${kc("Alt", "sm")} + ${kc("Tab", "sm")}</div>`;
   if (x.action === "wait") h += `<div class="bar"></div>` + (x.signals ?? []).map(s => `<div class="sig"><i></i>${esc(s)}</div>`).join("");
   return { top, body: h };
@@ -38,6 +39,7 @@ export function mountCard(ctx: Ctx, g: GuideMsg, c: Card, m: Mounted, onAction: 
     (actions ? `<div class="acts">${actions}</div>` : "");
   const card = el(ctx.ov, `card hit${m.wide ? " wide" : ""}`, "visibility:hidden", html);
   card.querySelectorAll<HTMLButtonElement>("button[data-a]").forEach(b => b.addEventListener("click", () => onAction(b.dataset.a!, b)));
+  card.querySelectorAll<HTMLButtonElement>("button[data-copy]").forEach(b => b.addEventListener("click", () => copied(b)));
   const p = placeCard(card.offsetWidth, card.offsetHeight, m.anchor, ctx.W, ctx.H, m.prefer as Side[] | undefined, reserveBottom);
   card.style.left = `${p.x}px`;
   card.style.top = `${p.y}px`;
@@ -46,4 +48,15 @@ export function mountCard(ctx: Ctx, g: GuideMsg, c: Card, m: Mounted, onAction: 
   if (p.ay != null) card.style.setProperty("--ay", `${p.ay}px`);
   card.style.visibility = "";
   return card;
+}
+
+/** Copy: the text goes to the clipboard through main; the button says so and the code box flashes. */
+function copied(b: HTMLButtonElement) {
+  window.ghost.copy(b.dataset.copy ?? "");
+  const box = b.closest(".codebox");
+  b.textContent = "Copied ✓";
+  b.classList.add("done");
+  box?.classList.remove("flash"); void (box as HTMLElement | null)?.offsetWidth; box?.classList.add("flash");
+  clearTimeout(Number(b.dataset.t));
+  b.dataset.t = String(setTimeout(() => { b.textContent = "Copy"; b.classList.remove("done"); }, 1600));
 }

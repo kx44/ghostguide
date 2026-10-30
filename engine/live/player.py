@@ -85,7 +85,7 @@ class Player:
             box, line = self.target(step.n)
             self.scheme = self._scheme(box, step.n)
             guide = self.planner.plan(step, box, line, self.displays, self.scheme)
-            if guide.style == "ghost_text" and step.n not in self.pins.steps:
+            if guide.style in ("code_card", "ghost_text") and step.n not in self.pins.steps:
                 guide.extra.update(self._located_extra.get(step.n, {}))
             if guide.card is not None and box is None and step.action not in NO_PIN_NEEDED:
                 first = "start point" if step.action in LINE_ACTIONS else "top-left corner"
