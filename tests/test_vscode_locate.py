@@ -228,3 +228,16 @@ def test_insert_col_for_mid_line_inserts():
     assert HTML.split("\n")[n - 1][col:] == ">"            # just before the tag's closing >
     assert insert_col('  <img src="x" />', "in <img> after class attribute", 1) == len('  <img src="x" ')
     assert insert_col(HTML, STEP[4].target.where, 8) is None
+
+
+def test_insert_context_marks_the_gap_and_shows_the_code_around_it():
+    from engine.live.locate.vscode import insert_context
+    doc = '<body>\n    <article class="video-container">\n    </article>\n</body>\n'
+    n = target_line(doc, 'index.html, inside <article class="video-container">')       # line 3 = </article>
+    assert insert_context(doc, n, None) == {"insert": "before", "context_before": '<article class="video-container">'}
+    blank = "<body>\n    \n</body>"
+    assert insert_context(blank, 2, None) == {"insert": "line", "context_before": "<body>"}
+    assert insert_context("a {\n}\n", 3, None) == {"insert": "line", "context_before": "}"}      # end of file
+    line = '  <a href="#" class="thumbnail">'
+    c = insert_context(line, 1, len(line) - 1)
+    assert c == {"insert": "col", "context_before": '<a href="#" class="thumbnail"', "context_after": ">"}

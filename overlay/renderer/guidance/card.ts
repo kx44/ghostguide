@@ -20,34 +20,87 @@ export function fallbackHtml(g: GuideMsg): { top: string; body: string } {
   return { top, body: h };
 }
 
+// Where the user dragged the card to (window px). Once set, every later card goes there too, until a
+// double-click on its top row hands placement back to the automatic rule.
+let pinned: { x: number; y: number } | null = null;
+
 export function mountCard(ctx: Ctx, g: GuideMsg, c: Card, m: Mounted, onAction: (a: string, btn: HTMLElement) => void,
                           reserveBottom: number): HTMLDivElement {
   const actions = c.actions.map(a => {
     const label = a === "do_it" && g.extra.action === "type" ? "Fill it for me" : LABELS[a] ?? a;
     return `<button data-a="${esc(a)}" class="${a === "next" && c.actions.length > 1 ? "link" : a === "next" ? "pri" : ""}">${esc(label)}</button>`;
   }).join("");
-  const html =
-    `<div class="meta"><span>${esc(c.meta)}</span>${c.low_confidence ? `<span class="unsure" title="This step was inferred or unclear in the source">unsure</span>` : ""}</div>` +
-    (m.cardTop ?? "") +
-    `<b>${esc(c.title)}</b>` +
-    (c.why ? `<div>${esc(c.why)}</div>` : "") +
-    (c.detail ? `<div class="detail">${esc(c.detail)}</div>` : "") +
-    (m.cardHtml ?? "") +
-    (c.suggested ? `<div class="sug">Suggested: ${esc(c.suggested)} <span>(ours; the tutorial leaves it open)</span></div>` : "") +
-    (c.done_when ? `<div class="done">Done when: ${esc(c.done_when)}</div>` : "") +
-    (c.dev_hint ? `<div class="devhint">${esc(c.dev_hint)}</div>` : "") +
-    (actions ? `<div class="acts">${actions}</div>` : "");
-  const card = el(ctx.ov, `card hit${m.wide ? " wide" : ""}`, "visibility:hidden", html);
+  const meta = `<div class="meta" title="Drag to move · double-click to put it back"><span>${esc(c.meta)}</span>` +
+    `${c.low_confidence ? `<span class="unsure" title="This step was inferred or unclear in the source">unsure</span>` : ""}</div>`;
+  const html = c.compact
+    // Repeat step: the light guide stays light, but the instruction never disappears.
+    ? meta + `<b>${esc(c.title)}</b>` + (c.up_next ? `<div class="upnext">Up next: ${esc(c.up_next)}</div>` : "") +
+      (c.dev_hint ? `<div class="devhint">${esc(c.dev_hint)}</div>` : "") + (actions ? `<div class="acts">${actions}</div>` : "")
+    : meta +
+      (m.cardTop ?? "") +
+      `<b>${esc(c.title)}</b>` +
+      (c.why ? `<div>${esc(c.why)}</div>` : "") +
+      (c.detail ? `<div class="detail">${esc(c.detail)}</div>` : "") +
+      (m.cardHtml ?? "") +
+      (c.suggested ? `<div class="sug">Suggested: ${esc(c.suggested)} <span>(ours; the tutorial leaves it open)</span></div>` : "") +
+      (c.done_when ? `<div class="done">Done when: ${esc(c.done_when)}</div>` : "") +
+      (c.dev_hint ? `<div class="devhint">${esc(c.dev_hint)}</div>` : "") +
+      (actions ? `<div class="acts">${actions}</div>` : "");
+  const card = el(ctx.ov, `card hit${m.wide && !c.compact ? " wide" : ""}${c.compact ? " compact" : ""}`, "visibility:hidden", html);
   card.querySelectorAll<HTMLButtonElement>("button[data-a]").forEach(b => b.addEventListener("click", () => onAction(b.dataset.a!, b)));
   card.querySelectorAll<HTMLButtonElement>("button[data-copy]").forEach(b => b.addEventListener("click", () => copied(b)));
-  const p = placeCard(card.offsetWidth, card.offsetHeight, m.anchor, ctx.W, ctx.H, m.prefer as Side[] | undefined, reserveBottom);
-  card.style.left = `${p.x}px`;
-  card.style.top = `${p.y}px`;
-  if (p.arrow) card.classList.add(p.arrow);
-  if (p.ax != null) card.style.setProperty("--ax", `${p.ax}px`);
-  if (p.ay != null) card.style.setProperty("--ay", `${p.ay}px`);
+
+  const auto = () => {
+    const p = placeCard(card.offsetWidth, card.offsetHeight, m.anchor, ctx.W, ctx.H, m.prefer as Side[] | undefined, reserveBottom);
+    card.classList.remove("up", "down", "left", "right");
+    card.style.left = `${p.x}px`;
+    card.style.top = `${p.y}px`;
+    if (p.arrow) card.classList.add(p.arrow);
+    if (p.ax != null) card.style.setProperty("--ax", `${p.ax}px`);
+    if (p.ay != null) card.style.setProperty("--ay", `${p.ay}px`);
+  };
+  const put = (x: number, y: number) => {          // a dragged card: no arrow, kept on screen
+    card.classList.remove("up", "down", "left", "right");
+    card.style.left = `${Math.min(Math.max(4, x), ctx.W - card.offsetWidth - 4)}px`;
+    card.style.top = `${Math.min(Math.max(4, y), ctx.H - card.offsetHeight - 4)}px`;
+  };
+  if (pinned) put(pinned.x, pinned.y); else auto();
   card.style.visibility = "";
+  draggable(card, ctx, put, auto);
   return card;
+}
+
+/** Drag the card by its top row. While dragging, a full-window hit area keeps the (normally click-through)
+ *  overlay window taking the mouse, so a fast drag can't drop it. */
+function draggable(card: HTMLDivElement, ctx: Ctx, put: (x: number, y: number) => void, auto: () => void) {
+  const handle = card.querySelector<HTMLElement>(".meta")!;
+  handle.addEventListener("pointerdown", e => {
+    if (e.button !== 0) return;
+    const sx = e.clientX, sy = e.clientY;
+    const dx = sx - card.offsetLeft, dy = sy - card.offsetTop;
+    let shield: HTMLElement | undefined;          // only once it's really a drag (moved 4 px): a click or a
+    const move = (ev: PointerEvent) => {          // double-click on the row must still reach the row
+      if (!shield) {
+        if (Math.abs(ev.clientX - sx) + Math.abs(ev.clientY - sy) < 4) return;
+        shield = el(ctx.ov, "dragshield hit", "");
+        window.dispatchEvent(new Event("ghost:hits"));
+        card.classList.add("dragging");
+      }
+      put(ev.clientX - dx, ev.clientY - dy);
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      if (!shield) return;
+      shield.remove();
+      card.classList.remove("dragging");
+      pinned = { x: card.offsetLeft, y: card.offsetTop };
+      window.dispatchEvent(new Event("ghost:hits"));
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  });
+  handle.addEventListener("dblclick", () => { pinned = null; auto(); });
 }
 
 /** Copy: the text goes to the clipboard through main; the button says so and the code box flashes. */

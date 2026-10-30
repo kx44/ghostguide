@@ -7,7 +7,8 @@ export function mountSignalCard(_ctx: Ctx, g: GuideMsg, local: Local): Mounted {
   const sigs = g.extra.signals ?? [];
   return {
     anchor: toRect(local.box),
-    cardHtml: `<div class="bar"></div>` + sigs.map((s, i) => `<div class="sig" data-i="${i}"><i></i>${esc(cap(s))}</div>`).join(""),
+    // The moving bar promises an automatic move; only show it when the engine will advance by itself.
+    cardHtml: (g.card?.actions.includes("skip_wait") ? `<div class="bar"></div>` : "") + sigs.map((s, i) => `<div class="sig" data-i="${i}"><i></i>${esc(cap(s))}</div>`).join(""),
     mark(result) {
       if (result !== "ok") return;
       document.querySelectorAll(".card .sig").forEach(s => { s.classList.add("on"); s.querySelector("i")!.textContent = "✓"; });

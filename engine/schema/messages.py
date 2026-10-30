@@ -94,6 +94,8 @@ class Card(BaseModel):
     actions: list[str] = Field(default_factory=list)   # show_me | do_it | next | skip_wait
     low_confidence: bool = False
     dev_hint: Optional[str] = None    # phase 2 only: "not pinned yet, Ctrl+Alt+P…"
+    compact: bool = False             # repeat steps: title + Next only, so the instruction never vanishes
+    up_next: Optional[str] = None     # the next step's title, shown on compact cards
 
 
 # ---------------- engine → overlay ----------------

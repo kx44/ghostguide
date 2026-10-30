@@ -42,6 +42,9 @@ export interface GuideExtra {
   backing?: string;    // …its background colour, for a solid backing over the code already there
   line_h?: number;     // …its line height (physical px), so multi-line code lines up with its lines
   col?: number;        // …a mid-line insert starts at this character column
+  insert?: "line" | "before" | "col";   // type on the line / new lines go before it (bar between lines) / mid-line
+  context_before?: string;  // code just before the spot, shown in the code box in purple (not copied)
+  context_after?: string;   // code just after it, for a mid-line insert
   [k: string]: unknown;
 }
 
@@ -55,6 +58,8 @@ export interface Card {
   actions: string[];          // show_me | do_it | next | skip_wait
   low_confidence?: boolean;
   dev_hint?: string;          // phase 2: how to pin this step's target
+  compact?: boolean;          // repeat steps: title + Up next + Next only
+  up_next?: string;           // the next step's title (compact cards)
 }
 
 export interface StepInfo { n: number; of: number; title: string; part?: string; source_t?: string; confidence?: string }

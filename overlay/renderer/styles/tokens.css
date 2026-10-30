@@ -77,6 +77,17 @@ svg.L { position:absolute; left:0; top:0; width:100%; height:100%; overflow:visi
 .card .codebox pre { margin:0; padding:7px 9px; max-height:220px; overflow:auto; font:12px/1.45 Consolas, "Cascadia Mono", monospace;
                      white-space:pre; color:var(--card-fg); }
 @keyframes copyflash { 0% { box-shadow:0 0 0 0 var(--card-ok); border-color:var(--card-ok); } 100% { box-shadow:0 0 0 6px transparent; } }
+.card .codebox pre .ctx { color:var(--card-acc); }
+.insbar { position:absolute; height:3px; border-radius:2px; background:var(--g); box-shadow:0 0 0 1.5px var(--halo); animation:fade .25s; }
+.insbar:before { content:""; position:absolute; left:-7px; top:-4.5px; border:6px solid transparent; border-left:7px solid var(--g); border-right:0; }
+.insbar.ok { background:var(--ok); } .insbar.ok:before { border-left-color:var(--ok); }
+.card.compact { width:auto; min-width:220px; max-width:320px; padding:9px 12px; }
+.card.compact .acts { margin-top:7px; }
+.card .upnext { font-size:12px; color:var(--card-mute); margin-top:2px; }
+.card .meta { cursor:grab; user-select:none; }
+.card.dragging { box-shadow:0 12px 28px rgba(0,0,0,.35); transition:none; }
+.card.dragging .meta { cursor:grabbing; }
+.dragshield { position:absolute; inset:0; z-index:5; cursor:grabbing; }
 .inscaret { position:absolute; width:2px; background:var(--g); box-shadow:0 0 0 1px var(--halo); border-radius:1px; animation:fade .25s; }
 
 .chips { display:flex; flex-wrap:wrap; align-items:center; gap:4px; margin-bottom:8px; font-size:12px; color:var(--card-mute); }

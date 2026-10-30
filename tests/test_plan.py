@@ -72,9 +72,17 @@ def test_no_target_falls_back_to_card_but_keeps_extras():
     assert plan(VS, 8, box=None).style == "signal_card"
 
 
-def test_beacon_has_no_card():
+def test_beacon_gets_a_compact_card_with_up_next():
     g = plan(VS, 19)
-    assert g.style == "beacon" and g.card is None
+    assert g.style == "beacon" and g.card.compact and g.card.actions == ["next"]
+    assert g.card.title == "Switch to index.html" and g.card.up_next == "Add the video duration"
+    assert plan(VS, 12).card.up_next == "Name it styles.css"     # after New File: what to name it
+    assert plan(VS, 23).card.compact is False
+
+
+def test_wait_says_press_next_until_checks_exist():
+    g = plan(VS, 8, box=None)
+    assert g.card.actions == ["next"] and g.card.detail == "When it has loaded, press Next."
 
 
 def test_lines_and_repeats():
@@ -113,7 +121,7 @@ def test_every_step_of_both_gold_files_plans():
             for box in (BOX, None):
                 g = p.plan(s, box, None, SCREEN, "light")
                 assert g.step.n == s.n and g.style
-                assert (g.card is None) == (g.style in ("beacon", "static_line"))
+                assert g.card is not None and g.card.compact == (g.style in ("beacon", "static_line"))
 
 
 def test_look_step_card_only_with_next():

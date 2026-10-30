@@ -136,6 +136,7 @@ function reportHits() {
   if (key !== lastHits) { lastHits = key; bridge.setHitRects(rects); }
 }
 setInterval(reportHits, 100);     // cheap, and catches cards that move, animate in or get removed
+window.addEventListener("ghost:hits", reportHits);   // right away, e.g. when a card drag starts
 
 window.addEventListener("resize", () => { if (lastGuide && !pending) drawGuide(lastGuide.g, lastGuide.local); });
 

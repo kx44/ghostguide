@@ -309,6 +309,23 @@ def insert_col(text: str, where: Optional[str], n: int) -> Optional[int]:
     return i if i >= 0 else None
 
 
+def insert_context(text: str, n: int, col: Optional[int]) -> dict:
+    """How the text goes in at line n, for the overlay: `insert` = "col" (inside the line), "before" (line n
+    already has code: the new lines go between n-1 and n, so a bar marks the gap rather than boxing a line
+    that stays), or "line" (line n is empty or past the end: type on it). `context_before` / `context_after`
+    are the code around the spot, shown in the card's code box (in purple, not copied)."""
+    lines = text.split("\n")
+    cur = lines[n - 1] if 1 <= n <= len(lines) else ""
+    if col is not None:
+        line = cur.expandtabs(4)
+        return {"insert": "col", "context_before": line[:col].lstrip(), "context_after": line[col:].rstrip()}
+    prev = next((lines[i].strip() for i in range(min(n - 2, len(lines) - 1), -1, -1) if lines[i].strip()), "")
+    out = {"insert": "before" if cur.strip() else "line"}
+    if prev:
+        out["context_before"] = prev
+    return out
+
+
 def editor_extra(ed: Optional[Editor], bg: Optional[str], col: Optional[int] = None) -> dict:
     """What the overlay needs to draw ghost code inside the editor: its visible area (code column to the
     minimap, physical px) to clip to, its background colour for a solid backing over the code already
@@ -435,7 +452,8 @@ class VSCodeLocator:
         self.last_extra = {}
         if box is not None and ed is not None and self.last_how.startswith("editor line"):
             n = int(self.last_how.split()[2])
-            self.last_extra = editor_extra(ed, bg, insert_col(ed.text, step.target.where, n))
+            col = insert_col(ed.text, step.target.where, n)
+            self.last_extra = {**editor_extra(ed, bg, col), **insert_context(ed.text, n, col)}
         self.last_seconds = time.perf_counter() - t0
         return box, line
 

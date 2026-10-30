@@ -232,6 +232,36 @@ def outline_on_box(img, b: dict, tol=40) -> float:
     return sum(violet_near(x, y) for x, y in pts) / max(1, len(pts))
 
 
+def bar_on_box(img, b: dict, tol=40) -> float:
+    """Share of the box's top edge (the gap above the line, where an insertion bar goes) that is violet."""
+    px = img.convert("RGB").load()
+    W, H = img.size
+    y = b["y"] + 2
+    pts = range(b["x"] + 10, b["x"] + b["w"] - 10, 6)
+    hit = sum(any(0 <= x < W and 0 <= y + dy < H and all(abs(c - v) < tol for c, v in zip(px[x, y + dy], VIOLET))
+                  for dy in range(-3, 4)) for x in pts)
+    return hit / max(1, len(pts))
+
+
+def drag(handle: dict, dx: int, dy: int) -> None:
+    import uiautomation as auto
+    x, y, w, h = handle["rect"]
+    sx, sy = x + w // 2, y + h // 2
+    auto.MoveTo(sx, sy, moveSpeed=3)
+    time.sleep(0.3)
+    u32.mouse_event(0x0002, 0, 0, 0, 0)                 # left down
+    for i in range(1, 21):
+        u32.SetCursorPos(int(sx + dx * i / 20), int(sy + dy * i / 20))
+        time.sleep(0.02)
+    time.sleep(0.15)
+    u32.mouse_event(0x0004, 0, 0, 0, 0)                 # left up
+
+
+def card_meta(els) -> dict | None:
+    return next((e for e in els if e["type"] == "Text" and (e.get("name") or "").startswith("Step ")
+                 and " of " in e["name"] and "·" in e["name"]), None)
+
+
 def violet_bbox(img, region, tol=38):
     x0, y0, x1, y1 = (max(0, region[0]), max(0, region[1]), min(img.width, region[2]), min(img.height, region[3]))
     if x1 <= x0 or y1 <= y0:                              # box off the screen
@@ -394,6 +424,33 @@ def main(argv=None) -> int:
             press(tog["name"])                           # close the list again
             time.sleep(0.5)
 
+        # ---- the card can be dragged away, stays there for the next step, double-click puts it back ----
+        bring_front(win)
+        time.sleep(0.5)
+        m1 = card_meta(ov_elements())
+        moved = kept = reset = False
+        if m1:
+            drag(m1, 260, 180)
+            time.sleep(0.6)
+            m2 = card_meta(ov_elements())
+            moved = bool(m2) and abs(m2["rect"][0] - m1["rect"][0] - 260) <= 12 and abs(m2["rect"][1] - m1["rect"][1] - 180) <= 12
+            k = rec.mark(); hotkey("right"); wait_step(rec, state(rec)["current"] + 1, k)
+            time.sleep(1.2)
+            m3 = card_meta(ov_elements())
+            kept = bool(m3 and m2) and abs(m3["rect"][0] - m2["rect"][0]) <= 12 and abs(m3["rect"][1] - m2["rect"][1]) <= 12
+            k = rec.mark(); hotkey("left"); time.sleep(1.2)
+            m4 = card_meta(ov_elements())
+            if m4:
+                x, y, w, h = m4["rect"]
+                auto.MoveTo(x + w // 2, y + h // 2, moveSpeed=3); time.sleep(0.3)
+                for _ in range(2):                         # a real double-click: two clicks well inside the OS limit
+                    u32.mouse_event(0x0002, 0, 0, 0, 0); u32.mouse_event(0x0004, 0, 0, 0, 0); time.sleep(0.06)
+                time.sleep(0.6)
+                m5 = card_meta(ov_elements())
+                reset = bool(m5) and abs(m5["rect"][0] - m1["rect"][0]) <= 12 and abs(m5["rect"][1] - m1["rect"][1]) <= 12
+        record("card drags by its top row, stays put on the next step, double-click puts it back", moved and kept and reset,
+               moved=moved, kept_next_step=kept, reset=reset)
+
         # ---- hotkeys with VS Code focused ----
         bring_front(win)
         time.sleep(0.3)
@@ -477,13 +534,19 @@ def main(argv=None) -> int:
             if b:
                 vb = violet_bbox(img, (b["x"] - 40, b["y"] - 40, b["x"] + b["w"] + 40, b["y"] + b["h"] + 40))
                 row["violet"] = vb
-                if g["style"] in ("outline", "click_type", "code_card"):
+                if g["style"] == "code_card" and g["extra"].get("insert") == "before":
+                    row["bar_share"] = round(bar_on_box(img, b), 2)          # a bar between the lines, not a box
+                    row["lands"] = row["bar_share"] >= 0.8
+                elif g["style"] in ("outline", "click_type", "code_card"):
                     row["outline_share"] = round(outline_on_box(img, b), 2)
                     row["lands"] = row["outline_share"] >= 0.8
                 else:
                     row["lands"] = lands(g["style"], b, vb)
                 c = card_rect(els, g)
                 row["card_covers_target"] = bool(c and _intersects(c, [b["x"], b["y"], b["w"], b["h"]]))
+            if row["style"] == "beacon":
+                names = [e.get("name") or "" for e in els]
+                row["compact_ok"] = step.title in names and any(nm.startswith("Up next: ") for nm in names)
             d = ImageDraw.Draw(img)
             if b and b["w"] > 0 and b["h"] > 0:
                 d.rectangle([b["x"] - 1, b["y"] - 1, b["x"] + b["w"] + 1, b["y"] + b["h"] + 1], outline=(0, 255, 120), width=1)
@@ -527,6 +590,9 @@ def main(argv=None) -> int:
         cards = [w for w in walk if w.get("style") == "code_card"]
         record("walk: code card Copy puts the step's text on the clipboard", bool(cards) and all(w.get("copy_ok") for w in cards),
                failed=[w["n"] for w in cards if not w.get("copy_ok")], code_cards=len(cards))
+        repeats = [w for w in walk if w.get("style") == "beacon"]
+        record("walk: repeat steps keep a compact card (title + Up next)", bool(repeats) and all(w.get("compact_ok") for w in repeats),
+               failed=[w["n"] for w in repeats if not w.get("compact_ok")], repeats=len(repeats))
         record("walk: scheme dark over VS Code", all(w.get("scheme") == "dark" for w in walk if w.get("scheme")),
                light=[w["n"] for w in walk if w.get("scheme") == "light"])
         no_target = [w["n"] for w in walk if not w.get("box") and w["action"] not in ("shortcut", "wait")]

@@ -26,7 +26,9 @@ _REPEAT = {"outline": "beacon", "ghost_line": "static_line"}
 _NEEDS_TARGET = {"outline", "beacon", "ghost_line", "static_line", "ghost_text", "mask", "path_chips",
                  "taskbar", "click_type"}
 _LINE_STYLES = {"ghost_line", "static_line"}
-_NO_CARD = {"beacon", "static_line"}
+_COMPACT = {"beacon", "static_line"}   # repeats: the light guide + a one-line card (title, Up next, Next)
+# Wait steps advance by themselves once phase 3's step checks exist; until then the card says to press Next.
+WAIT_AUTO = False
 EDGE_INSET = 28      # px from the display edge for the off-screen pill
 
 
@@ -99,7 +101,7 @@ class Planner:
             extra = {**extra, **_edge(box, displays), "original_style": style}
             style = "offscreen"
 
-        card = None if style in _NO_CARD else self._card(step, style, box is not None or line is not None)
+        card = self._card(step, style, box is not None or line is not None)
         return Guide(
             step=StepInfo(n=step.n, of=self.of, title=step.title, part=step.part,
                           source_t=step.source.t, confidence=step.confidence),
@@ -143,14 +145,19 @@ class Planner:
 
     def _card(self, step: Step, style: str, has_target: bool) -> Card:
         p = step.params
+        meta = f"Step {step.n} of {self.of} · {self.tutorial.meta.app}"
+        if style in _COMPACT:
+            nxt = self.tutorial.steps[step.n] if step.n < self.of else None
+            return Card(meta=meta, title=step.title, actions=["next"], compact=True,
+                        up_next=nxt.title if nxt else None, low_confidence=step.confidence in ("low", "inferred"))
         actions = []
         if has_target and style not in ("signal_card", "card", "offscreen"):
             actions.append("show_me")
         # Do it for me arrives in phase 4 (live/execute.py); only offered when we can act with confidence.
-        actions.append("skip_wait" if style == "signal_card" else "next")
+        actions.append("skip_wait" if style == "signal_card" and WAIT_AUTO else "next")
         suggested = p.get("suggested")
         return Card(
-            meta=f"Step {step.n} of {self.of} · {self.tutorial.meta.app}",
+            meta=meta,
             title=f"Bring {step.target.label} into view" if style == "offscreen" else step.title,
             why=step.why,
             detail=_detail(step, style),
@@ -203,7 +210,7 @@ def _detail(step: Step, style: str) -> Optional[str]:
     if a == "switch_app":
         return f"Switch to {label}. Or press Alt + Tab."
     if a == "wait":
-        return "We'll move on when it finishes."
+        return "We'll move on when it finishes." if WAIT_AUTO else "When it has loaded, press Next."
     if a == "pick":
         field = p.get("field")
         return f"Click {label}" + (f" (goes into {field})." if field else ".")
