@@ -1,0 +1,68 @@
+"""Paths, model IDs, MODEL_MODE and thresholds. Values come from the environment, then `.env`."""
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+CACHE = ROOT / "cache"
+CASSETTES = CACHE / "cassettes"
+LOGS = CACHE / "logs"
+COST_LOG = LOGS / "costs.jsonl"
+TUTORIALS = ROOT / "tutorials"
+APPMAPS = ROOT / "appmaps"
+
+
+def _load_dotenv(path: Path = ROOT / ".env") -> None:
+    """Minimal .env reader: KEY=VALUE lines; real environment variables win."""
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
+_load_dotenv()
+
+
+def env(key: str, default: str = "") -> str:
+    return os.environ.get(key, default)
+
+
+MODEL_MODES = ("live", "record", "replay")
+
+
+def model_mode() -> str:
+    mode = env("MODEL_MODE", "replay").lower()
+    if mode not in MODEL_MODES:
+        raise ValueError(f"MODEL_MODE must be one of {MODEL_MODES}, got {mode!r}")
+    return mode
+
+
+def budget_usd() -> float:
+    return float(env("BUDGET_USD", "4.00"))
+
+
+# Model IDs (02 Meta models)
+SPARK = "muse-spark-1.3"
+SPARK_CONTRIBUTOR = "muse-spark-1.3-contributor"
+WONDER = "muse-wonder-1.0"
+TRANSCRIBE = "muse-voice-transcribe-1.0"
+SAM = "sam-3.1"
+
+# USD per million tokens (input, output). Unknown models are refused in live mode.
+PRICES = {
+    SPARK: (1.25, 4.25),
+    SPARK_CONTRIBUTOR: (0.10, 0.20),
+    WONDER: (4.00, 20.00),
+}
+
+# Meta allows at most 50 images per request.
+MAX_IMAGES = 50
+
+# Live thresholds (used from phase 2 on)
+SCHEME_LIGHT_ABOVE = 0.45   # brightness in the ring around the target → light scheme
+SCHEME_RING_PX = 48

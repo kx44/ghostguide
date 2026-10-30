@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ghostguide-engine"
+version = "0.1.0"
+description = "GhostGuide engine: compiles tutorials and plays them live over the real app"
+requires-python = ">=3.10"
+dependencies = [
+  "pydantic>=2.6",
+  "pyyaml>=6",
+  "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+# Live loop (phases 2-4). Windows-only packages are marked so `pip install` works on Linux CI.
+live = [
+  "fastapi", "uvicorn", "mss", "pillow", "pyautogui", "keyboard", "ollama",
+  "uiautomation; sys_platform == 'win32'",
+]
+dev = ["pytest>=8"]
+
+# The package lives in this folder, so map the name `engine` onto it.
+# From the repo root:  pip install -e "engine[dev]"   (or just run `python -m engine` from the root)
+[tool.setuptools]
+package-dir = {"engine" = "."}
+packages = ["engine", "engine.schema", "engine.basefile", "engine.models"]
