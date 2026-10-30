@@ -1,6 +1,6 @@
 // The tooltip card: step meta, title, why, what to do, suggested value, done-when, and the help buttons.
 import type { Card, GuideMsg } from "../../shared/messages";
-import { Ctx, Mounted, Side, el, esc, kc } from "../dom";
+import { Ctx, Mounted, Rect, Side, el, esc, kc } from "../dom";
 import { placeCard } from "../place";
 import { codeBoxHtml } from "./codeCard";
 import { keycapsHtml } from "./keycaps";
@@ -25,7 +25,7 @@ export function fallbackHtml(g: GuideMsg): { top: string; body: string } {
 let pinned: { x: number; y: number } | null = null;
 
 export function mountCard(ctx: Ctx, g: GuideMsg, c: Card, m: Mounted, onAction: (a: string, btn: HTMLElement) => void,
-                          reserveBottom: number): HTMLDivElement {
+                          reserveBottom: number, avoid: Rect[] = []): HTMLDivElement {
   const actions = c.actions.map(a => {
     const label = a === "do_it" && g.extra.action === "type" ? "Fill it for me" : LABELS[a] ?? a;
     return `<button data-a="${esc(a)}" class="${a === "next" && c.actions.length > 1 ? "link" : a === "next" ? "pri" : ""}">${esc(label)}</button>`;
@@ -51,7 +51,7 @@ export function mountCard(ctx: Ctx, g: GuideMsg, c: Card, m: Mounted, onAction: 
   card.querySelectorAll<HTMLButtonElement>("button[data-copy]").forEach(b => b.addEventListener("click", () => copied(b)));
 
   const auto = () => {
-    const p = placeCard(card.offsetWidth, card.offsetHeight, m.anchor, ctx.W, ctx.H, m.prefer as Side[] | undefined, reserveBottom);
+    const p = placeCard(card.offsetWidth, card.offsetHeight, m.anchor, ctx.W, ctx.H, m.prefer as Side[] | undefined, reserveBottom, avoid);
     card.classList.remove("up", "down", "left", "right");
     card.style.left = `${p.x}px`;
     card.style.top = `${p.y}px`;

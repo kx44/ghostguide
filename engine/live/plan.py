@@ -29,8 +29,8 @@ _NEEDS_TARGET = {"outline", "beacon", "ghost_line", "static_line", "ghost_text",
                  "taskbar", "click_type"}
 _LINE_STYLES = {"ghost_line", "static_line"}
 _COMPACT = {"beacon", "static_line"}   # repeats: the light guide + a one-line card (title, Up next, Next)
-# Wait steps advance by themselves once phase 3's step checks exist; until then the card says to press Next.
-WAIT_AUTO = False
+# Wait steps advance by themselves (live/verify.py: the window settles, plus the step's hint if it has one).
+WAIT_AUTO = True
 EDGE_INSET = 28      # px from the display edge for the off-screen pill
 
 
@@ -178,8 +178,43 @@ class Planner:
         if box is None:
             return None
         if step.action == "type":
-            click = "left"
+            return ShowMe(to=line_start(box), click="left")
         return ShowMe(to=box.center, click=click)
+
+
+MENU_W_PX, MENU_H_PX = 520, 640     # room a context menu takes, right of and below where you right-click
+
+
+def avoid_areas(step: Step, box: Optional[Box], extra: dict) -> list[dict]:
+    """Where you're about to work, so the card keeps off it (physical px, like the box):
+    - typing: the lines the code goes on, from the target line down (the code pushes what's below it down);
+    - a right-click route: the context menu that opens at the target.
+    The outline itself is always avoided by the overlay; this is what appears next to it."""
+    if box is None:
+        return []
+    out: list[dict] = []
+    if step.action == "type":
+        value = str(step.params.get("value") or "")
+        n = 1 if extra.get("insert") == "col" else max(1, len(value.rstrip("\n").split("\n")))
+        lh = float(extra.get("line_h") or box.h)
+        clip = extra.get("clip")
+        bottom = box.y + box.h + (n - 1) * lh
+        if clip:
+            bottom = min(bottom, clip["y"] + clip["h"])
+        if n > 1 or extra.get("insert") in ("before", "end"):
+            out.append({"x": box.x, "y": box.y, "w": box.w, "h": int(max(box.h, bottom - box.y))})
+    if step.action == "menu_path" and (click_type(step.params) or {}).get("button") == "right":
+        out.append({"x": box.x + box.w // 2, "y": box.y + box.h // 2, "w": MENU_W_PX, "h": MENU_H_PX})
+    return out
+
+
+def line_start(box: Box) -> tuple[int, int]:
+    """Where to click to type on an editor line: its very start. An empty VS Code file shows hint links
+    across its first lines ("Generate code", "select a language"); a click on one opens a picker instead of
+    placing the caret, and they start a few px into the line."""
+    if box.w > 4 * box.h:
+        return box.x + 8, box.y + box.h // 2
+    return box.center
 
 
 def _where(step: Step) -> Optional[str]:

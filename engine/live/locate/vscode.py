@@ -397,47 +397,9 @@ def pitch_from_rows(ink: list[float], approx: float) -> Optional[float]:
 
 # ---------- Windows layer -----------------------------------------------------------------------
 def dump(window: str, max_depth: int = 60, max_elements: int = 6000, tries: int = 3) -> list[dict]:
-    """Every UIA element of the first top-level window whose title contains `window`. The walk itself can
-    throw when the UI changes under it (a menu closing, VS Code still starting), so it retries."""
-    for i in range(tries):
-        try:
-            return _dump(window, max_depth, max_elements)
-        except Exception:
-            if i == tries - 1:
-                raise
-            time.sleep(0.2)
-    return []
-
-
-def _dump(window: str, max_depth: int, max_elements: int) -> list[dict]:
-    import uiautomation as auto
-
-    out: list[dict] = []
-    for top in auto.GetRootControl().GetChildren():
-        title = top.Name or ""
-        if window.casefold() not in title.casefold():
-            continue
-        for ctrl, _ in auto.WalkControl(top, includeTop=True, maxDepth=max_depth):
-            if len(out) >= max_elements:
-                break
-            try:
-                r = ctrl.BoundingRectangle
-                t = ctrl.ControlTypeName.removesuffix("Control")
-                el = {"name": ctrl.Name, "type": t, "rect": [r.left, r.top, r.width(), r.height()],
-                      "offscreen": bool(ctrl.IsOffscreen)}
-                if t == "Edit":
-                    vp = ctrl.GetPattern(auto.PatternId.ValuePattern)
-                    if vp:
-                        el["value"] = vp.Value
-                elif t == "TabItem":
-                    sp = ctrl.GetPattern(auto.PatternId.SelectionItemPattern)
-                    if sp:
-                        el["selected"] = bool(sp.IsSelected)
-            except Exception:   # elements vanish mid-walk; keep going
-                continue
-            out.append(el)
-        break
-    return out
+    """Every UIA element of the first top-level window whose title contains `window` (locate/uia.py)."""
+    from engine.live.locate import uia
+    return uia.dump(window, max_depth, max_elements, tries)
 
 
 class VSCodeLocator:
@@ -450,10 +412,13 @@ class VSCodeLocator:
         self.last_how = ""
         self.last_seconds = 0.0
         self.last_extra: dict = {}         # for editor lines: what ghost text needs to sit in the editor
+        self.last_els: list[dict] = []     # the dump behind the last answer, so the step check can reuse it
+        self.last_t = 0.0
 
     def locate(self, step: Step) -> tuple[Optional[Box], Optional[Line]]:
         t0 = time.perf_counter()
         els = dump(self.window)
+        self.last_els, self.last_t = els, time.monotonic()
         ed = editor_from(els)
         bg = None
         if ed is not None:

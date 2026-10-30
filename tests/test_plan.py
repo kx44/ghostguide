@@ -80,9 +80,9 @@ def test_beacon_gets_a_compact_card_with_up_next():
     assert plan(VS, 23).card.compact is False
 
 
-def test_wait_says_press_next_until_checks_exist():
+def test_wait_moves_on_by_itself():
     g = plan(VS, 8, box=None)
-    assert g.card.actions == ["next"] and g.card.detail == "When it has loaded, press Next."
+    assert g.card.actions == ["skip_wait"] and g.card.detail == "We'll move on when it finishes."
 
 
 def test_lines_and_repeats():
@@ -128,3 +128,15 @@ def test_look_step_card_only_with_next():
     look = [s for s in MUG.steps if s.action == "look"][0]
     g = Planner(MUG).plan(look, None)
     assert g.style == "card" and g.card.actions == ["next"]
+
+
+def test_avoid_areas_cover_where_the_code_goes_and_the_menu():
+    from engine.live.plan import avoid_areas
+    box = Box(x=700, y=300, w=1000, h=38)
+    a = avoid_areas(VS.step(4), box, {"insert": "line", "line_h": 34.0})          # 6 lines of code
+    assert a == [{"x": 700, "y": 300, "w": 1000, "h": 38 + 5 * 34}]
+    clipped = avoid_areas(VS.step(4), box, {"insert": "line", "line_h": 34.0, "clip": {"x": 0, "y": 0, "w": 1, "h": 400}})
+    assert clipped[0]["h"] == 100                                                 # not past the editor's bottom
+    assert avoid_areas(VS.step(20), box, {"insert": "col", "line_h": 34.0}) == []   # a few characters mid-line
+    assert avoid_areas(VS.step(7), box, {})[0]["w"] > 0                            # the right-click menu
+    assert avoid_areas(VS.step(14), box, {}) == [] and avoid_areas(VS.step(4), None, {}) == []

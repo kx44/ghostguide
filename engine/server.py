@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+import traceback
 from pathlib import Path
 from typing import Optional
 
@@ -18,7 +19,9 @@ from engine.schema import messages as m
 
 DEFAULT_PORT = 8765
 CAPTURE_SETTLE_S = 0.08    # overlay clears, compositor shows the app, then we grab the ring
-POLL_S = 1.0               # how often a live locator re-finds the current step's target
+POLL_S = 1.0               # how often a live locator re-finds the current step's target and checks it
+CLICK_SETTLE_S = 0.25      # after a click, let the app react before checking
+TYPE_WAKE_S = 1.3          # after the last key, check once typing has paused (verify.TYPE_SETTLE_S + a bit)
 
 
 class Recorder:
@@ -46,7 +49,9 @@ class Recorder:
 
 
 async def serve(player: Player, port: int = DEFAULT_PORT, record: Optional[Path] = None,
-                log=print) -> None:
+                log=print, inputs=None) -> None:
+    """`inputs`: a live/inputs.Recent fed by the input watcher; a click or a pause after typing wakes the
+    step check at once instead of at the next tick."""
     from websockets.asyncio.server import serve as ws_serve
 
     clients: set = set()
@@ -72,6 +77,26 @@ async def serve(player: Player, port: int = DEFAULT_PORT, record: Optional[Path]
 
     player.before_capture = before_capture
 
+    key_timer = None
+
+    def wake_in(delay: float) -> None:
+        loop.call_later(delay, poke.set)
+
+    def on_input(ev) -> None:          # input watcher thread
+        nonlocal key_timer
+        if ev.kind == "down":
+            loop.call_soon_threadsafe(wake_in, CLICK_SETTLE_S)
+        elif ev.kind == "key":
+            def rearm():
+                nonlocal key_timer
+                if key_timer is not None:
+                    key_timer.cancel()
+                key_timer = loop.call_later(TYPE_WAKE_S, poke.set)    # once typing pauses
+            loop.call_soon_threadsafe(rearm)
+
+    if inputs is not None:
+        inputs.listeners.append(on_input)
+
     async def handler(ws):
         clients.add(ws)
         log(f"overlay connected ({len(clients)} client{'s' if len(clients) > 1 else ''})")
@@ -94,6 +119,8 @@ async def serve(player: Player, port: int = DEFAULT_PORT, record: Optional[Path]
 
     async def poll():
         last = None
+        last_check = None
+        last_error = None
         while True:
             try:
                 await asyncio.wait_for(poke.wait(), POLL_S)
@@ -102,19 +129,39 @@ async def serve(player: Player, port: int = DEFAULT_PORT, record: Optional[Path]
             poke.clear()
             if not clients:
                 continue
-            t0 = time.monotonic()
-            found = await asyncio.to_thread(player.locate_current)      # slow; buttons keep working meanwhile
-            async with busy:
-                out = await asyncio.to_thread(player.apply_located, found)
-            how = getattr(player.locator, "last_how", None)
-            if how != last:
-                log(f"  locate step {found[0] if found else '-'}: {how} ({time.monotonic() - t0:.1f}s)")
-                last = how
-            await send_all(out)
+            try:
+                t0 = time.monotonic()
+                if player.locator is not None:
+                    found = await asyncio.to_thread(player.locate_current)      # slow; buttons keep working meanwhile
+                    async with busy:
+                        out = await asyncio.to_thread(player.apply_located, found)
+                    how = getattr(player.locator, "last_how", None)
+                    if how != last:
+                        log(f"  locate step {found[0] if found else '-'}: {how} ({time.monotonic() - t0:.1f}s)")
+                        last = how
+                    await send_all(out)
+                if player.tracker is not None:
+                    checked = await asyncio.to_thread(player.check_round)       # rule checks reuse the locator's dump
+                    async with busy:
+                        out = player.apply_checked(checked)
+                    v = player.tracker.cache.get(checked[0]) if checked else None
+                    said = (checked[0], v.result, v.why) if v else None
+                    if said != last_check:
+                        log(f"  check step {said[0]}: {said[1]} ({said[2]})" if said else "  check: -")
+                        last_check = said
+                    if out:
+                        s = player.session
+                        log(f"  ✓ auto → {'finished' if s.finished else f'step {s.current}/{s.of}'}")
+                    await send_all(out)
+            except Exception as e:     # one bad round must never switch off the locator and the checks for good
+                err = f"{type(e).__name__}: {e}"
+                if err != last_error:
+                    log("  round failed, carrying on:\n" + traceback.format_exc())
+                    last_error = err
 
     async with ws_serve(handler, "127.0.0.1", port, max_size=2 ** 20):
         log(f"engine listening on ws://127.0.0.1:{port} · {player.session.tutorial.meta.title}")
-        poller = asyncio.create_task(poll()) if player.locator is not None else None
+        poller = asyncio.create_task(poll()) if (player.locator or player.tracker) is not None else None
         try:
             await asyncio.Future()
         finally:

@@ -46,6 +46,8 @@ export interface GuideExtra {
   scroll?: "up" | "down";   // the spot is scrolled out of the editor's view
   context_before?: string;  // code just before the spot, shown in the code box in purple (not copied)
   context_after?: string;   // code just after it, for a mid-line insert
+  avoid?: Box[];       // where you're about to work (the code's lines, an opening menu): the card keeps off them
+  route?: { path?: string[]; shortcut?: string };   // the target isn't on screen: how to get there
   [k: string]: unknown;
 }
 
@@ -101,6 +103,7 @@ export type FromOverlay =
 export interface Local {
   box?: Box;
   clip?: Box;          // ghost text: the editor's visible area (from extra.clip), this window's DIPs
+  avoid?: Box[];       // extra.avoid in this window's DIPs
   line?: LineSpec;
   edge_point?: Pt;
   to?: Pt;

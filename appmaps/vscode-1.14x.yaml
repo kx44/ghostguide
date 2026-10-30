@@ -1,0 +1,21 @@
+Save:
+  aliases: []
+  menu_path:
+  - File
+  - Save
+  shortcut: Ctrl+S
+  source: https://code.visualstudio.com/docs/editing/codebasics
+Open with Live Server:
+  aliases: []
+  menu_path:
+  - an HTML file in Explorer (right-click)
+  - Open with Live Server
+  shortcut: Alt+L Alt+O
+  source: https://marketplace.visualstudio.com/items?itemName=ritwickdey.LiveServer
+New File...:
+  aliases:
+  - New File
+  menu_path:
+  - Explorer folder (right-click)
+  - New File...
+  source: 'VS Code 1.143 UI: Explorer view title button (UIA name), not in the docs'

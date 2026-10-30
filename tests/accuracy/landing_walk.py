@@ -63,7 +63,11 @@ def window_title(folder: Path) -> str:
 def top_window(part: str):
     import uiautomation as auto
     for top in auto.GetRootControl().GetChildren():
-        if part.casefold() in (top.Name or "").casefold():
+        try:
+            name = top.Name or ""
+        except Exception:          # a window closing while we list them
+            continue
+        if part.casefold() in name.casefold():
             return top
     return None
 
@@ -231,6 +235,17 @@ def close_all_tabs(win, title: str, tries: int = 12) -> None:
         time.sleep(0.6)
 
 
+def focused_is(ctype: str, name_part: str) -> bool:
+    """Is the keyboard focus on a control of this type whose name contains `name_part`? Checked before any
+    typing: keys typed into VS Code's Explorer tree act on files (once one was deleted that way)."""
+    import uiautomation as auto
+    try:
+        f = auto.GetFocusedControl()
+        return f is not None and f.ControlTypeName.removesuffix("Control") == ctype and name_part in (f.Name or "")
+    except Exception:
+        return False
+
+
 def engine_running(port: int = 8765) -> bool:
     import socket
     with socket.socket() as s:
@@ -277,9 +292,28 @@ def prepare(step, win, title: str) -> None:
             time.sleep(0.7)
 
 
+def close_inline_chat(title: str) -> bool:
+    """Close VS Code's inline chat if one is open in the editor (a click on an empty file's "Generate code"
+    hint opens it, and VS Code restores it with the workspace). While it's open, Monaco hides its caret from
+    UIA, so no line can be found and nothing may be typed."""
+    els = dump(title)
+    chat = [e for e in els if e.get("type") == "Edit" and (e.get("name") or "").startswith("Inline Chat Input")]
+    if not chat:
+        return False
+    cy = chat[0]["rect"][1]
+    close = [e for e in els if e.get("type") == "Button" and e.get("name") == "Close (Escape)"
+             and abs(e["rect"][1] - cy) < 200]
+    if close:
+        r = close[0]["rect"]
+        click(r[0] + r[2] // 2, r[1] + r[3] // 2)
+        time.sleep(0.6)
+    return True
+
+
 def click_into_editor(win, title: str, fname: str) -> None:
     """Click into the file's editor, as whoever types there would. Upper left: a card with no target yet
     sits bottom-centre on screen, and a click there would land on it."""
+    close_inline_chat(title)
     body = [e["rect"] for e in dump(title) if e.get("type") == "Group" and e.get("name") == fname]
     if body:
         x, y, w, h = body[0]
@@ -297,6 +331,9 @@ def act(step, box, win, folder: Path, title: str, loc, row: dict, out: Path) -> 
         click(*box.center)
         time.sleep(0.8)
     elif step.action == "type" and t.kind == "field" and "filename" in t.label.lower() and box is not None:
+        if not focused_is("Edit", "Type file name"):
+            row["skipped_action"] = "filename box not focused: typed nothing"     # never type into the tree
+            return
         auto.SendKeys(str(step.params["value"]), interval=0.02)
         auto.SendKeys("{Enter}")
         time.sleep(1.2)
@@ -345,7 +382,7 @@ def main(argv=None) -> int:
 
     folder = Path(args.folder)
     win, title = setup(folder, fresh=not args.no_reset and args.start == 1)
-    loc = VSCodeLocator(title)
+    loc = resolver(title)
     tut = parse_file(TUTORIAL)
     OUT.mkdir(parents=True, exist_ok=True)
     rows = []
@@ -381,6 +418,21 @@ def main(argv=None) -> int:
     print("\n" + json.dumps(summary, indent=2))
     print(f"screenshots: {OUT}")
     return 0 if not summary["missed"] and not summary["verify_failed"] else 1
+
+
+def resolver(title: str):
+    """The engine's finder chain (app map → UIA → vision off → route) around the VS Code rules, as `play`
+    builds it, so this check covers the resolver and not just the rules. The app map's local layer goes to
+    a scratch folder under cache/, so a check run never writes into the user's own learned positions."""
+    from engine.appmap.store import AppMapStore
+    from engine.live import windows
+    from engine.live.locate.resolver import Resolver
+    store = AppMapStore("Visual Studio Code", version="1.143.1", local=config.CACHE / "appmaps-check")
+
+    def find_window(part: str):
+        w = windows.find(part)
+        return w.rect if w else None
+    return Resolver(VSCodeLocator(title), store, find_window)
 
 
 def norm_label(s: str) -> str:

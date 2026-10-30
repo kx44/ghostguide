@@ -78,7 +78,7 @@ function drawGuide(g: GuideMsg, local: Local) {
     console.error(`style ${g.style} failed, showing the card alone`, e);
     mounted = STYLE.card(ctx(), g, local);
   }
-  if (g.card) card = mountCard(ctx(), g, g.card, mounted, onCardAction, bottomReserve());
+  if (g.card) card = mountCard(ctx(), g, g.card, mounted, onCardAction, bottomReserve(), local.avoid ?? []);
 }
 
 function onCardAction(a: string, btn: HTMLElement) {

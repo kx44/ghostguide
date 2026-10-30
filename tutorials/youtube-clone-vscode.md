@@ -24,6 +24,7 @@ action: click
 target: {label: New File, kind: button, where: "Explorer, YOUTUBE-CLONE folder header (icons appear on hover)"}
 why: "Start the page."
 check: "Inline filename box in Explorer"
+verify: {uia: {type: Edit, name_contains: "Type file name"}}
 source: {t: "01:39-01:41"}
 confidence: high   # seen in frames
 ```
@@ -99,7 +100,7 @@ target: {label: Open with Live Server, kind: menu_item, where: "Explorer, right-
 params: {click_type: right}
 why: "Live Server reloads the browser on every save."
 check: "New browser tab at 127.0.0.1:5501/index.html"
-verify: {uia: {type: Edit, name: Address and search bar, value_contains: "127.0.0.1:5501"}}
+verify: {uia: {type: Edit, name: Address and search bar, window: Google Chrome, value_contains: "127.0.0.1:5501/index.html"}}
 source: {t: "03:43-03:46"}
 confidence: low   # frames show the new tab opening but not how; server was already running
 ```
@@ -109,6 +110,7 @@ action: wait
 target: {label: Browser, kind: window, where: "right half of screen"}
 params: {signals: [new tab, page loaded]}
 check: "One 250×150 image visible"
+verify: {uia: {type: TabItem, window: Google Chrome, name: Document}}   # the page's <title>, from Emmet
 source: {t: "03:46-03:52"}
 confidence: high
 note: "Author works split-screen, so there's no app switch back; if the user's browser covers VS Code, add switch_app."
@@ -170,6 +172,7 @@ repeat_of: 6
 action: click
 target: {label: New File..., kind: button, where: "Explorer view header"}
 check: "Inline filename box"
+verify: {uia: {type: Edit, name_contains: "Type file name"}}
 source: {t: "06:33"}
 repeat_of: 1
 ```
@@ -316,7 +319,7 @@ action: shortcut
 target: {label: Save, kind: button, where: "File menu"}
 params: {keys: [Ctrl, S], then: "look at browser"}
 check: "Browser: white '12:24' on a dark pill, bottom-right of the (full-width) thumbnail area"
-verify: {file: [{path: styles.css, contains: "attr(data-duration)"}, {path: index.html, contains: "data-duration=\"12:24\""}]}
+verify: {file: {path: styles.css, contains: "attr(data-duration)"}}   # index.html is never saved after 15/20 in the video
 source: {t: "10:19-10:25"}
 repeat_of: 6
 ```

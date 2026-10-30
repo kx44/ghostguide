@@ -13,10 +13,13 @@ It resets the scratch folder (as landing_walk does), starts the engine (`--resta
   focus       type in a test window, click the overlay's Next, type again: every letter lands, focus stays;
               plain H and S typed there never move the step
   walk        all 23 steps through the overlay: violet outline pixels on the engine's box, card not covering
-              it, scheme dark; the step is done on that box (so a click through the outline must work) and
-              Next is pressed with the hotkey
+              it, scheme dark; the step is done on that box (so a click through the outline must work), code
+              is pasted from the card's Copy at the outlined line, saves are real Ctrl+S, and then the walk
+              **waits for the engine to move on by itself** (smart Next). Next is only pressed when it doesn't,
+              and that counts as a failure.
+  catch-up    at step 12 the overlay is hidden, steps 12-15 are done by hand, Resume must land on 16
   restart     mid-walk the engine is killed ("Waiting for the engine" shows) and restarted: same step
-  hide        hide, resume: same step
+  hide        hide, resume with nothing done: same step
 
 It takes the mouse and keyboard for ~4 min. Results: cache/screenshots/overlay/ (one PNG per step,
 overlay.json). Left for a person: crispness at other display scalings, a second monitor.
@@ -24,6 +27,7 @@ overlay.json). Left for a person: crispness at other display scalings, a second 
 from __future__ import annotations
 
 import ctypes
+import os
 import json
 import subprocess
 import sys
@@ -34,9 +38,14 @@ from pathlib import Path
 from engine import config
 from engine.basefile.parse import parse_file
 from engine.live.locate.vscode import VSCodeLocator, dump
+from engine.live.plan import line_start
 from engine.schema.messages import Box
-from tests.accuracy.landing_walk import (FOLDER, TUTORIAL, act, bring_front, click, click_into_editor, prepare,
-                                        setup, top_window)
+from tests.accuracy.landing_walk import (EMMET_BANG, FOLDER, TUTORIAL, act, bring_front, click, click_into_editor,
+                                        focused_is, prepare, setup, top_window)
+
+AUTO_WAIT_S = 12        # how long the walk waits for a step to move on by itself
+WAIT_STEP_S = 30        # …a wait step, which depends on the page loading
+CATCH_UP = (12, 15)     # steps done while hidden; Resume must land on the one after
 
 OUT = config.CACHE / "screenshots" / "overlay"
 LOGS = config.LOGS
@@ -101,7 +110,8 @@ def start_engine(restart: bool, tag: str):
     rec.unlink(missing_ok=True)
     cmd = [sys.executable, "-u", "-m", "engine", "play", str(TUTORIAL.relative_to(config.ROOT)), "--window",
            f"{FOLDER.name} - Visual Studio Code", "--record", str(rec)] + (["--restart"] if restart else [])
-    p = subprocess.Popen(cmd, cwd=config.ROOT, stdout=(LOGS / f"overlay_check-{tag}.log").open("w"),
+    env = {**os.environ, "GG_LOCAL_APPMAPS": str(config.CACHE / "appmaps-check")}   # never the user's own learned map
+    p = subprocess.Popen(cmd, cwd=config.ROOT, env=env, stdout=(LOGS / f"overlay_check-{tag}.log").open("w"),
                          stderr=subprocess.STDOUT)
     return p, Rec(rec)
 
@@ -279,6 +289,78 @@ def violet_bbox(img, region, tol=38):
     return [x0 + min(xs), y0 + min(ys), x0 + max(xs), y0 + max(ys)]
 
 
+def act_live(step, box, win, title: str, loc, row: dict) -> None:
+    """Do the step the way a person would, so the engine's checks see real changes: typing steps paste the
+    step's code (what the card's Copy gives you) at the outlined line, saves are Ctrl+S. Everything else
+    as in the landing walk (clicks on the found box, the filename typed, the Live Server menu)."""
+    import uiautomation as auto
+    if not (step.action == "type" and step.target.label == "Editor"):
+        act(step, box, win, FOLDER, title, loc, row, OUT)
+        return
+    bring_front(win)
+    value = str(step.params.get("value", ""))
+    if value == "!":                                # Emmet: ! then Tab, as the tutorial says
+        if box is not None:
+            click(*line_start(box))
+        time.sleep(0.3)
+        if not focused_is("Edit", "index.html"):
+            row["skipped_action"] = "editor not focused: typed nothing"
+            return
+        auto.SendKeys("!", interval=0.05)
+        time.sleep(0.8)
+        auto.SendKeys("{Tab}")
+        time.sleep(1.2)
+        ed = [e for e in dump(title) if e.get("type") == "Edit" and e.get("name") == "index.html"]
+        if not (ed and "<!DOCTYPE html>" in (ed[0].get("value") or "")):
+            row["emmet_fallback"] = True            # the suggestion didn't come up in time: paste what it makes
+            auto.SendKeys("{Ctrl}a")
+            auto.SetClipboardText(EMMET_BANG)
+            auto.SendKeys("{Ctrl}v")
+        return
+    if box is None:
+        row["skipped_action"] = True
+        return
+    insert, col = row.get("insert"), row.get("col")
+    fname = (step.target.where or "").split(",")[0].strip()
+    ed = [e for e in dump(title) if e.get("type") == "Edit" and e.get("name") == fname]
+    if ed and not (ed[0].get("value") or "").strip():
+        # an empty file: VS Code's hint links fill its first lines; focus the editor from its tab instead
+        tab = [e for e in dump(title) if e.get("type") == "TabItem" and (e.get("name") or "").startswith(fname)]
+        if tab:
+            r = tab[0]["rect"]
+            click(r[0] + r[2] // 3, r[1] + r[3] // 2)
+        row["empty_file"] = True
+    else:
+        click(*line_start(box))                     # the start of the outlined line, as Show me points
+    time.sleep(0.3)
+    text = value.rstrip("\n")
+    if insert == "end":
+        auto.SendKeys("{Ctrl}{End}")
+        text = "\n" + text.lstrip("\n")
+    elif col is not None:                           # mid-line: just before the tag's closing >
+        auto.SendKeys("{End}{Left}")
+    elif insert == "before":                        # new lines go above the line that's there
+        auto.SendKeys("{Home}")
+        text += "\n"
+    else:
+        auto.SendKeys("{Home}")
+    if not focused_is("Edit", fname):
+        row["skipped_action"] = f"{fname} editor not focused: pasted nothing"
+        return
+    auto.SetClipboardText(text)
+    auto.SendKeys("{Ctrl}v")
+    time.sleep(0.4)
+
+
+def wait_moves_on(rec, n: int, k: int, timeout: float = AUTO_WAIT_S):
+    """The state message that took the engine past step n by itself (n+1, or further when it chained). A wait
+    step can finish before the walk even starts watching, so a state already past n counts too."""
+    st = rec.last("state")
+    if st and not st["hidden"] and (st["finished"] or st["current"] > n):
+        return st
+    return rec.wait(lambda m: m["type"] == "state" and (m["finished"] or m["current"] > n) and not m["hidden"], timeout, k)
+
+
 # ---------- the checks --------------------------------------------------------------------------
 def main(argv=None) -> int:
     if sys.platform != "win32":
@@ -365,17 +447,22 @@ def main(argv=None) -> int:
         u32.WindowFromPoint.restype = wt.HWND
         u32.GetAncestor.argtypes = [wt.HWND, ctypes.c_uint]
         u32.GetAncestor.restype = wt.HWND
+        hit_titles = {}
         for name, (x, y) in (("outline", pt_outline), ("elsewhere", pt_else)):
             auto.MoveTo(x, y, moveSpeed=4)                # the cursor is there, as when a person clicks it
             time.sleep(0.15)
             root = u32.GetAncestor(u32.WindowFromPoint(wt.POINT(x, y)), 2)          # GA_ROOT
             hits[name] = (root or 0) == win.NativeWindowHandle
+            if not hits[name]:
+                buf = ctypes.create_unicode_buffer(200)
+                u32.GetWindowTextW(root, buf, 200)
+                hit_titles[name] = buf.value
         bring_front(win)
         click(*pt_else)
         time.sleep(1.2)
         tabs = [e for e in dump(title) if e.get("type") == "TabItem" and "apps.svg" in (e.get("name") or "")]
         record("clicks pass through (under the outline and elsewhere VS Code gets them)", all(hits.values()) and bool(tabs),
-               window_from_point=hits, real_click_opened_apps_svg=bool(tabs))
+               window_from_point=hits, real_click_opened_apps_svg=bool(tabs), on_top_instead=hit_titles or None)
         for t in tabs:                                   # close the preview it opened, with its tab's close button
             tr = t["rect"]
             close = [e for e in dump(title) if e.get("type") == "Button" and (e.get("name") or "").startswith("Close")
@@ -447,9 +534,13 @@ def main(argv=None) -> int:
                     u32.mouse_event(0x0002, 0, 0, 0, 0); u32.mouse_event(0x0004, 0, 0, 0, 0); time.sleep(0.06)
                 time.sleep(0.6)
                 m5 = card_meta(ov_elements())
-                reset = bool(m5) and abs(m5["rect"][0] - m1["rect"][0]) <= 12 and abs(m5["rect"][1] - m1["rect"][1]) <= 12
+                # back at the automatic spot: same x, off the dragged one. (Its y follows the card's height, which can
+                # change between visits as the "Not found (…)" hint text changes, so y is compared with the drag.)
+                reset = bool(m5) and abs(m5["rect"][0] - m1["rect"][0]) <= 12 and abs(m5["rect"][1] - m2["rect"][1]) > 100
         record("card drags by its top row, stays put on the next step, double-click puts it back", moved and kept and reset,
-               moved=moved, kept_next_step=kept, reset=reset)
+               moved=moved, kept_next_step=kept, reset=reset,
+               at={k: (v["rect"][:2] if v else None) for k, v in (("start", m1), ("dragged", locals().get("m2")),
+                                                                  ("back", locals().get("m4")), ("reset", locals().get("m5")))})
 
         # ---- hotkeys with VS Code focused ----
         bring_front(win)
@@ -510,17 +601,66 @@ def main(argv=None) -> int:
         up = wait_step(rec, 1, 0, 20)
         record("engine down: overlay says 'Waiting for the engine', reconnects by itself", bool(waiting) and bool(up))
         walk.clear()
-        for step in tut.steps:
-            n = step.n
+        caught_up_tried = False
+        n = 1
+        while n <= len(tut.steps):
+            step = tut.step(n)
             st = rec.last("state")
             if not (st and (st["current"] == n or rec.wait(lambda m: m["type"] == "state" and m["current"] == n, 8, rec.mark()))):
-                walk.append({"n": n, "error": "engine not on this step"})
-                print(f"  step {n}: engine isn't on it, stopping the walk")
+                walk.append({"n": n, "error": "engine not on this step", "engine_on": st and st["current"]})
+                print(f"  step {n}: engine isn't on it (on {st and st['current']}), stopping the walk")
                 break
+            if n == CATCH_UP[0] and not caught_up_tried:  # ---- hide, do steps by hand, resume (once) ----
+                caught_up_tried = True
+                k = rec.mark()
+                hotkey("h")
+                hid = rec.wait(lambda m: m["type"] == "state" and m["hidden"], 4, k)
+                rows = []
+                for j in range(CATCH_UP[0], CATCH_UP[1] + 1):
+                    sj = tut.step(j)
+                    prepare(sj, win, title)
+                    if sj.target.label == "Editor":
+                        click_into_editor(win, title, (sj.target.where or "").split(",")[0].strip())
+                    bj, _ = loc.locate(sj)
+                    for _ in range(3):                    # Monaco reads its caret a moment after the click
+                        if bj is not None or sj.target.label != "Editor":
+                            break
+                        time.sleep(0.8)
+                        click_into_editor(win, title, (sj.target.where or "").split(",")[0].strip())
+                        bj, _ = loc.locate(sj)
+                    rj = {"n": j, "hidden": True, "action": sj.action, "how": loc.last_how,
+                          "insert": loc.last_extra.get("insert"), "col": loc.last_extra.get("col")}
+                    act_live(sj, bj, win, title, loc, rj)
+                    time.sleep(0.8)
+                    rows.append(rj)
+                time.sleep(3.0)                           # the engine keeps checking while hidden (1 s ticks)
+                k = rec.mark()
+                hotkey("h")
+                landed = rec.wait(lambda m: m["type"] == "state" and not m["hidden"], 5, k)
+                toast = next((m for m in rec.since(k) if m["type"] == "toast" and "Caught up" in m["text"]), None)
+                ok = bool(hid) and bool(landed) and landed["current"] == CATCH_UP[1] + 1
+                record(f"catch-up: hide at {CATCH_UP[0]}, do {CATCH_UP[0]}-{CATCH_UP[1]} by hand, resume lands on {CATCH_UP[1] + 1}",
+                       ok, landed=landed and landed["current"], toast=toast and toast["text"])
+                walk.extend(rows)
+                n = landed["current"] if landed else CATCH_UP[1] + 1
+                continue
+            if n == 16:                                   # hide / resume with nothing done stays on the step
+                k = rec.mark()
+                hotkey("h")
+                time.sleep(1.5)
+                hotkey("h")
+                record("hide / resume with nothing done stays on the step", bool(wait_step(rec, 16, k, 4)))
+            if n == 17:                                   # restart mid-walk, before acting (step still pending)
+                kill(eng)
+                time.sleep(2.0)
+                eng, rec = start_engine(restart=False, tag="c")
+                record("engine restarted mid-way resumes on the same step", bool(wait_step(rec, 17, 0, 20)))
             prepare(step, win, title)
             time.sleep(1.4)                               # the engine re-locates every second
             g = rec.last("guide")
-            if step.target.label == "Editor" and (g is None or g.get("box") is None):
+            for _ in range(2):
+                if not (step.target.label == "Editor" and (g is None or g.get("box") is None)):
+                    break
                 click_into_editor(win, title, (step.target.where or "").split(",")[0].strip())
                 time.sleep(1.6)
                 g = rec.last("guide")
@@ -529,7 +669,8 @@ def main(argv=None) -> int:
             img = grab()
             els = ov_elements()
             row = {"n": n, "action": step.action, "style": g and g["style"], "scheme": g and g["scheme"],
-                   "box": g and g.get("box"), "insert": g and g["extra"].get("insert"), "scroll": g and g["extra"].get("scroll")}
+                   "box": g and g.get("box"), "insert": g and g["extra"].get("insert"), "col": g and g["extra"].get("col"),
+                   "scroll": g and g["extra"].get("scroll")}
             b = g and g.get("box")
             if b:
                 vb = violet_bbox(img, (b["x"] - 40, b["y"] - 40, b["x"] + b["w"] + 40, b["y"] + b["h"] + 40))
@@ -544,6 +685,8 @@ def main(argv=None) -> int:
                     row["lands"] = lands(g["style"], b, vb)
                 c = card_rect(els, g)
                 row["card_covers_target"] = bool(c and _intersects(c, [b["x"], b["y"], b["w"], b["h"]]))
+                av = (g.get("extra") or {}).get("avoid") or []
+                row["card_covers_avoid"] = bool(c and any(_intersects(c, [a["x"], a["y"], a["w"], a["h"]]) for a in av))
             if row["style"] == "beacon":
                 names = [e.get("name") or "" for e in els]
                 row["compact_ok"] = step.title in names and any(nm.startswith("Up next: ") for nm in names)
@@ -562,27 +705,30 @@ def main(argv=None) -> int:
                 row["copy_ok"] = pressed and got == want and bool(find("Copied ✓"))
                 if not row["copy_ok"]:
                     row["copy_detail"] = {"pressed": pressed, "got": got[:60], "want": want[:60]}
-            act(step, Box(**b) if b else None, win, FOLDER, title, loc, row, OUT)
-            if n == 14:            # restart mid-walk (after a tab click: nothing short-lived like the filename box open)
-                kill(eng)
-                time.sleep(2.0)
-                eng, rec = start_engine(restart=False, tag="c")
-                row["resumed_same_step"] = bool(wait_step(rec, 14, 0, 20))
-                record("engine restarted mid-way resumes on the same step", row["resumed_same_step"])
-            if n == 13:
-                k = rec.mark()
-                hotkey("h"); time.sleep(0.8); hotkey("h")
-                row["hide_resume_same_step"] = bool(wait_step(rec, 13, k, 4))
-            bring_front(win)
-            time.sleep(0.3)
             k = rec.mark()
-            hotkey("right")
-            rec.wait(lambda m: m["type"] == "state" and (m["current"] == n + 1 or m["finished"]), 5, k)
+            t_act = time.monotonic()
+            act_live(step, Box(**b) if b else None, win, title, loc, row)
+            # a wait step waits for the page itself (here: placeholder images from unsplash.it), so give it longer
+            moved = wait_moves_on(rec, n, k, WAIT_STEP_S if step.action == "wait" else AUTO_WAIT_S)
+            row["auto"] = bool(moved)
+            row["auto_s"] = round(time.monotonic() - t_act, 1) if moved else None
+            if not moved:                                 # smart Next missed it: note why, then press Next
+                lg = (LOGS / f"overlay_check-{'c' if n >= 17 else 'b'}.log").read_text(encoding="utf-8", errors="replace")
+                row["engine_said"] = [ln.strip() for ln in lg.splitlines() if f"check step {n}:" in ln][-1:]
+                if "round failed" in lg:
+                    row["engine_error"] = lg[lg.rindex("round failed"):][:600]
+                bring_front(win)
+                time.sleep(0.3)
+                k = rec.mark()
+                hotkey("right")
+                moved = rec.wait(lambda m: m["type"] == "state" and (m["current"] > n or m["finished"]), 5, k)
+            print(f"           -> {'moved on by itself in ' + str(row['auto_s']) + ' s' if row['auto'] else 'NEEDED NEXT ' + str(row.get('engine_said'))}")
             walk.append(row)
+            n = moved["current"] if moved and not moved["finished"] else len(tut.steps) + 1
         fin = rec.wait(lambda m: m["type"] == "state" and m["finished"], 6)
         targets = [w for w in walk if w.get("box")]
         record("walk: all 23 steps through the overlay, finished", bool(fin) and len(walk) == len(tut.steps),
-               steps=len(walk))
+               steps=len(walk), errors=[w for w in walk if "error" in w])
         record("walk: outline drawn on the engine's box", all(w.get("lands") for w in targets),
                off=[w["n"] for w in targets if not w.get("lands")], with_target=len(targets))
         record("walk: card never covers the target", not any(w.get("card_covers_target") for w in targets),
@@ -595,10 +741,14 @@ def main(argv=None) -> int:
                failed=[w["n"] for w in repeats if not w.get("compact_ok")], repeats=len(repeats))
         record("walk: scheme dark over VS Code", all(w.get("scheme") == "dark" for w in walk if w.get("scheme")),
                light=[w["n"] for w in walk if w.get("scheme") == "light"])
-        no_target = [w["n"] for w in walk if not w.get("box") and w["action"] not in ("shortcut", "wait")]
+        shown = [w for w in walk if not w.get("hidden") and "auto" in w]
+        record("smart Next: every step moved on by itself, no Next pressed", bool(shown) and all(w["auto"] for w in shown),
+               needed_next=[w["n"] for w in shown if not w["auto"]], steps=len(shown),
+               slowest_s=max((w["auto_s"] or 0) for w in shown) if shown else None)
+        record("card stays off where the code goes (avoid areas)", not any(w.get("card_covers_avoid") for w in walk),
+               covered=[w["n"] for w in walk if w.get("card_covers_avoid")])
+        no_target = [w["n"] for w in walk if not w.get("box") and not w.get("hidden") and w.get("action") not in ("shortcut", "wait")]
         record("walk: every step that needs a target had one", not no_target, missing=no_target)
-        if any("hide_resume_same_step" in w for w in walk):
-            record("hide / resume mid-walk stays on the step", all(w.get("hide_resume_same_step", True) for w in walk))
     finally:
         kill(probe)
         kill(ov)

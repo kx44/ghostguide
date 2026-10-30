@@ -91,6 +91,10 @@ function route(msg: ToOverlay) {
         const c = toDipRect(msg.extra.clip);
         local.clip = localRect(d, c.x, c.y, c.width, c.height);
       }
+      if (msg.extra.avoid?.length && d) {
+        const dd = d;
+        local.avoid = msg.extra.avoid.map(a => { const r = toDipRect(a); return localRect(dd, r.x, r.y, r.width, r.height); });
+      }
       const target = (d && wins.get(d.id)) || (guideDisplay !== undefined && wins.get(guideDisplay)) || primaryWin();
       guideDisplay = target.display.id;
       for (const w of wins.values()) deliver(w, w === target ? msg : { type: "clear" }, w === target ? local : {});

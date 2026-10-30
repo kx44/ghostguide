@@ -2,8 +2,10 @@
 the list of messages to send back. `engine/server.py` carries them over the WebSocket; tests and the
 console mode call this directly.
 
-Phase 2 finds targets from pinned boxes (locate/pinned.py), else from a locator such as the VS Code UIA
-rules (locate/vscode.py); a pin always wins. Phase 3 swaps in the resolver.
+Targets come from pinned boxes (locate/pinned.py, dev only), else from the locator (the resolver:
+app map → UIA → vision → menu path); a pin always wins. Step checks come from the tracker (live/verify.py):
+when the current step checks done it moves on by itself (smart Next), and while hidden it keeps checking so
+Resume lands on the first step you haven't done.
 """
 from __future__ import annotations
 
@@ -32,8 +34,16 @@ class Locator(Protocol):
 class Player:
     def __init__(self, session: Session, pins: Optional[Pins] = None, scheme_fn: Optional[SchemeFn] = None,
                  scheme_override: Optional[str] = None, before_capture: Optional[Callable[[], None]] = None,
-                 pins_path=None, locator: Optional[Locator] = None):
+                 pins_path=None, locator: Optional[Locator] = None, tracker=None,
+                 folder_fn: Optional[Callable[[], object]] = None, inputs=None):
         self.session = session
+        self.inputs = inputs                     # live/inputs.Recent: recent clicks (acted_on, card placement)
+        self._drawn: dict[int, list[m.Box]] = {} # every box a step's guide was drawn at
+        # Checks steps (live/verify.py Tracker). Slow like the locator, so the server runs check_round()
+        # outside its lock and apply_checked() inside it.
+        self.tracker = tracker
+        self.folder_fn = folder_fn               # finds the working folder for `file` checks once the app is up
+        self._hidden_scan: list[int] = []
         # Finds targets live. Slow (a UIA walk), so it never runs inside handle(): the server calls
         # locate_current() outside its lock and apply_located() with the result, so buttons answer at once.
         self.locator = locator
@@ -85,8 +95,17 @@ class Player:
             box, line = self.target(step.n)
             self.scheme = self._scheme(box, step.n)
             guide = self.planner.plan(step, box, line, self.displays, self.scheme)
-            if guide.style in ("code_card", "ghost_text") and step.n not in self.pins.steps:
-                guide.extra.update(self._located_extra.get(step.n, {}))
+            located = self._located_extra.get(step.n, {}) if step.n not in self.pins.steps else {}
+            if guide.style in ("code_card", "ghost_text"):
+                guide.extra.update(located)
+            from engine.live.plan import avoid_areas
+            avoid = avoid_areas(step, box, guide.extra if guide.style == "code_card" else located)
+            if avoid:
+                guide.extra["avoid"] = avoid
+            if box is None and located.get("route") and guide.card is not None:
+                from engine.live.locate.menu import describe
+                guide.card.detail = describe(located["route"])      # nothing on screen: say how to get there
+                guide.extra["route"] = located["route"]
             if guide.card is not None and box is None and step.action not in NO_PIN_NEEDED:
                 first = "start point" if step.action in LINE_ACTIONS else "top-left corner"
                 second = "end point" if step.action in LINE_ACTIONS else "bottom-right corner"
@@ -95,6 +114,10 @@ class Player:
                 guide.card.dev_hint = (f"{found}Hover the {first} of {step.target.label} and press "
                                        f"Ctrl+Alt+P, then the {second} and Ctrl+Alt+P again." if self._corner is None
                                        else f"Now hover the {second} and press Ctrl+Alt+P.")
+        if guide is not None and guide.box is not None:
+            seen = self._drawn.setdefault(guide.step.n, [])
+            if guide.box not in seen:
+                seen.append(guide.box)
         out.append(self.state())
         if guide is None:
             out.append(m.Clear(reason="finished" if s.finished else "hidden"))
@@ -134,6 +157,72 @@ class Player:
             self._located[n] = (g.box, g.line)    # keep what's drawn: a pixel of jitter mustn't move the card
             return []
         return self.current()
+
+    # ---------- step checks (smart Next, tracking while hidden) ----------
+    def check_round(self) -> Optional[tuple]:
+        """Run the check ladder on the current step and the next few: (current step, hidden, steps done).
+        Reads the session but changes nothing, so the server runs it outside its lock."""
+        s, t = self.session, self.tracker
+        if t is None or s.finished:
+            return None
+        if t.folder is None and self.folder_fn is not None:
+            try:
+                t.folder = self.folder_fn()
+            except Exception:
+                pass
+        seed = None
+        loc = self.locator
+        if loc is not None and getattr(loc, "last_els", None) and _fresh(getattr(loc, "last_t", 0.0)):
+            seed = loc.last_els
+        snap = t.snapshot(seed)
+        t.verdicts(s, snap)
+        done = s.scan(t.checker(snap))
+        return s.current, s.hidden, done
+
+    def apply_checked(self, r) -> list[m._Msg]:
+        """Act on a check_round() result: while showing, mark the steps done and move on; while hidden,
+        remember them for Resume. Steps you already passed (Back, Jump) never auto-advance: only a step
+        still pending does, so going back to look at one isn't undone a second later."""
+        if r is None:
+            return []
+        cur, hidden, done = r
+        s = self.session
+        if s.current != cur or s.finished:
+            return []          # the user moved meanwhile
+        if s.hidden:
+            self._hidden_scan = done if hidden else []
+            return []
+        if hidden or not done or s.status(cur) != "pending":
+            return []
+        had_target = self.last_guide is not None and self.last_guide.box is not None
+        s.apply_done(done)
+        learn = getattr(self.locator, "learn", None)
+        for n in done:                     # checked done: stable controls are remembered for next time
+            boxes = self._drawn.get(n)
+            if learn is not None and boxes and n not in self.pins.steps:
+                try:
+                    learn(s.tutorial.step(n), boxes[-1])
+                except Exception:
+                    pass
+        self._step_changed()
+        out = ([m.Mark(result="ok")] if had_target else []) + self.current()
+        text = ("✓ You finished it" if s.finished else
+                f"✓ Step {done[0]} done" if len(done) == 1 else f"✓ Steps {done[0]}–{done[-1]} done")
+        out.append(m.Toast(text=text, kind="ok", ms=1600))
+        return out
+
+    def acted_on(self, n: int, since: float, pad: int = 6) -> bool:
+        """Did you click inside one of step n's drawn targets since `since`? (A click is never proof on its own:
+        the tracker only uses this next to a hint that holds.)"""
+        if self.inputs is None:
+            return False
+        boxes = self._drawn.get(n, [])
+        return any(e.t >= since and any(b.x - pad <= e.x <= b.x + b.w + pad and b.y - pad <= e.y <= b.y + b.h + pad
+                                        for b in boxes) for e in self.inputs.clicks(within_s=600))
+
+    def _step_changed(self) -> None:
+        if self.tracker is not None and not self.session.finished:
+            self.tracker.forget(self.session.current)
 
     def refresh(self) -> list[m._Msg]:
         """locate_current + apply_located in one go (tests, console mode)."""
@@ -190,9 +279,15 @@ class Player:
             except ValueError as e:
                 return [m.Toast(text=str(e), kind="warn")]
         if t == "hide":
+            self._hidden_scan = []
             return self._after(s.hide())
         if t == "resume":
-            return self._after(s.resume())
+            # Catch up from what the tracker saw while hidden (it kept checking), so this answers at once.
+            scan = list(self._hidden_scan)
+            s.checker = (lambda step: "done" if step.n in scan else "unknown") if scan else None
+            ev = s.resume()
+            s.checker = None
+            return self._after(ev)
         return []
 
     def _pin(self, at: tuple[int, int]) -> list[m._Msg]:
@@ -224,6 +319,7 @@ class Player:
     def _after(self, ev: Event) -> list[m._Msg]:
         if ev.kind == "noop":
             return []
+        self._step_changed()
         out = self.current()
         if ev.text:
             out.append(m.Toast(text=ev.text, kind="warn" if ev.kind == "skipped" else "ok",
@@ -232,6 +328,12 @@ class Player:
 
 
 JITTER_PX = 4    # a located box that moved this little is the same target
+DUMP_FRESH_S = 0.5   # a locator dump younger than this is reused by the step check
+
+
+def _fresh(t: float) -> bool:
+    import time
+    return time.monotonic() - t <= DUMP_FRESH_S
 
 
 def _near(a: Optional[m.Box], b: Optional[m.Box]) -> bool:

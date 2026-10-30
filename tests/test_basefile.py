@@ -58,11 +58,11 @@ def test_gold_step_counts_and_verify():
     mug = parse_file(ROOT / "tutorials/mug-solidworks.md")
     assert len(vs.steps) == 23 and len(mug.steps) == 43
     assert vs.meta.gold and mug.meta.gold
-    assert sum(s.verify is not None for s in vs.steps) == 20
+    assert all(s.verify is not None for s in vs.steps)     # phase 3: every step has a hint
     assert sum(s.verify is not None for s in mug.steps) == 10
     s14 = vs.step(14).verify.uia_checks()[0]
     assert (s14.name_contains, s14.type, s14.selected) == ("index.html", "TabItem", True)
-    assert [f.path for f in vs.step(23).verify.file_checks()] == ["styles.css", "index.html"]
+    assert [f.path for f in vs.step(23).verify.file_checks()] == ["styles.css"]
 
 
 def test_parts_and_titles():

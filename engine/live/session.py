@@ -15,7 +15,7 @@ from engine.schema.tutorial import Step, Tutorial
 
 Status = Literal["pending", "done", "skipped"]
 CheckResult = Literal["done", "not_yet", "wrong", "unknown"]
-Checker = Callable[[Step], CheckResult]
+Checker = Callable[[Step], "CheckResult | object"]     # a result string, or a verify.Verdict
 
 # Catch-up never runs through more steps than this in one resume, so a checker that wrongly
 # says "done" for everything can't race to the end.
@@ -129,21 +129,57 @@ class Session:
             return Event("caught_up", f"✓ Caught up: step{s} {_ranges(caught)} done. You're on step {self.current}.", caught)
         return Event("resumed")
 
-    def catch_up(self) -> list[int]:
-        done: list[int] = []
-        if self.checker is None:
-            return done
-        while not self.finished and len(done) < MAX_CATCH_UP:
-            step = self.step
-            assert step is not None
-            if self.checker(step) != "done":
-                break
-            self.statuses[self.current - 1] = "done"
-            done.append(self.current)
-            self.current += 1
-        if done:
-            self._log("catch_up")
+    def catch_up(self, checker: Optional[Checker] = None) -> list[int]:
+        """Walk forward while the current step checks done. Stuck on a step the checker can't vouch for (no
+        hint, or a fact that doesn't last such as "tab selected"), look further ahead: a later step whose
+        done *lasts* (its code is in the file, its tab exists) means the steps before it were done too, as
+        long as no lasting "not yet" lies in between. A "still typing" answer stops the scan outright.
+        Also used by the live loop (live/verify.py), so early actions advance the same way as a resume."""
+        checker = checker or self.checker
+        if checker is None:
+            return []
+        done = self.scan(checker)
+        self.apply_done(done, "catch_up")
         return done
+
+    def apply_done(self, done: list[int], op: str = "auto") -> None:
+        """Mark a scan's steps done and land on the one after them."""
+        for n in done:
+            self.statuses[n - 1] = "done"
+        if done:
+            self.current = done[-1] + 1
+            self._log(op)
+
+    def scan(self, checker: Checker) -> list[int]:
+        """The steps catch_up would mark done, without changing anything (the engine runs this while hidden
+        so Resume can answer at once from the result)."""
+        done: list[int] = []
+        cur = self.current
+        while cur <= self.of and len(done) < MAX_CATCH_UP:
+            v = _verdict(checker(self.tutorial.step(cur)))
+            if v.result == "done":
+                done.append(cur)
+                cur += 1
+                continue
+            if _stops(v):
+                break
+            k = self._anchor(checker, cur, MAX_CATCH_UP - len(done))
+            if k is None:
+                break
+            done.extend(range(cur, k + 1))
+            cur = k + 1
+        return done
+
+    def _anchor(self, checker: Checker, cur: int, budget: int) -> Optional[int]:
+        """Furthest step after `cur` whose done lasts, before any lasting not-yet."""
+        best = None
+        for n in range(cur + 1, min(self.of, cur + budget - 1) + 1):
+            v = _verdict(checker(self.tutorial.step(n)))
+            if _stops(v):
+                break
+            if v.result == "done" and v.lasting:
+                best = n
+        return best
 
     # ---------- persistence ----------
     def _log(self, op: str) -> None:
@@ -176,6 +212,23 @@ class Session:
         self.statuses = list(statuses)
         self.current = max(1, min(int(data.get("current", 1)), self.of + 1))
         return True
+
+
+@dataclass
+class _Plain:
+    """A plain string answer from a simple checker: "done" counts, nothing lasts."""
+    result: str
+    stage: str = "none"
+    lasting: bool = False
+
+
+def _verdict(v):
+    return _Plain(v) if isinstance(v, str) else v
+
+
+def _stops(v) -> bool:
+    """A "not yet" that lasts, a wrong result, or "still typing": nothing past it counts."""
+    return v.result == "wrong" or v.stage == "settle" or (v.result == "not_yet" and v.lasting)
 
 
 def _ranges(ns: list[int]) -> str:
