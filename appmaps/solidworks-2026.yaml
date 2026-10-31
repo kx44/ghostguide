@@ -17,6 +17,7 @@ Normal To:
   shortcut: Ctrl+8
   source: Checked on screen, SOLIDWORKS 2026 SP4.1 (mug run, 31 Oct 2026)
 Centerline:
+  where: "Sketch tab, CommandManager. Line is a small icon with no text, a diagonal line, the first in the top row of small icons, with its dropdown arrow right beside it"
   aliases: []
   menu_path:
   - Sketch
@@ -24,6 +25,7 @@ Centerline:
   - Centerline
   source: Checked on screen, SOLIDWORKS 2026 SP4.1 (mug run, 31 Oct 2026)
 Line:
+  where: "Sketch tab, CommandManager. A small icon with no text, a diagonal line, the first in the top row of small icons"
   aliases: []
   menu_path:
   - Sketch
@@ -37,6 +39,7 @@ Offset Entities:
   - Offset Entities
   source: Checked on screen, SOLIDWORKS 2026 SP4.1 (mug run, 31 Oct 2026)
 Centerpoint Straight Slot:
+  where: "Sketch tab, CommandManager. Straight Slot is a small icon with no text, a rounded slot with two dots, the first in the bottom row of small icons, with its dropdown arrow right beside it"
   aliases: []
   menu_path:
   - Sketch
@@ -69,6 +72,7 @@ Plane:
   - Plane
   source: Checked on screen, SOLIDWORKS 2026 SP4.1 (mug run, 31 Oct 2026)
 Hidden Lines Visible:
+  where: "Heads-up View toolbar across the top of the graphics area. Display Style is an icon with no text: a small shaded box, the third icon from the right end of the toolbar, with a dropdown arrow. The next one along, two half boxes, is Section View: not that. In its dropdown of five icons, Hidden Lines Visible is the fourth"
   aliases: []
   menu_path:
   - Display Style

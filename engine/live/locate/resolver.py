@@ -117,6 +117,7 @@ class Resolver:
     def locate(self, step: Step) -> tuple[Optional[Box], Optional[Line]]:
         t0 = time.perf_counter()
         self.last_conf = ""
+        step = self._described(step)
         try:
             if (getattr(self.uia, "follows_hops", False) and step.action == "menu_path"
                     and len(step.target.menu_path or []) > 1):
@@ -124,6 +125,11 @@ class Resolver:
             return self._locate(step)
         finally:
             self.last_seconds = time.perf_counter() - t0
+
+    def _described(self, step: Step) -> Step:
+        """The step with the built-in map's words for where its control is: someone checked those on this version."""
+        where = getattr(self.store, "reviewed_where", lambda label: None)(step.target.label)
+        return step.model_copy(update={"target": step.target.model_copy(update={"where": where})}) if where else step
 
     def _locate(self, step: Step) -> tuple[Optional[Box], Optional[Line]]:
         box, line = self.uia.locate(step)

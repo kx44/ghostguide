@@ -29,6 +29,7 @@ class Control(BaseModel):
     menu_path: Optional[list[str]] = None              # route when the button is hidden
     shortcut: Optional[str] = None
     source: Optional[str] = None                       # docs link the fact came from
+    where: Optional[str] = None                        # where it is and what it looks like, for an icon with no text
     seen: Optional[Seen] = None                        # local layer only
 
 

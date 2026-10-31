@@ -22,7 +22,7 @@ from engine.schema.appmap import AppMap, Control, Seen
 
 # Apps by the name tutorials use (meta.app) → file slug.
 SLUGS = {"visual studio code": "vscode", "vs code": "vscode", "solidworks": "solidworks"}
-DOCS_FIELDS = ("aliases", "menu_path", "shortcut", "source")
+DOCS_FIELDS = ("aliases", "menu_path", "shortcut", "source", "where")
 
 
 def slug(app: str) -> str:
@@ -100,6 +100,11 @@ class AppMapStore:
         """The built-in layer's route: someone clicked it on this version, so it beats what an old tutorial says."""
         c = self.builtin.get(label)
         return list(c.menu_path) if c is not None and c.menu_path else None
+
+    def reviewed_where(self, label: str) -> Optional[str]:
+        """The built-in layer's description of where a control is and what it looks like, for icons with no text."""
+        c = self.builtin.get(label)
+        return c.where if c is not None else None
 
     def names(self, label: str) -> list[str]:
         """The label and its aliases, for the UIA stage."""

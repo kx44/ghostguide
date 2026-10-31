@@ -188,7 +188,11 @@ def act(step, w: mw.Walk, hands: Hands) -> dict:
         if short and w.e.current == n:        # the card offers it, and a person would take it over a small icon
             d.keys(*[k.strip() for k in short.split("+")], settle=2.0)
             return {"how": f"the card's shortcut, {short}"}
-        return w.follow_hops(n)
+        out = w.follow_hops(n)
+        g = w.g(n)
+        if g and w.e.current == n and g["extra"].get("path_done", 0) < len(g["extra"].get("path") or [0]) - 1:
+            raise mw.Missing(f"step {n}: the route didn't get to its last chip")     # the next steps would run on nothing
+        return out
     if step.action == "type":
         return {"how": "Fill it for me", **w.do_it(n, presses=1)}
     if step.action in ("wait", "look"):

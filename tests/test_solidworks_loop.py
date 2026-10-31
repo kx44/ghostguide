@@ -1,6 +1,8 @@
 """The SolidWorks loop, the pure parts: vision memory and regions, route hops, Wonder, Do it for me, the start check, the model gate."""
 from types import SimpleNamespace
 
+from pathlib import Path
+
 import pytest
 from PIL import Image
 
@@ -295,6 +297,24 @@ def test_a_look_tells_neighbours_apart_but_forgives_a_hover_shade():
     other = [247] * 150 + [120] * 56 + [247] * 50                   # a different icon in the same spot
     assert not same_look(icon, other)
     assert not same_look(icon, icon[:-1])
+
+
+def test_the_built_in_map_describes_a_textless_icon_when_a_tutorial_doesnt():
+    import copy
+    from engine.appmap.store import AppMapStore
+    store = AppMapStore("SOLIDWORKS", version="2026", local=Path(__file__).parent / "no-such-folder")
+    assert store.get("Centerpoint Straight Slot").where and "rounded slot" in store.reviewed_where("Centerpoint Straight Slot")
+    step = copy.deepcopy(MUG.step(34))
+    step.target.menu_path, step.target.where = ["Straight Slot", "Centerpoint Straight Slot"], "Sketch toolbar"
+    seen = []
+
+    class Sees(VisionStub):
+        def find(self, step, label=None, route=None, hop=0, near=None):
+            seen.append((label, step.target.where))
+
+    Resolver(Stage(), store, vision=Sees()).locate(step)
+    assert seen[0][0] == "Sketch" and "rounded slot" in seen[0][1]
+    assert step.target.where == "Sketch toolbar"            # the step itself is never changed
 
 
 def test_a_route_offers_the_app_maps_shortcut():
