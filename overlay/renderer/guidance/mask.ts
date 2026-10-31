@@ -1,7 +1,7 @@
 // 7 · Pick in the model: tinted, breathing mask over the face or edge, with a plain-words label.
 // Phase 2 draws an ellipse in the pinned box; SAM 3.1 gives the real outline later (phase 4).
 import type { GuideMsg, Local } from "../../shared/messages";
-import { Bag, Ctx, Mounted, el, esc, halo, sv, toRect } from "../dom";
+import { Bag, Ctx, Mounted, el, esc, sv, toRect } from "../dom";
 
 export function mountMask(ctx: Ctx, g: GuideMsg, local: Local): Mounted {
   const bag = new Bag();
@@ -9,7 +9,7 @@ export function mountMask(ctx: Ctx, g: GuideMsg, local: Local): Mounted {
   const cx = r.x + r.w / 2, cy = r.y + r.h / 2, rx = r.w / 2, ry = r.h / 2;
   const mg = bag.add(sv(ctx.svg, "g", { class: "mask" }));
   const fill = sv(mg, "ellipse", { cx, cy, rx, ry, fill: "var(--gfill)" });
-  const edge = halo(mg, "ellipse", { cx, cy, rx, ry, stroke: "var(--g)" }, 2.5);
+  const edge = sv(mg, "ellipse", { cx, cy, rx, ry, fill: "none", stroke: "var(--g)", "stroke-width": 2 });
   const lab = bag.add(el(ctx.ov, "pill", "", esc(g.extra.label ?? "")));
   lab.style.left = `${cx - lab.offsetWidth / 2}px`;
   lab.style.top = `${r.y + r.h + 8}px`;
@@ -21,7 +21,7 @@ export function mountMask(ctx: Ctx, g: GuideMsg, local: Local): Mounted {
     mark(result) {
       mg.classList.remove("mask");
       fill.remove();
-      edge.top.style.stroke = result === "ok" ? "var(--ok)" : "var(--warn)";
+      edge.style.stroke = result === "ok" ? "var(--ok)" : "var(--warn)";
     },
     remove: () => bag.remove(),
   };

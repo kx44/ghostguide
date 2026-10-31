@@ -1,14 +1,13 @@
 // 2 · Cursor action, first time: animated ghost line (+ card). 4 · Repeat: the same path, static, no card.
 import type { GuideMsg, Local, Pt } from "../../shared/messages";
-import { Bag, Ctx, Mounted, Rect, el, esc, halo, sv } from "../dom";
+import { Bag, Ctx, Mounted, Rect, el, esc, sv } from "../dom";
 
 const LOOP_MS = 2400;
 
 function path(ctx: Ctx, bag: Bag, o: Pt, e: Pt, pill?: string) {
   const g = bag.add(sv(ctx.svg, "g", {}));
-  halo(g, "line", { x1: o[0], y1: o[1], x2: e[0], y2: e[1], stroke: "var(--g)", "stroke-dasharray": "8 6", "stroke-linecap": "round" }, 3);
-  halo(g, "circle", { cx: o[0], cy: o[1], r: 7, stroke: "var(--g)", fill: "none" }, 2.5);
-  sv(g, "circle", { cx: e[0], cy: e[1], r: 6.5, fill: "var(--halo)" });
+  sv(g, "line", { x1: o[0], y1: o[1], x2: e[0], y2: e[1], stroke: "var(--g)", "stroke-width": 2.5, "stroke-dasharray": "8 6", "stroke-linecap": "round" });
+  sv(g, "circle", { cx: o[0], cy: o[1], r: 7, stroke: "var(--g)", "stroke-width": 2, fill: "none" });
   sv(g, "circle", { cx: e[0], cy: e[1], r: 5, fill: "var(--g)" });
   if (pill) {
     const p = bag.add(el(ctx.ov, "pill", "", esc(pill)));
@@ -28,8 +27,8 @@ export function mountGhostLine(ctx: Ctx, g: GuideMsg, local: Local, animated = t
   const group = path(ctx, bag, o, e, g.extra.pill);
   let raf = 0;
   if (animated) {
-    const grow = bag.add(sv(ctx.svg, "line", { x1: o[0], y1: o[1], x2: o[0], y2: o[1], stroke: "var(--g)", "stroke-width": 4, "stroke-linecap": "round" }));
-    const ring = bag.add(sv(ctx.svg, "circle", { cx: o[0], cy: o[1], r: 0, fill: "none", stroke: "var(--g)", "stroke-width": 2.5 }));
+    const grow = bag.add(sv(ctx.svg, "line", { x1: o[0], y1: o[1], x2: o[0], y2: o[1], stroke: "var(--g)", "stroke-width": 3, "stroke-linecap": "round" }));
+    const ring = bag.add(sv(ctx.svg, "circle", { cx: o[0], cy: o[1], r: 0, fill: "none", stroke: "var(--g)", "stroke-width": 2 }));
     const t0 = performance.now();
     const ease = (u: number) => (u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2);
     const frame = (now: number) => {
@@ -54,7 +53,7 @@ export function mountGhostLine(ctx: Ctx, g: GuideMsg, local: Local, animated = t
     prefer: ["right", "left", "below", "above"],     // the card sits to the side, off the path
     mark(result) {
       cancelAnimationFrame(raf);
-      group.querySelectorAll("line").forEach((l, i) => { if (i % 2) l.style.stroke = result === "ok" ? "var(--ok)" : "var(--warn)"; });
+      group.querySelectorAll("line").forEach(l => { l.style.stroke = result === "ok" ? "var(--ok)" : "var(--warn)"; });
     },
     remove: () => bag.remove(),
   };

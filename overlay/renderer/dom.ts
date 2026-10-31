@@ -49,15 +49,7 @@ export function sv<K extends keyof SVGElementTagNameMap>(parent: Element, tag: K
   return e;
 }
 
-/** Every overlay stroke gets a halo underneath. */
-export function halo<K extends keyof SVGElementTagNameMap>(parent: Element, tag: K, attrs: Record<string, string | number>, w: number) {
-  const g = sv(parent, "g", {});
-  sv(g, tag, { ...attrs, fill: "none", stroke: "var(--halo)", "stroke-width": w + 3, "stroke-dasharray": "none" });
-  const top = sv(g, tag, { fill: "none", ...attrs, "stroke-width": w });
-  return { g, top };
-}
-
-/** 3 px outline with a 4 px gap around the target. */
+/** 2 px outline, clear of the target. */
 export function outline(parent: HTMLElement, b: Rect, cls = ""): HTMLDivElement {
   return el(parent, `outline ${cls}`, `left:${b.x - 4}px;top:${b.y - 4}px;width:${b.w + 8}px;height:${b.h + 8}px`);
 }

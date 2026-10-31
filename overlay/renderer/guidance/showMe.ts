@@ -9,8 +9,8 @@ export function ghostCursor(layer: HTMLElement): SVGSVGElement {
   const c = document.createElementNS(NS, "svg");
   c.id = "gcur";
   c.setAttribute("width", "40"); c.setAttribute("height", "40"); c.setAttribute("viewBox", "0 0 40 40");
-  c.innerHTML = `<path d="M2 2 L2 24 L8 18 L12 27 L16 25 L12 17 L20 17 Z" style="fill:var(--g);stroke:var(--halo)" stroke-width="1.8" stroke-linejoin="round"/>` +
-    `<circle class="ring" cx="2" cy="2" r="0" fill="none" style="stroke:var(--g)" stroke-width="2.5"/>`;
+  c.innerHTML = `<path d="M2 2 L2 24 L8 18 L12 27 L16 25 L12 17 L20 17 Z" style="fill:var(--g)"/>` +
+    `<circle class="ring" cx="2" cy="2" r="0" fill="none" style="stroke:var(--g)" stroke-width="2"/>`;
   layer.appendChild(c);
   return c;
 }

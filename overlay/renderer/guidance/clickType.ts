@@ -5,17 +5,18 @@
 import type { GuideMsg, Local } from "../../shared/messages";
 import { Bag, Ctx, Mounted, el, kc, outline, toRect } from "../dom";
 
-// Slim outline mouse (glossary style 11, chosen 30 Oct): 30×44, violet line, dark/light body per scheme,
-// thin halo underneath so it reads on any background, scroll wheel, the two buttons split by a faint line.
+// Slim outline mouse (glossary style 11): a line icon in one solid colour, no body fill, with a scroll wheel and
+// the two buttons split by a thin line. 20 x 30 sits with Fluent's 20-24 px icons, and beside a toolbar button rather
+// than over it. Drawn in a 20 x 30 grid, so the stroke widths in tokens.css are real pixels.
+const MOUSE_W = 20, MOUSE_H = 30;
 const MOUSE = (button: string, count: number) => {
   const press = `class="mbtn on p${Math.min(count, 2)}"`;
-  return `<svg class="mouse" width="30" height="44" viewBox="0 0 30 44" aria-hidden="true">
-    <rect x="2" y="2" width="26" height="40" rx="13" class="mhalo"/>
-    <rect x="2" y="2" width="26" height="40" rx="13" class="mbody"/>
-    <path ${button === "left" ? press : `class="mbtn"`} d="M15 3.5 V19 H3.5 V15 A11.5 11.5 0 0 1 15 3.5Z"/>
-    <path ${button === "right" ? press : `class="mbtn"`} d="M15 3.5 V19 H26.5 V15 A11.5 11.5 0 0 0 15 3.5Z"/>
-    <path d="M15 3 V19 M3 19 H27" class="msplit"/>
-    <rect x="13.5" y="8" width="3" height="6" rx="1.5" class="mwheel"/></svg>`;
+  return `<svg class="mouse" width="${MOUSE_W}" height="${MOUSE_H}" viewBox="0 0 ${MOUSE_W} ${MOUSE_H}" aria-hidden="true">
+    <path ${button === "left" ? press : `class="mbtn"`} d="M10 1 V13 H1 V10 A9 9 0 0 1 10 1Z"/>
+    <path ${button === "right" ? press : `class="mbtn"`} d="M10 1 V13 H19 V10 A9 9 0 0 0 10 1Z"/>
+    <path d="M10 1 V13 M1 13 H19" class="msplit"/>
+    <rect x="1" y="1" width="18" height="28" rx="9" class="mbody"/>
+    <rect x="9" y="5" width="2" height="4" rx="1" class="mwheel"/></svg>`;
 };
 
 export function mountClickType(ctx: Ctx, g: GuideMsg, local: Local, withOutline = true): Mounted {
@@ -24,9 +25,9 @@ export function mountClickType(ctx: Ctx, g: GuideMsg, local: Local, withOutline 
   const ct = g.extra.click_type ?? { button: "left", count: 1, modifiers: [], label: "Click" };
   const ol = withOutline ? bag.add(outline(ctx.ov, r)) : undefined;
   const mods = ct.modifiers.map(m => kc(m, "sm").replace('class="kc', `class="kc kpress p${Math.min(ct.count, 2)}`)).join(" ");
-  const right = r.x + r.w + 16 + 30 + (mods ? 70 : 0) < ctx.W;
-  const x = right ? r.x + r.w + 12 : r.x - 12 - 30 - (mods ? 62 : 0);
-  bag.add(el(ctx.ov, "clicktype", `left:${x}px;top:${r.y + r.h / 2 - 22}px`,
+  const right = r.x + r.w + 16 + MOUSE_W + (mods ? 70 : 0) < ctx.W;
+  const x = right ? r.x + r.w + 10 : r.x - 10 - MOUSE_W - (mods ? 62 : 0);
+  bag.add(el(ctx.ov, "clicktype", `left:${x}px;top:${r.y + r.h / 2 - MOUSE_H / 2}px`,
     MOUSE(ct.button, ct.count) + (mods ? `<span class="mods">${mods}</span>` : "")));
   return {
     anchor: r,
