@@ -149,6 +149,7 @@ class _Memo:
     how: str = ""
     conf: str = ""
     not_it: list = field(default_factory=list)      # what tooltips said about the boxes this target has been given
+    on_nothing: bool = False     # a box it gave showed no tooltip: it wasn't on a button
     patch: object = None         # the pixels around the answer, or the whole window for a miss
     patch_at: tuple = (0, 0, 0, 0)
 
@@ -181,6 +182,13 @@ class SparkVision:
         memo.t = 0.0
         if shown not in memo.not_it:
             memo.not_it.append(shown)
+
+    def empty(self, n: int, label: str) -> None:
+        """No tooltip came at that box, so it isn't on a button. Look again, from the same allowance: this can't go on for ever."""
+        memo = self._memo.setdefault((n, label), _Memo())
+        memo.box, memo.line, memo.patch = None, None, None
+        memo.t = 0.0
+        memo.on_nothing = True
 
     def spent(self, n: int, label: str) -> bool:
         """Has this target had all its calls?"""
@@ -256,6 +264,8 @@ class SparkVision:
             text = PROMPT.format(**fields)
         if memo.not_it:
             text += "\nNot these, checked by their tooltips: " + ", ".join(memo.not_it) + "."
+        if memo.on_nothing:
+            text += "\nYour last box wasn't on a button: nothing showed a tooltip there. The control is close by. Box the icon itself, tightly."
         memo.calls += 1
         memo.t = self.clock()
         memo.box, memo.line, memo.route, memo.conf = None, None, None, ""

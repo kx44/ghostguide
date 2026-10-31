@@ -8,9 +8,14 @@ The name rules are pure, so they're tested off Windows.
 from __future__ import annotations
 
 import re
-from typing import Optional
+import threading
+import time
+from typing import Callable, Optional
 
 TOOLTIP_CLASSES = ("swBalloonTip", "tooltips_class32")
+NO_TIP_S = 3.0        # a real button has shown its tooltip by now (it takes about a second)
+WATCH_EVERY_S = 0.4
+SAME_SPOT_PX = 2
 
 
 def clean(text: str) -> str:
@@ -31,6 +36,74 @@ def same_control(want: str, shown: str) -> bool:
 
 def first_line(texts: list[Optional[str]]) -> Optional[str]:
     return next((clean(t) for t in texts if t and clean(t)), None)
+
+
+class Watch:
+    """Where the mouse rests and what shows there. The finder looks only every few seconds and a tooltip can come and go
+    between looks, so this samples, and what it saw holds until the mouse moves. It's also how a box on empty space gives
+    itself away: the mouse has rested on it and nothing has shown."""
+
+    def __init__(self, read_tip: Callable[[], Optional[tuple[str, tuple[int, int]]]], cursor: Callable[[], tuple[int, int]],
+                 in_front: Callable[[], bool], clock: Callable[[], float] = time.monotonic):
+        self.read_tip, self.cursor, self.in_front, self.clock = read_tip, cursor, in_front, clock
+        self.spot: Optional[tuple[int, int]] = None
+        self.since: Optional[float] = None      # None: the app wasn't in front, so its tooltips couldn't show
+        self.seen: Optional[str] = None
+
+    def note(self) -> None:
+        at = self.cursor()
+        if self.spot is None or max(abs(at[0] - self.spot[0]), abs(at[1] - self.spot[1])) > SAME_SPOT_PX:
+            self.spot, self.since, self.seen = at, self.clock(), None
+        if not self.in_front():
+            self.since = None
+            return
+        if self.since is None:
+            self.since = self.clock()
+        got = self.read_tip()
+        if got:
+            self.seen = got[0]
+
+    def tip(self) -> Optional[tuple[str, tuple[int, int]]]:
+        """What the tooltip says, or said, at the spot the mouse is on."""
+        return (self.seen, self.spot) if self.seen and self.spot else None
+
+    def rested(self) -> Optional[tuple[int, int]]:
+        """The spot, once the mouse has stayed there long enough for a tooltip and none has shown."""
+        if self.spot is None or self.since is None or self.seen or self.clock() - self.since < NO_TIP_S:
+            return None
+        return self.spot
+
+    def start(self) -> "Watch":
+        def run():
+            while True:
+                try:
+                    self.note()
+                except Exception:      # windows come and go; the next look will do
+                    pass
+                time.sleep(WATCH_EVERY_S)
+        threading.Thread(target=run, daemon=True, name="tooltip-watch").start()
+        return self
+
+
+def watch(window: str) -> Watch:
+    """A running Watch on that app's window."""
+    import ctypes
+    from ctypes import wintypes
+
+    from engine.live import windows
+
+    u32 = ctypes.windll.user32
+
+    def cursor():
+        at = wintypes.POINT()
+        u32.GetCursorPos(ctypes.byref(at))
+        return at.x, at.y
+
+    def in_front():
+        w = windows.foreground()
+        return bool(w and window.casefold() in w.title.casefold())
+
+    return Watch(lambda: read(window), cursor, in_front).start()
 
 
 def read(window: str) -> Optional[tuple[str, tuple[int, int]]]:

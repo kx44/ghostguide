@@ -29,6 +29,7 @@ from engine.schema.tutorial import Step
 NOTHING_TO_CLICK = ("shortcut", "wait", "look")
 DROP_ARROW_PX = 9     # the small dropdown arrow, this far past a ribbon button's icon
 TIP_MARGIN_PX = 24    # the mouse this close to a box counts as on it: model boxes can be loose
+TOOLBAR_SHARE = 0.11  # the top of the window down to here is toolbars and ribbon icons, where every button has a tooltip
 
 
 class GenericUIA:
@@ -66,7 +67,7 @@ class GenericUIA:
 class Resolver:
     def __init__(self, uia_stage, store=None, find_window: Optional[Callable[[str], Optional[tuple]]] = None,
                  vision=None, wonder=None, hops: Optional[menu.Hops] = None, looks=None, look_of=None, arrow=None,
-                 tip=None):
+                 tip=None, rested=None):
         self.uia = uia_stage                 # VSCodeLocator, SolidWorksUIA or GenericUIA
         self.store = store                   # appmap.store.AppMapStore
         self.find_window = find_window       # title part → window rect, for remembered boxes
@@ -77,6 +78,7 @@ class Resolver:
         self.look_of = look_of               # box → its look, saved when learning
         self.arrow = arrow                   # box → the dropdown arrow beside it, to the pixel
         self.tip = tip                       # () → (what the tooltip showing says, where the mouse is), or None
+        self.rested = rested                 # () → where the mouse has rested with no tooltip showing, or None
         self._tip_ok: set[tuple] = set()     # boxes a tooltip has already vouched for
         self._tip_note = ""
         self.window = getattr(uia_stage, "window", "")
@@ -154,7 +156,7 @@ class Resolver:
             return hit, None
         seen_route = None
         if self.vision is not None:
-            b = self._tip_check(step, step.target.label, self.vision.find(step))
+            b = self._tip_check(step, step.target.label, self.vision.find(step), sight=True)
             ln = getattr(self.vision, "last_line", None)
             if b is not None or ln is not None:
                 self.last_how, self.last_stage = self.vision.last_how, "vision"
@@ -271,10 +273,11 @@ class Resolver:
         self.last_how, self.last_stage = f"hop {i + 1} of {len(path)}, {label}: {why}", stage if box is not None or stage == "wonder" else "none"
         return box, None
 
-    def _tip_check(self, step: Step, label: str, box: Optional[Box]) -> Optional[Box]:
+    def _tip_check(self, step: Step, label: str, box: Optional[Box], sight: bool = False) -> Optional[Box]:
         """The mouse is on a box found by sight or memory and the app's tooltip is up: it says what's really there. Right,
         and the box is remembered at once, because a name is better proof than the step later checking done. Wrong, and
-        the box goes, and sight looks again knowing that spot isn't it."""
+        the box goes, and sight looks again knowing that spot isn't it. No tooltip at all, and a box found by sight may be
+        on empty space."""
         if box is None or self.tip is None:
             return box
         try:
@@ -282,7 +285,7 @@ class Resolver:
         except Exception:
             return box
         if not seen:
-            return box
+            return self._nothing_there(step, label, box) if sight else box
         name, (mx, my) = seen
         if not (box.x - TIP_MARGIN_PX <= mx <= box.x + box.w + TIP_MARGIN_PX and box.y - TIP_MARGIN_PX <= my <= box.y + box.h + TIP_MARGIN_PX):
             return box
@@ -299,6 +302,23 @@ class Resolver:
         if reject is not None:
             reject(step.n, label, name)
         self._tip_note = f"; the tooltip there says {name}, not {label}"
+        return None
+
+    def _nothing_there(self, step: Step, label: str, box: Box) -> Optional[Box]:
+        """The mouse has rested in the box and nothing has shown. Among the toolbars every button has a tooltip, so this
+        box is off its control: sight looks again, from its own allowance. When that's spent the card's route or shortcut
+        takes over, which beats an outline pointing at nothing. Elsewhere, no tooltip proves nothing."""
+        spot = self.rested() if self.rested else None
+        empty = getattr(self.vision, "empty", None)
+        if spot is None or empty is None or step.target.kind != "button" or not self.find_window:
+            return box
+        if not (box.x <= spot[0] <= box.x + box.w and box.y <= spot[1] <= box.y + box.h):
+            return box
+        rect = self.find_window(self.window)
+        if rect is None or box.y + box.h / 2 > rect[1] + rect[3] * TOOLBAR_SHARE or (label, box.x, box.y, box.w, box.h) in self._tip_ok:
+            return box
+        empty(step.n, label)
+        self._tip_note = f"; no tooltip at that box, so no {label} there"
         return None
 
     def _remembered(self, label: str) -> Optional[Box]:

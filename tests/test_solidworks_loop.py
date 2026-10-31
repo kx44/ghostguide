@@ -370,6 +370,110 @@ def test_a_tooltip_elsewhere_or_none_says_nothing_about_the_box():
     assert r.locate(_exit_sketch())[0] is not None
 
 
+def _new_button(y=20):
+    from engine.schema.messages import Box
+
+    class Sees(VisionStub):
+        told = []
+
+        def find(self, step, label=None, route=None, hop=0, near=None):
+            return Box(x=10, y=y, w=20, h=20)
+
+        def empty(self, n, label):
+            self.told.append((n, label))
+
+    v = Sees()
+    v.told = []
+    r = Resolver(Stage(), None, find_window=lambda w: (0, 0, 1000, 1000), vision=v, tip=lambda: None, rested=lambda: (15, y + 5))
+    return r, v, MUG.step(1)
+
+
+def test_a_box_on_empty_space_gives_itself_away():
+    """The New button's outline sat under the icon, and the click there did nothing."""
+    r, v, step = _new_button()
+    assert r.locate(step)[0] is None and v.told == [(1, "New")] and "no tooltip" in r.last_how
+
+
+def test_no_tooltip_says_nothing_until_the_mouse_has_rested_in_the_box():
+    r, v, step = _new_button()
+    r.rested = lambda: None
+    assert r.locate(step)[0] is not None
+    r.rested = lambda: (500, 500)
+    assert r.locate(step)[0] is not None and not v.told
+
+
+def test_no_tooltip_proves_nothing_below_the_toolbars_or_away_from_a_button():
+    r, v, step = _new_button(y=400)
+    assert r.locate(step)[0] is not None and not v.told
+    r, v, step = _new_button()
+    step = step.model_copy(update={"target": step.target.model_copy(update={"kind": "canvas"})})
+    assert r.locate(step)[0] is not None and not v.told
+
+
+def test_a_box_a_tooltip_vouched_for_isnt_doubted_later():
+    r, v, step = _new_button()
+    r._tip_ok.add(("New", 10, 20, 20, 20))
+    assert r.locate(step)[0] is not None and not v.told
+
+
+def test_memory_isnt_doubted_by_a_missing_tooltip():
+    r, v, step = _new_button()
+    assert r._tip_check(step, "New", step_box()) is not None and not v.told
+
+
+def step_box():
+    from engine.schema.messages import Box
+    return Box(x=10, y=20, w=20, h=20)
+
+
+def test_empty_looks_again_from_the_same_allowance_and_says_why():
+    c = FakeClient(NotFound(reason="no"))
+    v = SparkVision("SOLIDWORKS", client=c, grab=lambda: (blank(), (0, 0), 1.0))
+    step = MUG.step(1)
+    v.find(step)
+    calls = v._memo[(1, "New")].calls
+    v.empty(1, "New")
+    memo = v._memo[(1, "New")]
+    assert memo.calls == calls and memo.box is None and memo.on_nothing
+
+
+def test_the_watch_remembers_a_tooltip_until_the_mouse_moves():
+    from engine.live.locate.tooltip import Watch
+    now, at, tip, front = [0.0], [(5, 5)], [("New", (5, 5))], [True]
+    w = Watch(lambda: tip[0], lambda: at[0], lambda: front[0], clock=lambda: now[0])
+    w.note()
+    assert w.tip() == ("New", (5, 5)) and w.rested() is None
+    tip[0] = None                       # it times out, and the mouse hasn't moved
+    now[0] = 9.0
+    w.note()
+    assert w.tip() == ("New", (5, 5)) and w.rested() is None
+    at[0] = (50, 50)                    # moved: nothing known here yet
+    w.note()
+    assert w.tip() is None and w.rested() is None
+    now[0] = 11.0
+    w.note()
+    assert w.rested() is None           # not long enough for a tooltip to come
+    now[0] = 12.5
+    w.note()
+    assert w.rested() == (50, 50)
+
+
+def test_the_watch_doesnt_count_time_with_the_app_behind():
+    from engine.live.locate.tooltip import Watch
+    now, front = [0.0], [False]
+    w = Watch(lambda: None, lambda: (5, 5), lambda: front[0], clock=lambda: now[0])
+    w.note()
+    now[0] = 30.0
+    w.note()
+    assert w.rested() is None           # a tooltip couldn't have shown
+    front[0] = True
+    w.note()
+    assert w.rested() is None
+    now[0] = 34.0
+    w.note()
+    assert w.rested() == (5, 5)
+
+
 def test_sight_gets_another_try_and_is_told_what_isnt_it():
     v = SparkVision("SOLIDWORKS", client=FakeClient(NotFound(reason="no")), grab=lambda: (blank(), (0, 0), 1.0))
     step = _exit_sketch()
