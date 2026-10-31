@@ -129,17 +129,28 @@ class Player:
                     guide.extra.update(path=located["route"]["path"], path_done=0)
             if "path_done" in located:
                 guide.extra["path_done"] = located["path_done"]
-            if guide.card is not None and self.executor is not None and can_do(step, box) and not located.get("route"):
+            if located.get("path"):
+                guide.extra["path"] = located["path"]
+                if guide.card is not None:
+                    guide.card.detail = "Route: " + " › ".join(located["path"])
+            if located.get("click_at"):
+                guide.extra["click_at"] = list(located["click_at"])
+            if guide.card is not None and self.executor is not None and can_do(step, self._act_box(step.n, box)):
                 at = 1 if "show_me" in guide.card.actions else 0
                 guide.card.actions.insert(at, "do_it")
             if guide.card is not None and box is None and step.action not in NO_PIN_NEEDED and not located.get("route"):
                 first = "start point" if step.action in LINE_ACTIONS else "top-left corner"
                 second = "end point" if step.action in LINE_ACTIONS else "bottom-right corner"
-                found = ("Not pinned yet: " if self.locator is None else
-                         f"Not found ({self.locator.last_how}). " if step.n in self._located else "Looking for it… ")
-                guide.card.dev_hint = (f"{found}Hover the {first} of {step.target.label} and press "
-                                       f"Ctrl+Alt+P, then the {second} and Ctrl+Alt+P again." if self._corner is None
-                                       else f"Now hover the {second} and press Ctrl+Alt+P.")
+                if self.locator is None:
+                    guide.card.dev_hint = (f"Not pinned yet: Hover the {first} of {step.target.label} and press "
+                                           f"Ctrl+Alt+P, then the {second} and Ctrl+Alt+P again." if self._corner is None
+                                           else f"Now hover the {second} and press Ctrl+Alt+P.")
+                elif self._corner is not None:
+                    guide.card.dev_hint = f"Now hover the {second} and press Ctrl+Alt+P."
+                elif step.n in self._located:
+                    guide.card.dev_hint = f"Not found ({self.locator.last_how}). You can still do it by hand; Next moves on."
+                else:
+                    guide.card.dev_hint = "Looking for it…"
         if guide is not None and guide.box is not None:
             seen = self._drawn.setdefault(guide.step.n, [])
             if guide.box not in seen:
@@ -173,6 +184,10 @@ class Player:
         return out
 
     # ---------- Do it for me ----------
+    def _act_box(self, n: int, box: Optional[m.Box]) -> Optional[m.Box]:
+        """The box Do it for me may click: not the outline on a route's hop, which isn't the control."""
+        return None if self._located_extra.get(n, {}).get("route") else box
+
     def _do_it(self) -> list[m._Msg]:
         s = self.session
         if self.executor is None:
@@ -180,11 +195,11 @@ class Player:
         if s.finished or s.hidden or s.step is None:
             return []
         step = s.step
-        box, _ = self.target(step.n)
+        box = self._act_box(step.n, self.target(step.n)[0])
         if not can_do(step, box):
             return [m.Toast(text="There's nothing sure to act on for this step, so it's yours.", kind="warn")]
         stage = getattr(self.locator, "last_stage", "")
-        if needs_confirm(step, stage) and step.n not in self.pins.steps and self._armed != step.n:
+        if needs_confirm(step, stage, box) and step.n not in self.pins.steps and self._armed != step.n:
             self._armed = step.n
             return [m.Toast(text="Found by sight, not by name. Check the outline, then press Do it for me again.", ms=5000)]
         self._armed = None

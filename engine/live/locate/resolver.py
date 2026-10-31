@@ -26,6 +26,9 @@ from engine.schema.messages import Box, Line
 from engine.schema.tutorial import Step
 
 
+DROP_ARROW_PX = 9     # the small dropdown arrow, this far past a ribbon button's icon
+
+
 class GenericUIA:
     """UIA stage for apps without a rule pack: the label or one of its app-map aliases, among the control types
     the target's kind allows, in the app's own window."""
@@ -70,6 +73,9 @@ class Resolver:
         self.looks = looks                   # (box, remembered look) → same pixels? None = don't compare
         self.look_of = look_of               # box → its look, saved when learning
         self.window = getattr(uia_stage, "window", "")
+        self._hop_box: dict[int, Optional[Box]] = {}  # the current chip's control, as found (no dropdown arrow)
+        self._pending_look: dict[str, list[int]] = {}  # its pixels as first found, before a click changes them
+        self._new_route: dict[int, list[str]] = {}    # a route Wonder gave, replacing the tutorial's
         self.last_how = ""
         self.last_stage = ""
         self.last_conf = ""
@@ -137,6 +143,9 @@ class Resolver:
             if seen_route and seen_route.get("confidence") != "high":
                 seen_route = None
         r = menu.route(step, self.store)
+        tab = menu.tab_route(step) if getattr(self.uia, "follows_hops", False) else None
+        if tab:                     # it's on a closed ribbon tab: closer than any menu, which may be hidden anyway
+            r = {**(r or {}), "path": tab}
         if r is not None and not r.get("path") and seen_route:   # a shortcut alone: the route is still worth showing
             r = {**seen_route, **r}
         elif r is None and self.wonder is None:
@@ -163,26 +172,73 @@ class Resolver:
         path = r.get("path") or []
         if len(path) < 2 or self.vision is None:
             return None
-        return self.vision.find(step, menu.hop_label(path[0]))
+        return self.vision.find(step, menu.hop_label(path[0]), route=path)
 
     def _locate_hops(self, step: Step) -> tuple[Optional[Box], Optional[Line]]:
-        path = step.target.menu_path
+        path = self._new_route.get(step.n) or step.target.menu_path
+        before = self.hops._at.get(step.n, 0)
         i = self.hops.current(step.n, path)
+        if i > before:                   # that chip was clicked and the route moved on: its box was right
+            self._learn_hop(menu.hop_label(path[before]), self._hop_box.pop(step.n, None))
         label = menu.hop_label(path[i])
         box = self.uia.locate(step, label)[0]
         self.last_extra = {"path_done": i}
+        if step.n in self._new_route:
+            self.last_extra["path"] = path
         why = self.uia.last_how
         stage = "uia"
+        if box is None:
+            box = self._remembered(label)
+            if box is not None:
+                why, stage = "remembered from a checked run", "appmap"
         if box is None and self.vision is not None:
-            box = self.vision.find(step, label)
+            box = self.vision.find(step, label, route=path, hop=i)
             why, stage = self.vision.last_how, "vision"
             self.last_conf = getattr(self.vision, "last_conf", "")
-        if box is None and i > 0:
-            self.hops.back_to_start(step.n)
-            self.last_extra = {"path_done": 0}
+        self._hop_box[step.n] = box
+        if box is not None and stage == "vision" and self.look_of is not None and label not in self._pending_look:
+            look = self.look_of(box)
+            if look is not None:
+                self._pending_look[label] = look
+        if box is not None and label != path[i]:
+            # A chip with ▾ means the small arrow beside the button: the outline takes both, the click the arrow.
+            self.last_extra["click_at"] = (box.x + box.w + DROP_ARROW_PX, box.y + box.h // 2)
+            box = Box(x=box.x, y=box.y, w=box.w + 2 * DROP_ARROW_PX, h=box.h)
+        if box is None and i == 0 and self.wonder is not None and not step.target.shortcut and step.n not in self._new_route:
+            # The tutorial's route isn't on this version's screen: Wonder may know where it went.
+            b, r = self.wonder.ask(step)
+            if b is not None:
+                self.last_how, self.last_stage = self.wonder.last_how, "wonder"
+                return b, None
+            if r and r.get("path"):
+                self._new_route[step.n] = r["path"]
+                self.last_extra["path"] = r["path"]
+                why, stage = self.wonder.last_how, "wonder"
+        spent = getattr(self.vision, "spent", None)
+        if box is None and i > 0 and (spent is None or spent(step.n, label)):
+            self.hops.back_to_start(step.n)       # it had its tries: the menu must have closed again
+            self.last_extra["path_done"] = 0
         self.hops.found(step.n, box)
-        self.last_how, self.last_stage = f"hop {i + 1} of {len(path)}, {label}: {why}", stage if box is not None else "none"
+        self.last_how, self.last_stage = f"hop {i + 1} of {len(path)}, {label}: {why}", stage if box is not None or stage == "wonder" else "none"
         return box, None
+
+    def _remembered(self, label: str) -> Optional[Box]:
+        """A route's hop where it was last time, if it still looks the same. Nothing remembered without a look."""
+        c = self.store.get(label) if self.store is not None else None
+        if c is None or c.seen is None or self.looks is None or not self.find_window:
+            return None
+        rect = self.find_window(c.seen.window)
+        if rect is None:
+            return None
+        box = appmap_hit.place(c.seen.rel_box, rect)
+        return box if self.looks(box, c.seen.look) else None
+
+    def _learn_hop(self, label: str, box: Optional[Box]) -> None:
+        if box is None or self.store is None or self.find_window is None or self.look_of is None:
+            return
+        rect = self.find_window(self.window)
+        if rect is not None:
+            self.store.learn(label, self.window, (box.x, box.y, box.w, box.h), rect, self._pending_look.pop(label, None))
 
     def learn(self, step: Step, box: Box) -> bool:
         """After the step checked done: remember a stable control's box, relative to its window."""

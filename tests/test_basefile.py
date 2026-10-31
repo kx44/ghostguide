@@ -56,10 +56,10 @@ def test_gold_validates(path):
 def test_gold_step_counts_and_verify():
     vs = parse_file(ROOT / "tutorials/youtube-clone-vscode.md")
     mug = parse_file(ROOT / "tutorials/mug-solidworks.md")
-    assert len(vs.steps) == 23 and len(mug.steps) == 43
+    assert len(vs.steps) == 23 and len(mug.steps) == 45
     assert vs.meta.gold and mug.meta.gold
     assert all(s.verify is not None for s in vs.steps)     # phase 3: every step has a hint
-    assert sum(s.verify is not None for s in mug.steps) == 10
+    assert sum(s.verify is not None for s in mug.steps) == 18
     s14 = vs.step(14).verify.uia_checks()[0]
     assert (s14.name_contains, s14.type, s14.selected) == ("index.html", "TabItem", True)
     assert [f.path for f in vs.step(23).verify.file_checks()] == ["styles.css"]

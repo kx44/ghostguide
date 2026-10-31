@@ -46,6 +46,12 @@ def route(step: Step, store=None) -> Optional[dict]:
     return out
 
 
+def tab_route(step: Step) -> Optional[list[str]]:
+    """A ribbon control on a named tab ("Features tab, CommandManager") that isn't showing: that tab, then it."""
+    m = re.match(r"\s*([\w ]+?) tab\b", step.target.where or "", re.I)
+    return [m.group(1).strip(), step.target.label] if m else None
+
+
 def describe(r: dict) -> str:
     bits = []
     if r.get("path"):

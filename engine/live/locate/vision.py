@@ -14,6 +14,7 @@ that part of the window at higher resolution instead of the whole window scaled 
 """
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass
 from typing import Callable, Optional
@@ -25,7 +26,7 @@ from engine.schema.tutorial import Step
 
 # Spark's reasoning counts toward max_tokens, so leave room beyond the tool call.
 MAX_TOKENS = 1024
-EFFORT = "low"
+EFFORT = config.env("FINDER_EFFORT", "low")
 MAX_CALLS = 3            # per target, per run of a step
 MIN_GAP_S = 3.0          # between calls for one target
 SAME_SHARE = 0.35        # the patch around an answer may change this much (a hover highlight) and still stand
@@ -42,8 +43,9 @@ PROMPT = ("This is a screenshot of {app}, {what}, {w} pixels wide and {h} pixels
 ZOOM = 2                 # the second look: this much larger…
 ZOOM_PAD_X, ZOOM_PAD_Y = 240, 120      # …around the first answer (window px)
 PROMPT_ZOOM = ("This is an enlarged part of a screenshot of {app}, {w} pixels wide and {h} pixels tall. Call point_at "
-               "with a box in these pixels, tight around the control labelled \"{label}\" ({kind}): its icon and text "
-               "together, nothing else. Read the text labels. If it isn't in this picture, call not_found.")
+               "with a box in these pixels, tight around this control: {label} ({kind}), its icon and text together, nothing "
+               "else. Read the text labels; if it's a small icon with no text, go by the description: {where}. If it "
+               "isn't in this picture, call not_found.")
 PROMPT_LINE = ("This is a screenshot of {app}, {what}, {w} pixels wide and {h} pixels tall. The user has to draw "
                "this line with the mouse in the graphics area. Call draw_line with its start and end in screenshot "
                "pixels. The sketch origin is where the red arrows meet.\n"
@@ -53,11 +55,17 @@ PROMPT_PICK = ("This is a screenshot of {app}, {what}, {w} pixels wide and {h} p
                "centred on it), or not_found if it isn't there.\n"
                "Step: {title}\nGeometry: {label} ({kind})\nWhere: {where}")
 
+PROMPT_HOP = ("This is a screenshot of {app}, {what}, {w} pixels wide and {h} pixels tall. The user is following this "
+              "route: {route}. Call point_at with a box tight around the next thing to click: \"{label}\". It may be a "
+              "ribbon tab name, an item in an open dropdown or menu, or a small icon with no text on a toolbar (use what "
+              "you know of the app's icons). If it isn't visible, call not_found.\nWhere the tutorial says it is: {where}")
+
 # Regions in DIPs from the window's edges (SolidWorks' layout; the frame scales with the display, not the window).
 RIBBON_H = 125
 PANEL_TOP, PANEL_W = 85, 300
 CORNER_W, CORNER_H = 0.45, 240
-HEADSUP_H = 50
+HEADSUP_H = 70
+TAB_TOP, TAB_H = 115, 19     # the row of ribbon tab names: thin, and Spark's y is off by more than its height
 
 
 def enabled() -> bool:
@@ -162,7 +170,14 @@ class SparkVision:
         for k in [k for k in self._memo if k[0] == n]:
             del self._memo[k]
 
-    def find(self, step: Step, label: Optional[str] = None) -> Optional[Box]:
+    def spent(self, n: int, label: str) -> bool:
+        """Has this target had all its calls?"""
+        memo = self._memo.get((n, label))
+        return memo is not None and memo.calls >= self.max_calls
+
+    def find(self, step: Step, label: Optional[str] = None, route: Optional[list[str]] = None,
+             hop: int = 0) -> Optional[Box]:
+        """`route` + `hop`: looking for that hop of a route, rather than for the step's own control."""
         self.last_line, self.last_route, self.last_conf = None, None, ""
         if self.grab is None:
             self.last_how = "vision: no screenshot"
@@ -176,7 +191,7 @@ class SparkVision:
         memo = self._memo.setdefault(key, _Memo())
         if self._still_good(memo, img, origin) or memo.calls >= self.max_calls or self.clock() - memo.t < MIN_GAP_S:
             return self._answer(memo)
-        self._ask(step, label or step.target.label, img, origin, s, memo)
+        self._ask(step, label or step.target.label, img, origin, s, memo, route, hop)
         return self._answer(memo)
 
     def _answer(self, memo: _Memo) -> Optional[Box]:
@@ -187,23 +202,34 @@ class SparkVision:
         from engine.live.capture import changed, changed_share, crop
         if memo.patch is None:
             return False
-        if memo.box is None and memo.line is None:     # a miss: stands until the window changes
+        if memo.box is None and memo.line is None:     # a miss gets more tries (Spark's answers vary on small
+            if memo.calls < self.max_calls:            # icons), then stands until the window changes
+                return False
             return memo.patch.size == img.size and not changed(memo.patch, img)
         now = crop(img, memo.patch_at, origin, PAD_PX)
         return now.size == memo.patch.size and changed_share(memo.patch, now) <= SAME_SHARE
 
-    def _ask(self, step: Step, label: str, img, origin, s: float, memo: _Memo) -> None:
+    def _ask(self, step: Step, label: str, img, origin, s: float, memo: _Memo, route=None, hop: int = 0) -> None:
         from engine.live.capture import crop
         from engine.models.client import ModelClient, image_part, text_part
 
         t = step.target
-        region = region_for(step) if self.regions else "window"
+        # A route's last hop is an item in a menu, which can open anywhere; the ones before it are still in the ribbon.
+        last_hop = bool(route) and hop == len(route) - 1
+        region = region_for(step) if self.regions and not last_hop else "window"
         png, scale, (rx, ry), (w, h) = picture(img, region, s)
         at = (origin[0] + rx, origin[1] + ry)
         fields = dict(app=self.app, what=REGION_WORDS[region], w=w, h=h, title=step.title, label=label, kind=t.kind,
                       where=t.where or "-")
         line_step = step.action in ("draw_line", "drag") and t.kind in ("canvas", "edge", "face")
-        if line_step:
+        is_tab = False
+        if route:
+            m = re.match(r"\s*([\w ]+?) tab\b", t.where or "", re.I)
+            is_tab = bool(hop == 0 and m and m.group(1).casefold() == label.casefold())
+            if is_tab:
+                fields["label"] = f"the {label} tab, in the row of ribbon tab names under the ribbon (not a button called {label})"
+            text = PROMPT_HOP.format(route=" › ".join(route), **fields)
+        elif line_step:
             text = PROMPT_LINE.format(how=how_to_draw(step.params), **fields)
         elif step.action == "pick" and t.kind in ("canvas", "edge", "face"):
             text = PROMPT_PICK.format(**fields)
@@ -230,7 +256,9 @@ class SparkVision:
                 memo.box = to_screen(call, scale, at)
                 memo.conf, memo.how = call.confidence, f"vision: Spark pointed ({call.confidence})"
                 if not line_step and t.kind not in ("canvas", "edge", "face"):
-                    self._refine(step, label, img, origin, memo, c)
+                    self._refine(step, fields["label"], img, origin, memo, c)
+                    if memo.box is not None and is_tab and self.regions:
+                        memo.box = Box(x=memo.box.x, y=origin[1] + round(TAB_TOP * s), w=memo.box.w, h=round(TAB_H * s))
                 break
             if isinstance(call, DrawLine):
                 memo.line = line_to_screen(call, scale, at)
@@ -266,7 +294,8 @@ class SparkVision:
         part = img.crop((x0, y0, x1, y1)).resize(((x1 - x0) * ZOOM, (y1 - y0) * ZOOM), Image.LANCZOS)
         buf = io.BytesIO()
         part.convert("RGB").save(buf, format="PNG")
-        text = PROMPT_ZOOM.format(app=self.app, w=part.width, h=part.height, label=label, kind=step.target.kind)
+        text = PROMPT_ZOOM.format(app=self.app, w=part.width, h=part.height, label=label, kind=step.target.kind,
+                                  where=step.target.where or "-")
         try:
             reply = client.chat(model=config.SPARK, max_tokens=MAX_TOKENS, tools=LOCATE_TOOLS, reasoning_effort=EFFORT,
                                 tag=f"find-step-{step.n}-zoom",
@@ -278,3 +307,5 @@ class SparkVision:
                 memo.box = to_screen(call, ZOOM, (origin[0] + x0, origin[1] + y0))
                 memo.conf, memo.how = call.confidence, f"vision: Spark pointed, zoomed in ({call.confidence})"
                 return
+        # Close up, it isn't there: the first look was at something else. A miss, which gets another try.
+        memo.box, memo.conf, memo.how = None, "", "vision: the closer look didn't find it"

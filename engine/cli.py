@@ -179,6 +179,19 @@ def _for_hard_apps(player, tut, locator, args) -> None:
             got = capture.with_popups(w.hwnd) if w else None
             return got[0] if got else None
         player.tracker.grab = grab
+        player.tracker.diff_opts = {"width": 640, "share": 0.0003}     # a highlighted row is a tiny part of the whole app
+        player.tracker.model_w = 1920                                  # sketch lines are thin: keep them visible
+
+        def close_up(step, since, img):
+            """A step on the canvas is judged near where you just clicked, if that shows the whole of it."""
+            recent = getattr(args, "_inputs", None)
+            w = windows.find(window)
+            if step.target.kind not in ("canvas", "edge", "face") or recent is None or w is None:
+                return None
+            got = capture.with_popups(w.hwnd)
+            pts = [(e.x, e.y) for e in recent.clicks(within_s=120) if e.t >= since]
+            return capture.near_clicks(img, pts, got[1]) if got else None
+        player.tracker.close_up = close_up
 
 
 def _app_version(app: str):

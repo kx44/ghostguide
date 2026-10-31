@@ -13,7 +13,8 @@ export function placeCard(cw: number, ch: number, anchor: Rect | undefined, W: n
                           prefer: Side[] = ["below", "above", "right", "left"], reserveBottom = BOTTOM_RESERVE,
                           avoid: Rect[] = []): Placement {
   const maxY = H - reserveBottom;
-  if (!anchor) return { x: Math.round((W - cw) / 2), y: Math.max(MARGIN, maxY - ch - 16), arrow: "" };
+  // Nothing to point at: bottom right, out of the middle of the window, where the work usually is.
+  if (!anchor) return { x: Math.max(MARGIN, W - cw - 24), y: Math.max(MARGIN, maxY - ch - 16), arrow: "" };
   const a = { x: anchor.x - 4, y: anchor.y - 4, w: anchor.w + 8, h: anchor.h + 8 };
   const cx = a.x + a.w / 2, cy = a.y + a.h / 2;
   const clampX = (x: number) => Math.min(Math.max(MARGIN, x), W - cw - MARGIN);

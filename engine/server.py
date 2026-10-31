@@ -58,7 +58,13 @@ async def serve(player: Player, port: int = DEFAULT_PORT, record: Optional[Path]
     rec = Recorder(record)
     loop = asyncio.get_running_loop()
     busy = asyncio.Lock()      # one player call at a time; the slow locator walk itself runs outside it
-    poke = asyncio.Event()     # set after each overlay message: locate the (new) step now, not in a second
+    poke_locate, poke_check = asyncio.Event(), asyncio.Event()
+
+    class poke:                # set after each overlay message: locate and check the (new) step now, not in a second
+        @staticmethod
+        def set() -> None:
+            poke_locate.set()
+            poke_check.set()
 
     async def send_all(msgs: list[m._Msg]) -> None:
         for msg in msgs:
@@ -117,58 +123,71 @@ async def serve(player: Player, port: int = DEFAULT_PORT, record: Optional[Path]
             clients.discard(ws)
             log("overlay disconnected")
 
-    async def poll():
-        last = None
-        last_check = None
+    async def round_loop(event: asyncio.Event, one_round) -> None:
         last_error = None
         while True:
             try:
-                await asyncio.wait_for(poke.wait(), POLL_S)
+                await asyncio.wait_for(event.wait(), POLL_S)
             except asyncio.TimeoutError:
                 pass
-            poke.clear()
+            event.clear()
             if not clients:
                 continue
             try:
-                t0 = time.monotonic()
-                if player.start_open:
-                    async with busy:
-                        out = await asyncio.to_thread(player.start_round)
-                    await send_all(out)
-                if player.locator is not None:
-                    found = await asyncio.to_thread(player.locate_current)      # slow; buttons keep working meanwhile
-                    async with busy:
-                        out = await asyncio.to_thread(player.apply_located, found)
-                    how = getattr(player.locator, "last_how", None)
-                    if how != last:
-                        log(f"  locate step {found[0] if found else '-'}: {how} ({time.monotonic() - t0:.1f}s)")
-                        last = how
-                    await send_all(out)
-                if player.tracker is not None:
-                    checked = await asyncio.to_thread(player.check_round)       # rule checks reuse the locator's dump
-                    async with busy:
-                        out = player.apply_checked(checked)
-                    v = player.tracker.cache.get(checked[0]) if checked else None
-                    said = (checked[0], v.result, v.why) if v else None
-                    if said != last_check:
-                        log(f"  check step {said[0]}: {said[1]} ({said[2]})" if said else "  check: -")
-                        last_check = said
-                    if out:
-                        s = player.session
-                        log(f"  ✓ auto → {'finished' if s.finished else f'step {s.current}/{s.of}'}")
-                    await send_all(out)
+                await one_round()
             except Exception as e:     # one bad round must never switch off the locator and the checks for good
                 err = f"{type(e).__name__}: {e}"
                 if err != last_error:
                     log("  round failed, carrying on:\n" + traceback.format_exc())
                     last_error = err
 
+    last_how = None
+
+    async def locate_round() -> None:
+        nonlocal last_how
+        t0 = time.monotonic()
+        if player.start_open:
+            async with busy:
+                out = await asyncio.to_thread(player.start_round)
+            await send_all(out)
+        found = await asyncio.to_thread(player.locate_current)      # slow; buttons keep working meanwhile
+        async with busy:
+            out = await asyncio.to_thread(player.apply_located, found)
+        how = getattr(player.locator, "last_how", None)
+        if how != last_how:
+            log(f"  locate step {found[0] if found else '-'}: {how} ({time.monotonic() - t0:.1f}s)")
+            last_how = how
+        await send_all(out)
+
+    last_check = None
+
+    async def check_round() -> None:
+        nonlocal last_check
+        checked = await asyncio.to_thread(player.check_round)       # rule checks reuse the locator's dump
+        async with busy:
+            out = player.apply_checked(checked)
+        v = player.tracker.cache.get(checked[0]) if checked else None
+        said = (checked[0], v.result, v.why) if v else None
+        if said != last_check:
+            log(f"  check step {said[0]}: {said[1]} ({said[2]})" if said else "  check: -")
+            last_check = said
+        if out:
+            s = player.session
+            log(f"  ✓ auto → {'finished' if s.finished else f'step {s.current}/{s.of}'}")
+        await send_all(out)
+
     async with ws_serve(handler, "127.0.0.1", port, max_size=2 ** 20):
         log(f"engine listening on ws://127.0.0.1:{port} · {player.session.tutorial.meta.title}")
-        poller = asyncio.create_task(poll()) if (player.locator or player.tracker) is not None else None
+        # Apart, so a slow model call in one never holds up the other: the check must see a dialog open the moment
+        # it opens, even while Spark is still looking for the next step's button.
+        tasks = []
+        if player.locator is not None:
+            tasks.append(asyncio.create_task(round_loop(poke_locate, locate_round)))
+        if player.tracker is not None:
+            tasks.append(asyncio.create_task(round_loop(poke_check, check_round)))
         try:
             await asyncio.Future()
         finally:
-            if poller:
-                poller.cancel()
+            for t in tasks:
+                t.cancel()
             rec.close()

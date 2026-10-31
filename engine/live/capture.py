@@ -26,9 +26,9 @@ def thumb(img, width: int = DIFF_W):
     return img.convert("L").resize((width, max(1, round(h * width / w))))
 
 
-def changed_share(a, b, delta: int = CELL_DELTA) -> float:
+def changed_share(a, b, delta: int = CELL_DELTA, width: int = DIFF_W) -> float:
     """Share of thumbnail cells that differ by more than `delta` (0..1). Different sizes = everything changed."""
-    ta, tb = thumb(a), thumb(b)
+    ta, tb = thumb(a, width), thumb(b, width)
     if ta.size != tb.size:
         return 1.0
     pa, pb = ta.tobytes(), tb.tobytes()
@@ -36,16 +36,25 @@ def changed_share(a, b, delta: int = CELL_DELTA) -> float:
     return sum(1 for x, y in zip(pa, pb) if abs(x - y) > delta) / n if n else 0.0
 
 
-def changed(a, b, share: float = CHANGED_SHARE) -> bool:
-    return changed_share(a, b) > share
+def changed(a, b, share: float = CHANGED_SHARE, width: int = DIFF_W) -> bool:
+    return changed_share(a, b, width=width) > share
 
 
-LOOK_SIDE = 8           # a control's remembered look: this many grey cells a side
-LOOK_DELTA = 28         # mean grey levels two looks may differ by and still be the same control
+LOOK_SIDE = 16          # a control's remembered look: this many grey cells a side
+LOOK_DELTA = 14         # mean grey levels two looks may differ by and still be the same control (a hover shade,
+                        # not its neighbour on another ribbon tab: buttons there look alike at a glance)
 
 
 def look_of(img) -> list[int]:
     return list(img.convert("L").resize((LOOK_SIDE, LOOK_SIDE)).tobytes())
+
+
+def near_clicks(img, clicks: list[tuple[int, int]], origin: tuple[int, int], pad: int = 320):
+    """The part of a picture around these screen points: thin sketch lines need a close look. None without clicks."""
+    if not clicks:
+        return None
+    xs, ys = [c[0] - origin[0] for c in clicks], [c[1] - origin[1] for c in clicks]
+    return img.crop((max(0, min(xs) - pad), max(0, min(ys) - pad), min(img.width, max(xs) + pad), min(img.height, max(ys) + pad)))
 
 
 def same_look(a: list[int], b: list[int], delta: int = LOOK_DELTA) -> bool:

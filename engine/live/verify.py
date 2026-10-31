@@ -133,7 +133,7 @@ def lasting(c: UiaCheck) -> bool:
         return False
     if c.type == "Edit" and (c.value_contains or c.value):
         return c.name is None or "." in (c.name or "")      # an editor (named after its file), not a field
-    if c.type == "TabItem":
+    if c.type in ("TabItem", "TreeItem"):      # a tab stays open, a feature stays in the tree
         return True
     return False
 
@@ -295,6 +295,9 @@ class Tracker:
         self._watch: dict[int, _StepWatch] = {}
         self.primed = False
         self.last_snapshot: Optional[Snapshot] = None
+        self.close_up = None                      # (step, since, picture) → the part to show the models, or None
+        self.model_w = 1280                       # the picture's width for the models
+        self.diff_opts: dict = {}                 # capture.changed's width and share, for a picture of the whole app
         self.current_n: Optional[int] = None      # models only ever look at the step showing
         self.hidden = False                       # …and never while hidden (free checks only)
 
@@ -368,7 +371,7 @@ class Tracker:
             w.baseline = img
             return Verdict("not_yet", "diff", why="baseline taken")
         from engine.live.capture import changed, for_model
-        if not changed(w.baseline, img):
+        if not changed(w.baseline, img, **self.diff_opts):
             return Verdict("not_yet", "diff", why="nothing changed yet")
         if self.hidden or not (self.ladder.glimmer or self.ladder.spark):
             return Verdict("unknown", "diff", why="changed; no model to ask")
@@ -379,12 +382,13 @@ class Tracker:
         tick: ask only when you've paused, when the window has changed since the last answer, and not too often."""
         from engine.live.capture import changed
         idle = self.idle_s() if self.idle_s is not None else 1e9
-        unchanged = w.asked is not None and not changed(w.asked, img)
+        unchanged = w.asked is not None and not changed(w.asked, img, **self.diff_opts)
         if (idle < MODEL_IDLE_S or unchanged or now - w.asked_t < MODEL_GAP_S or w.asks >= MODEL_MAX_ASKS):
             return w.answer or Verdict("unknown", "diff", why="waiting to look")
         w.asked, w.asked_t = img, now
         w.asks += 1
-        w.answer = self.ladder.model(step, for_model(img)[0])
+        look = self.close_up(step, w.shown_at, img) if self.close_up is not None else None
+        w.answer = self.ladder.model(step, for_model(img if look is None else look, self.model_w)[0])
         return w.answer
 
     def forget(self, n: int) -> None:

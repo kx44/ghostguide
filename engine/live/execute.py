@@ -21,6 +21,7 @@ DOABLE = {"click", "type", "shortcut", "menu_path"}
 NOT_DOABLE_KINDS = {"canvas", "edge", "face"}
 SURE_STAGES = {"uia"}
 SETTLE_S = 0.15
+HIT_SETTLE_S = 0.1       # the overlay checks the cursor every 30 ms and lets go of the mouse once it's off a card
 
 
 @dataclass
@@ -48,16 +49,16 @@ def can_do(step: Step, box: Optional[Box]) -> bool:
         return False
     if step.action == "shortcut":
         return bool(step.params.get("keys"))
-    if step.action == "menu_path":
-        return box is not None or bool(step.target.shortcut)
+    if step.action == "menu_path":          # a route of several clicks is yours; its shortcut is one key press
+        return bool(step.target.shortcut)
     if step.action == "type":
         return box is not None and _value(step) is not None
-    return box is not None
+    return box is not None or bool(step.target.shortcut)     # no box, but one key press does the same
 
 
-def needs_confirm(step: Step, stage: str) -> bool:
+def needs_confirm(step: Step, stage: str, box: Optional[Box] = None) -> bool:
     """A shortcut needs no box; UIA's box is exact; anything found by sight or memory waits for a second press."""
-    return step.action != "shortcut" and not (step.action == "menu_path" and step.target.shortcut) and stage not in SURE_STAGES
+    return (box is not None and step.action not in ("shortcut", "menu_path") and stage not in SURE_STAGES)
 
 
 def plan(step: Step, box: Optional[Box]) -> list[Op]:
@@ -67,9 +68,7 @@ def plan(step: Step, box: Optional[Box]) -> list[Op]:
     if step.action == "shortcut":
         return [Op("keys", keys=tuple(str(k) for k in p["keys"]))]
     if step.action == "menu_path":
-        if step.target.shortcut:
-            return [Op("keys", keys=tuple(k.strip() for k in step.target.shortcut.split("+")))]
-        return [Op("click", at=box.center)]
+        return [Op("keys", keys=tuple(k.strip() for k in step.target.shortcut.split("+")))]
     if step.action == "type":
         ops = [Op("click", at=box.center)]
         ops.append(Op("keys", keys=("F2",)) if step.target.kind == "tree_item" else Op("keys", keys=("Ctrl", "A")))
@@ -78,6 +77,8 @@ def plan(step: Step, box: Optional[Box]) -> list[Op]:
         if then:
             ops.append(Op("keys", keys=(str(then),)))
         return ops
+    if box is None:
+        return [Op("keys", keys=tuple(k.strip() for k in step.target.shortcut.split("+")))]
     ct = click_type(p) or {}
     return [Op("click", at=box.center, button=ct.get("button", "left"), count=ct.get("count", 1),
                modifiers=tuple(ct.get("modifiers", ())))]
@@ -120,8 +121,12 @@ class Executor:
         if fg is None or _pid(fg.hwnd) != pid:
             return f"Bring {self.app_window} to the front first, so nothing goes to another window."
         for op in ops:
-            if op.kind == "click" and _pid_at(op.at) != pid:
-                return "Something is covering that spot, so nothing was clicked."
+            if op.kind == "click":
+                # From there, not from here: the cursor is on our card, whose overlay takes the mouse until it leaves.
+                ctypes_set_cursor(op.at)
+                time.sleep(HIT_SETTLE_S)
+                if _pid_at(op.at) != pid:
+                    return "Something is covering that spot, so nothing was clicked."
         return None
 
     def run(self, ops: list[Op]) -> Optional[str]:
@@ -149,6 +154,11 @@ class Executor:
         finally:
             u32.SetCursorPos(*back)
         return None
+
+
+def ctypes_set_cursor(at: tuple[int, int]) -> None:
+    import ctypes
+    ctypes.windll.user32.SetCursorPos(*at)
 
 
 def _pid(hwnd: int) -> int:
