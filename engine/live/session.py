@@ -1,5 +1,5 @@
 """The one state machine that owns "where you are" (live step 1, 8a, 8b): next, back, skip, jump,
-hide / resume with catch-up. Overlay, hotkeys and (later) voice all go through here, so they agree.
+hide / resume with catch-up. Overlay and hotkeys both go through here, so they agree.
 
 No screen, no models: the step check is passed in as `checker` (live/verify.py).
 Progress is saved after every change so a restart lands on the step you stopped at.
