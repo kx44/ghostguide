@@ -109,6 +109,7 @@ function setKeyBar(show: boolean) {
 }
 
 function deliver(w: Win, msg: ToOverlay, local: Local = {}) {
+  if (w.win.isDestroyed()) return;
   const r: Routed = { msg, local, primary: w.display.id === screen.getPrimaryDisplay().id,
                       display: { w: w.display.bounds.width, h: w.display.bounds.height } };
   if (w.ready) w.win.webContents.send("ghost:msg", r); else w.queue.push(r);

@@ -24,7 +24,7 @@ export function connectEngine(url: string, onMsg: (m: ToOverlay) => void, onOpen
     ws.on("message", data => {
       try { onMsg(JSON.parse(String(data)) as ToOverlay); } catch (e) { console.error("bad message from engine", e); }
     });
-    ws.on("close", () => { onStatus(false); if (!closed) timer = setTimeout(open, 1000); });
+    ws.on("close", () => { if (closed) return; onStatus(false); timer = setTimeout(open, 1000); });     // on quit the windows are already gone
     ws.on("error", () => { /* close follows; we retry every second */ });
   };
   open();
