@@ -106,11 +106,11 @@ class Rec:
         return self.poll()[i:]
 
 
-def start_engine(restart: bool, tag: str):
+def start_engine(restart: bool, tag: str, tutorial: Path = TUTORIAL, extra: tuple[str, ...] = ()):
     rec = LOGS / f"overlay_check-{tag}.jsonl"
     rec.unlink(missing_ok=True)
-    cmd = [sys.executable, "-u", "-m", "engine", "play", str(TUTORIAL.relative_to(config.ROOT)), "--window",
-           f"{FOLDER.name} - Visual Studio Code", "--record", str(rec)] + (["--restart"] if restart else [])
+    cmd = [sys.executable, "-u", "-m", "engine", "play", str(tutorial.relative_to(config.ROOT)), "--window",
+           f"{FOLDER.name} - Visual Studio Code", "--record", str(rec), *extra] + (["--restart"] if restart else [])
     env = {**os.environ, "GG_LOCAL_APPMAPS": str(config.CACHE / "appmaps-check")}   # never the user's own learned map
     p = subprocess.Popen(cmd, cwd=config.ROOT, env=env, stdout=(LOGS / f"overlay_check-{tag}.log").open("w"),
                          stderr=subprocess.STDOUT)

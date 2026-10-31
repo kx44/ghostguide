@@ -67,7 +67,7 @@ class Fake:
                 "usage": {"input_tokens": 10, "output_tokens": 5}}
         name = request["response_format"]["json_schema"]["name"]
         self.calls.append(name)
-        return _reply(RAW if name == "raw_actions" else self.draft)
+        return _reply({"raw_actions": RAW, "explanations": json.dumps({"explanations": []})}.get(name, self.draft))
 
 
 def _client(tmp_path, fake, mode="record", budget=5.0):
@@ -300,7 +300,9 @@ def test_a_draft_failing_twice_stops_the_compile(tmp_path):
 def test_prompts_contain_nothing_from_the_gold_files():
     tell = ["mug", "solidworks", "youtube", "offset entities", "revolve", "sweep", "front plane", "centerline", "thumbnail",
             "video-container", "video-details", "styles.css", "index.html", "live server", "mugedge", "fillet", "unsplash"]
-    for p in sorted((ROOT / "engine/compile/passes/prompts").glob("*.md")):
+    prompts = sorted((ROOT / "engine/compile/passes/prompts").glob("*.md"))
+    assert {"extract.md", "merge.md", "enrich.md", "explain.md"} <= {p.name for p in prompts}
+    for p in prompts:
         text = p.read_text(encoding="utf-8").casefold()
         assert not [t for t in tell if t in text], p.name
 
@@ -483,13 +485,13 @@ def test_compile_end_to_end_then_from_the_cache(tmp_path, monkeypatch):
     stages = []
     r = compile_tutorial(str(source), opts, client=client, progress=lambda s, p: stages.append((s, p)))
     assert r.steps == 1 and not r.cached and r.cost_usd > 0
-    assert fake.calls == ["raw_actions", "tutorial", "enrich"]
+    assert fake.calls == ["raw_actions", "tutorial", "explanations", "enrich"]
     assert stages[-1] == ("Done", 1.0) and [p for _, p in stages] == sorted(p for _, p in stages)
     t = parse_file(r.path)
     assert t.meta.title == "Build a box" and t.meta.source.hash == r.source_hash and not t.meta.gold
     assert t.meta.compiled["prompts"] == prompts_version()
     again = compile_tutorial(str(source), opts, client=client)
-    assert again.cached and again.path == r.path and len(fake.calls) == 3
+    assert again.cached and again.path == r.path and len(fake.calls) == 4
 
 
 def test_fresh_replays_recorded_replies_without_paying_twice(tmp_path, monkeypatch):
@@ -499,7 +501,7 @@ def test_fresh_replays_recorded_replies_without_paying_twice(tmp_path, monkeypat
     spent = client.spent_usd()
     opts.fresh = True
     r = compile_tutorial(str(source), opts, client=client)
-    assert client.spent_usd() == spent and r.cost_usd == 0 and len(fake.calls) == 3
+    assert client.spent_usd() == spent and r.cost_usd == 0 and len(fake.calls) == 4
 
 
 def test_a_gold_source_gets_scored_and_logged(tmp_path, monkeypatch):

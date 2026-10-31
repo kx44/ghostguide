@@ -183,6 +183,7 @@ class CompileDone(_Msg):         # shell/importScreen.ts
     cached: bool = False
     cost_usd: Optional[float] = None
     score: Optional[list[str]] = None   # the lines to show, raw first; None when the source has no gold file
+    warnings: Optional[list[str]] = None
     error: Optional[str] = None
     blocked: bool = False               # the site refuses automatic reading: offer a saved file
 

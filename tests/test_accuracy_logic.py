@@ -82,3 +82,20 @@ def test_glimmer_verdict_parser():
 def test_glimmer_cases_file():
     cases = load_cases(CASES)
     assert len(cases) >= 6 and {c["expect"] for c in cases} <= {"done", "not_yet", "wrong"}
+
+
+def test_card_check_flags_a_card_on_its_target_or_off_screen():
+    from engine.schema.tutorial import Step
+    from tests.accuracy.card_check import card_row
+    step = Step(n=4, title="Type it", action="type", target={"label": "Editor", "kind": "field"}, params={"value": "x"}, why="Because.",
+                check="x shows", source={"t": "00:01"})
+    guide = {"style": "code_card", "box": {"x": 100, "y": 100, "w": 50, "h": 20}, "extra": {"avoid": [{"x": 500, "y": 500, "w": 50, "h": 50}]},
+             "card": {"meta": "Step 4", "title": "Type it"}}
+    at = lambda x, y: [{"type": "Text", "name": "Step 4", "rect": [x, y, 300, 20]}, {"type": "Text", "name": "Type it", "rect": [x, y + 20, 300, 400]}]
+    clear = card_row(step, guide, at(200, 50) + [{"type": "Text", "name": "Because.", "rect": [200, 90, 300, 20]}], (1000, 1000))
+    assert clear["height"] == 420 and clear["on_screen"] and not clear["covers_target"] and not clear["covers_work"] and clear["why_shown"]
+    over = card_row(step, guide, at(90, 90), (1000, 1000))
+    assert over["covers_target"] and over["why_shown"] is False
+    assert card_row(step, guide, at(450, 450), (1000, 1000))["covers_work"]
+    assert not card_row(step, guide, at(800, 800), (1000, 1000))["on_screen"]
+    assert card_row(step, guide, [], (1000, 1000))["card"] is None

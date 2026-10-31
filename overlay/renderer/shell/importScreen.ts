@@ -82,6 +82,12 @@ function done(m: CompileDoneMsg) {
     score.textContent = m.score.join("\n");
     box.append(score);
   }
+  if (m.warnings?.length) {
+    const warn = document.createElement("div");
+    warn.className = "score";
+    warn.textContent = m.warnings.join("\n");
+    box.append(warn);
+  }
   $("play").hidden = false;
 }
 

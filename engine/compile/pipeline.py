@@ -1,4 +1,4 @@
-"""Compile a tutorial, once: read the source, build the timeline, pass 1, pass 2, enrich,
+"""Compile a tutorial, once: read the source, build the timeline, pass 1, pass 2, explain, enrich,
 validate, save, score. A source compiled before with the same prompts and model opens from the cache for free.
 
     python -m engine compile "https://www.youtube.com/watch?v=…" --start 01:28 --end 10:25
@@ -23,6 +23,7 @@ from engine.compile import eval as evaluate
 from engine.compile.adapters import SourceError, text as text_adapter, video, web
 from engine.compile.enrich import enrich
 from engine.compile.passes import CompileError, prompts_version
+from engine.compile.passes.explain import explain
 from engine.compile.passes.extract import extract
 from engine.compile.passes.merge import merge
 from engine.compile.timeline import Evidence, Item, segments
@@ -36,7 +37,7 @@ TEXT_FILES = (".txt", ".md")
 WEB_FILES = (".html", ".htm")
 
 # Share of the progress bar each stage ends at.
-STAGES = {"read": 0.25, "extract": 0.65, "merge": 0.88, "enrich": 0.96, "save": 1.0}
+STAGES = {"read": 0.25, "extract": 0.65, "merge": 0.84, "explain": 0.9, "enrich": 0.96, "save": 1.0}
 
 
 @dataclass
@@ -179,9 +180,13 @@ def compile_tutorial(src: str, opts: Optional[Options] = None, *, client: Option
     tut = merge(client, model, ev, raw)
     log(f"  pass 2: {len(tut.steps)} steps")
 
+    progress("Explaining the typed steps", STAGES["merge"])
+    told = explain(client, model, tut, log=log)
+    log(f"  explain: {told['filled']} of {told['asked']} typed steps, {told['filled_optional']} others")
+
     info = None
     if opts.enrich:
-        progress("Looking up controls in the app's help", STAGES["merge"])
+        progress("Looking up controls in the app's help", STAGES["explain"])
         info = enrich(client, model, tut, AppMapStore(tut.meta.app, version=opts.version), version=opts.version, log=log)
         log(f"  enrich: {info['found']} of {info['asked']} new controls, {info['searches']} searches")
 
@@ -196,10 +201,12 @@ def compile_tutorial(src: str, opts: Optional[Options] = None, *, client: Option
 
     score = evaluate.score_files(out, gold) if gold else None
     result = Result(path=out, title=tut.meta.title, steps=len(tut.steps), model=model, source_hash=ev.hash,
-                    cost_usd=client.spent_usd() - spent_at_start, score=score, enrich=info, warnings=check.warnings)
-    done_file.parent.mkdir(parents=True, exist_ok=True)
-    done_file.write_text(json.dumps({"path": str(out), "title": result.title, "steps": result.steps, "score": score,
-                                     "enrich": info}, ensure_ascii=False), encoding="utf-8")
+                    cost_usd=client.spent_usd() - spent_at_start, score=score, enrich=info,
+                    warnings=told["warnings"] + check.warnings)
+    if not told["warnings"]:      # a compile short of explanations gets another try next time
+        done_file.parent.mkdir(parents=True, exist_ok=True)
+        done_file.write_text(json.dumps({"path": str(out), "title": result.title, "steps": result.steps, "score": score,
+                                         "enrich": info}, ensure_ascii=False), encoding="utf-8")
     if score:
         _log_score(result, score)
     progress("Done", 1.0)

@@ -90,7 +90,7 @@ export interface StartCheckMsg { type: "start_check"; tutorial: string; items: {
 export interface CompileProgressMsg { type: "compile_progress"; stage: string; pct: number }
 export interface CompileDoneMsg {
   type: "compile_done"; ok: boolean; path?: string; title?: string; steps?: number; cached?: boolean; cost_usd?: number;
-  score?: string[]; error?: string; blocked?: boolean;
+  score?: string[]; warnings?: string[]; error?: string; blocked?: boolean;
 }
 
 export type ToOverlay = GuideMsg | ClearMsg | StateMsg | ToastMsg | ShowMeMsg | MarkMsg | StartCheckMsg | CompileProgressMsg | CompileDoneMsg;

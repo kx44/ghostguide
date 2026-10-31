@@ -13,7 +13,7 @@ start_state: YOUTUBE-CLONE folder open in Visual Studio Code containing apps.svg
   video-plus.svg
 compiled:
   model: muse-spark-1.3
-  prompts: aea7adb90a1d
+  prompts: e729c706c779
 ---
 
 # Create video markup
@@ -40,6 +40,7 @@ target:
 params:
   then_key: Enter
   value: index.html
+why: Gives the page the standard homepage name, so it opens as a website in the browser preview.
 check: index.html appears in OPEN EDITORS and YOUTUBE-CLONE folder
 verify:
   uia:
@@ -103,6 +104,7 @@ params:
         </article>
       </section>
     </div>
+why: Builds one video card with thumbnail, channel icon, title and view info. Later steps style it like YouTube.
 check: code shows videos div with thumbnail, channel icon, title, channel name and 12K views • 1 week ago
 verify:
   uia:
@@ -160,6 +162,7 @@ target:
 params:
   then_key: Enter
   value: styles.css
+why: Creates the separate style file the page will use, keeping design rules out of the HTML.
 check: styles.css appears in Explorer under YOUTUBE-CLONE and in OPEN EDITORS
 verify:
   uia:
@@ -197,6 +200,7 @@ target:
   where: index.html, inside <head>
 params:
   value: <link rel="stylesheet" href="styles.css">
+why: Connects styles.css to the page, so rules written there change how the video card looks.
 check: link tag appears in head in index.html
 verify:
   uia:
@@ -216,6 +220,7 @@ target:
   where: index.html, inside <head>, after stylesheet link
 params:
   value: <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+why: Loads the Roboto typeface for the page, so all text shares the same clean style.
 check: Google Fonts Roboto link appears below styles.css link
 verify:
   uia:
@@ -281,6 +286,7 @@ params:
       box-sizing: border-box;
       font-family: Roboto, Arial, Helvetica, sans-serif;
     }
+why: Makes sizes include padding and borders, and sets the same default text style everywhere.
 check: universal selector rule with box-sizing and font-family is in styles.css
 verify:
   uia:
@@ -324,6 +330,7 @@ params:
     body {
       margin: 0;
     }
+why: Removes the browser's default blank space around the edges, so content reaches the top and sides.
 check: body margin rule is in styles.css
 verify:
   uia:
@@ -368,6 +375,7 @@ params:
       display: flex;
       flex-direction: column;
     }
+why: Stacks the thumbnail above its details in a column, so the card reads top to bottom.
 check: .video-container rule with display flex and flex-direction column is in styles.css
 verify:
   uia:
@@ -391,6 +399,7 @@ params:
       position: relative;
       display: flex;
     }
+why: Lets items be placed on top of the thumbnail, so the video length badge can sit in its corner.
 check: .thumbnail rule with position relative and display flex is in styles.css
 verify:
   uia:
@@ -431,6 +440,7 @@ target:
   where: index.html, in <a class="thumbnail"> after the class attribute
 params:
   value: data-duration="12:24"
+why: Stores the video length on the thumbnail, so it can be shown as an overlay without extra markup.
 check: thumbnail anchor reads <a href="#" class="thumbnail" data-duration="12:24">
 verify:
   uia:

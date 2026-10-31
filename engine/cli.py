@@ -310,7 +310,7 @@ def _importer(msg, progress):
     except BudgetExceeded:
         return CompileDone(ok=False, error="This would pass the spending cap (BUDGET_USD), so it wasn't started.")
     return CompileDone(ok=True, path=str(r.path), title=r.title, steps=r.steps, cached=r.cached,
-                       cost_usd=round(r.cost_usd, 4), score=_score_lines(r.score) if r.score else None)
+                       cost_usd=round(r.cost_usd, 4), score=_score_lines(r.score) if r.score else None, warnings=r.warnings)
 
 
 def cmd_play(args) -> int:

@@ -11,7 +11,7 @@ source:
 start_state: SOLIDWORKS open with no document open
 compiled:
   model: muse-spark-1.3
-  prompts: aea7adb90a1d
+  prompts: e729c706c779
 ---
 
 # Mug body
@@ -127,6 +127,7 @@ params:
   from: center over the red arrows straight up along blue dotted guideline to just above the Front Plane boundary
     box
   to: just as far below the Front Plane boundary box over the red arrow
+why: Creates the spin axis for the mug body, which later steps revolve the wall profile around.
 check: Vertical centerline crosses Front Plane boundary box
 source:
   anchor: '#2-draw-a-centerline'
@@ -170,6 +171,7 @@ params:
   suggested:
     note: exact shape, bottom edges and outer wall angle are up to you
     value: outer wall profile offset from centerline
+why: Draws the side shape of the cup that will be spun into a solid wall.
 check: Outer wall profile line appears beside centerline
 source:
   anchor: '#3-sketch-a-camping-mug-profile'
@@ -194,6 +196,7 @@ target:
   label: Offset Entities
   kind: button
   where: Sketch toolbar
+why: Makes a parallel copy of the outer wall to form the inner wall thickness.
 check: Offset Entities PropertyManager opens
 verify:
   uia:
@@ -251,6 +254,7 @@ params:
   suggested:
     note: exact position follows your profile
     value: line closing inner and outer wall at one end
+why: Seals one end of the walls to help make a closed loop that can become solid.
 check: Gap at one end of parallel lines is closed
 source:
   anchor: '#3-sketch-a-camping-mug-profile'
@@ -267,6 +271,7 @@ params:
   suggested:
     note: exact position follows your profile
     value: line closing inner and outer wall at other end
+why: Seals the other end, finishing the closed wall loop needed for the solid body.
 check: Profile is a closed loop between inner and outer walls
 source:
   anchor: '#3-sketch-a-camping-mug-profile'
@@ -297,6 +302,7 @@ target:
   label: outer edge of profile sketch
   kind: edge
   where: workspace sketch
+why: Tells the revolve tool which closed loop to spin into the mug body.
 check: Outer edge of profile is highlighted
 source:
   anchor: '#4-revolve-the-profile'
@@ -309,6 +315,7 @@ target:
   label: Revolved Boss/Base
   kind: button
   where: Features toolbar
+why: Spins the wall loop around the centerline to form the round mug body.
 check: Revolve PropertyManager opens
 verify:
   uia:
@@ -435,6 +442,7 @@ params:
     note: exact handle shape up to you
     value: natural handle loop out from wall and back
   to: last point on same inner wall
+why: Draws the curve the handle will follow from top to bottom of the mug.
 check: Handle loop sketch connects back to same inner wall
 source:
   anchor: '#5-sketch-the-handle-profile'
@@ -447,6 +455,7 @@ target:
   label: Sketch Fillet
   kind: button
   where: Sketch toolbar
+why: Rounds the handle corners so the swept handle flows smoothly without sharp kinks.
 check: Handle corners are rounded
 source:
   anchor: '#5-sketch-the-handle-profile'
@@ -496,6 +505,7 @@ target:
   - Insert
   - Reference Geometry
   - Plane
+why: Creates a new flat drawing surface placed at the edge of the mug for the handle shape.
 check: Plane PropertyManager opens
 verify:
   uia:
@@ -514,6 +524,7 @@ target:
   label: first point of handle profile sketch
   kind: canvas
   where: workspace where point turns orange
+why: Anchors the new surface at the handle end, so the handle shape lines up with its path.
 check: Handle endpoint highlights orange as plane reference
 source:
   anchor: '#6-create-a-new-plane'
@@ -548,6 +559,7 @@ target:
   where: Feature Tree
 params:
   value: MugEdge
+why: Gives the plane a clear name so it is easy to find as the handle sketch surface.
 check: Feature Tree shows MugEdge plane name
 verify:
   uia:
@@ -601,6 +613,7 @@ target:
   menu_path:
   - Straight Slot
   - Centerpoint Straight Slot
+why: Makes the rounded cross-section shape that gives the handle its thickness.
 check: Centerpoint Straight Slot tool is active
 source:
   anchor: '#7-sketch-a-handle-body-profile'
@@ -613,6 +626,7 @@ target:
   label: first sketch point of handle
   kind: canvas
   where: MugEdge plane sketch where line turns orange
+why: Centers that cross-section on the handle path so the handle starts in the right place.
 check: Slot centerpoint is placed at handle endpoint
 source:
   anchor: '#7-sketch-a-handle-body-profile'
@@ -631,6 +645,7 @@ params:
     note: keep narrow, any small width works
     value: narrow width
   to: width position using guidelines
+why: Sets how thick the handle feels when gripped.
 check: Narrow slot width preview appears
 source:
   anchor: '#7-sketch-a-handle-body-profile'
@@ -649,6 +664,7 @@ params:
     note: height up to you, avoid design requiring too much material
     value: short length up or down to mug height
   to: up or down to mug height position
+why: Sets how wide the handle face is where it meets the mug.
 check: Slot length extends to mug height
 source:
   anchor: '#7-sketch-a-handle-body-profile'
@@ -680,6 +696,7 @@ target:
   label: Swept Boss/Base
   kind: button
   where: Features toolbar
+why: Builds the solid handle by pushing the slot shape along the handle curve.
 check: Sweep PropertyManager opens
 verify:
   uia:
@@ -700,6 +717,7 @@ target:
   where: blue Profile dialog box / workspace
 params:
   field: Profile
+why: Tells the tool which cross-section shape to push to form the handle.
 check: Slot profile fills Profile box
 source:
   anchor: '#8-sweep-the-handle-body'
@@ -714,6 +732,7 @@ target:
   where: pink Path dialog box / workspace
 params:
   field: Path
+why: Tells the tool which curve to follow to place the handle.
 check: Handle sketch fills Path box with preview
 source:
   anchor: '#8-sweep-the-handle-body'
@@ -746,6 +765,7 @@ target:
   label: Fillet
   kind: button
   where: Features toolbar
+why: Smooths sharp joins where the handle meets the mug into rounded, comfortable edges.
 check: Fillet PropertyManager opens
 verify:
   uia:
@@ -780,6 +800,7 @@ params:
   suggested:
     note: any small radius works
     value: '2'
+why: Sets how rounded the smoothed edges become.
 check: Fillet preview updates
 source:
   anchor: '#10-add-fillets-and-design-details'

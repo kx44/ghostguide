@@ -1,4 +1,4 @@
-"""The two model passes (compile steps 4 and 5). Prompts live in prompts/ as plain text, so they can be read and diffed."""
+"""The model passes: extract, merge, explain. Prompts live in prompts/ as plain text, so they can be read and diffed."""
 from __future__ import annotations
 
 import hashlib
