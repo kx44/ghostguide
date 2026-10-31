@@ -59,6 +59,20 @@ def test_scheme_is_measured_once_per_step():
     assert sum(1 for b in calls if b is not None) == 1
 
 
+def test_measuring_from_the_apps_own_pixels_doesnt_clear_the_overlay():
+    cleared = []
+
+    def fn(box):
+        return "light", 0.8
+    fn.reads_app_pixels = True
+    loc = FakeLocator()
+    loc.box = BOX
+    p = Player(Session(parse_file("tutorials/mug-solidworks.md")), locator=loc, scheme_fn=fn, before_capture=lambda: cleared.append(1))
+    p.handle(HELLO)
+    p.apply_located(p.locate_current())
+    assert p.last_guide.scheme == "light" and not cleared
+
+
 @pytest.mark.skipif(sys.platform != "win32", reason="input is Windows")
 def test_the_cursor_comes_back_even_when_it_refuses(monkeypatch):
     spots = []
@@ -78,6 +92,37 @@ def test_the_cursor_comes_back_even_when_it_refuses(monkeypatch):
     monkeypatch.setattr(ex, "refuse", refuse)
     assert "covering" in ex.run([execute.Op("click", at=(500, 500))])
     assert spots[-1] == (11, 22)
+
+
+def test_a_tooltip_still_up_from_the_last_spot_doesnt_name_this_one():
+    from engine.live.locate.tooltip import Watch
+
+    now = [0.0]
+    at = [(10, 10)]
+    w = Watch(lambda: ("Right Plane", at[0]), lambda: at[0], lambda: True, clock=lambda: now[0])
+    w.note()
+    now[0] = 1.0
+    w.note()
+    assert w.tip()[0] == "Right Plane"
+    at[0] = (900, 40)            # the mouse goes to a ribbon box, and the old tooltip hasn't closed yet
+    now[0] = 1.1
+    w.note()
+    assert w.tip() is None
+    now[0] = 1.3
+    w.note()
+    assert w.tip() is None
+
+
+def test_a_tooltip_that_keeps_saying_no_cant_spend_for_ever():
+    from engine.live.locate.vision import MAX_CALLS, MAX_REFUNDS, SparkVision, _Memo
+
+    v = SparkVision("app")
+    memo = v._memo[(1, "Sketch")] = _Memo(calls=MAX_CALLS)
+    for _ in range(MAX_REFUNDS + 5):
+        before = memo.calls
+        v.reject(1, "Sketch", "Right Plane")
+        memo.calls = MAX_CALLS if memo.calls < before else memo.calls      # the look it gave back gets used
+    assert v.spent(1, "Sketch") and memo.refunds == MAX_REFUNDS
 
 
 def _step(**params):

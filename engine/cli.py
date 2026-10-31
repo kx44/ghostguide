@@ -120,7 +120,19 @@ def _load_play(args):
     tracker = folder_fn = None
     if locator is not None and getattr(args, "check", "auto") == "auto":
         tracker, folder_fn = _tracker(tut, locator.window, args)
-    player = Player(session, pins, scheme_fn=pick_scheme, scheme_override=override, pins_path=pins_path,
+    scheme_fn = pick_scheme
+    if locator is not None:
+        def scheme_fn(box):
+            """From the app's own pixels, so the overlay needn't clear for it and nothing flickers as a target turns up."""
+            from engine.live import capture, windows
+            from engine.live.scheme import ring_luminance, scheme_for
+
+            w = windows.find(locator.window) if box is not None else None
+            got = capture.with_popups(w.hwnd) if w else None
+            lum = ring_luminance(got[0], box, origin=got[1]) if got else None
+            return (scheme_for(lum), lum) if lum is not None else pick_scheme(box)
+        scheme_fn.reads_app_pixels = True
+    player = Player(session, pins, scheme_fn=scheme_fn, scheme_override=override, pins_path=pins_path,
                     locator=locator, tracker=tracker, folder_fn=folder_fn, inputs=getattr(args, "_inputs", None))
     if tracker is not None:
         tracker.acted = player.acted_on

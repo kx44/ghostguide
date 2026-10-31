@@ -29,6 +29,7 @@ from engine.schema.tutorial import Step
 MAX_TOKENS = 2048
 EFFORT = config.env("FINDER_EFFORT", "low")
 MAX_CALLS = 3            # per target, per run of a step
+MAX_REFUNDS = 3          # looks a tooltip's "no" can give back, per target
 MIN_GAP_S = 3.0          # between calls for one target
 SAME_SHARE = 0.35        # the patch around an answer may change this much (a hover highlight) and still stand
 PAD_PX = 24              # around an answer, for that patch
@@ -142,6 +143,7 @@ def how_to_draw(p: dict) -> str:
 @dataclass
 class _Memo:
     calls: int = 0
+    refunds: int = 0             # looks given back because a tooltip said no
     t: float = -1e9
     box: Optional[Box] = None
     line: Optional[Line] = None
@@ -178,7 +180,9 @@ class SparkVision:
         """A tooltip says that box is something else: look again, and that look is on us, not on the allowance."""
         memo = self._memo.setdefault((n, label), _Memo())
         memo.box, memo.line, memo.patch = None, None, None
-        memo.calls = max(0, memo.calls - 1)
+        if memo.refunds < MAX_REFUNDS:      # a limit, or a tooltip that keeps saying no is a paid look every few seconds, for ever
+            memo.refunds += 1
+            memo.calls = max(0, memo.calls - 1)
         memo.t = 0.0
         if shown not in memo.not_it:
             memo.not_it.append(shown)

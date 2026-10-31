@@ -284,5 +284,6 @@ app.whenReady().then(() => {
   screen.on("display-metrics-changed", rebuild);
 });
 
-app.on("will-quit", () => { unregisterHotkeys(); tray?.destroy(); link?.close(); });
+// The link closing updates the tray, so the tray goes first and for good: an update on a destroyed tray is an error dialog on quit.
+app.on("will-quit", () => { unregisterHotkeys(); tray?.destroy(); tray = undefined; link?.close(); });
 app.on("window-all-closed", () => app.quit());

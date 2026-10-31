@@ -96,7 +96,7 @@ class Player:
             # Nothing to measure yet. Remembering this answer would keep the step in the Windows theme's colours after its
             # target turned up, so the card keeps the colours it has, and the box, once found, decides.
             return self.scheme if self._scheme_measured else self._scheme_fn(None)[0]
-        if box is not None and self.before_capture:
+        if box is not None and self.before_capture and not getattr(self._scheme_fn, "reads_app_pixels", False):
             self.before_capture()
         scheme, _ = self._scheme_fn(box)
         self._scheme_cache[key] = scheme

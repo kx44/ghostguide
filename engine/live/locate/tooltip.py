@@ -14,6 +14,7 @@ from typing import Callable, Optional
 
 TOOLTIP_CLASSES = ("swBalloonTip", "tooltips_class32")
 NO_TIP_S = 3.0        # a real button has shown its tooltip by now (it takes about a second)
+TIP_REST_S = 0.6      # a tooltip read sooner than this after the mouse arrived belongs to where it was before
 WATCH_EVERY_S = 0.4
 SAME_SPOT_PX = 2
 
@@ -59,6 +60,8 @@ class Watch:
             return
         if self.since is None:
             self.since = self.clock()
+        if self.clock() - self.since < TIP_REST_S:
+            return      # the tooltip up right now is still the last spot's: it would put another control's name on this one
         got = self.read_tip()
         if got:
             self.seen = got[0]

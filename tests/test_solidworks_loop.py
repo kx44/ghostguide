@@ -442,6 +442,9 @@ def test_the_watch_remembers_a_tooltip_until_the_mouse_moves():
     now, at, tip, front = [0.0], [(5, 5)], [("New", (5, 5))], [True]
     w = Watch(lambda: tip[0], lambda: at[0], lambda: front[0], clock=lambda: now[0])
     w.note()
+    assert w.tip() is None                 # just arrived: a tooltip up now is the last spot's
+    now[0] = 1.0
+    w.note()
     assert w.tip() == ("New", (5, 5)) and w.rested() is None
     tip[0] = None                       # it times out, and the mouse hasn't moved
     now[0] = 9.0
