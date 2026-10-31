@@ -1,10 +1,10 @@
 """Muse Glimmer on Modal: the check ladder's rung 9c (engine/models/glimmer.py talks to it).
 
-llama.cpp serves the 17 GB Q4_K_M GGUF plus the vision projector on one L40S (48 GB), so the whole model sits on
-the GPU. The container scales to zero after SCALEDOWN_S idle seconds; the weights live in a Modal volume, so a
+llama.cpp serves the 17 GB Q4_K_M GGUF plus the vision projector on one L40S (48 GB) in Asia-Pacific, so the whole
+model sits on the GPU, with the DFlash draft for speculative decoding (~3 s per check in the model instead of ~5.5). The container scales to zero after SCALEDOWN_S idle seconds; the weights live in a Modal volume, so a
 cold start only loads them (no download).
 
-Contract (POST, JSON): {"image_png_b64": "...", "question": "...", "check": "..."}
+Contract (POST, JSON): {"image_b64": "...", "image_mime": "image/jpeg", "question": "...", "check": "..."}
                      → {"result": "done|not_yet|wrong", "why": "...", "seconds": 1.2}
 Auth: header `Authorization: Bearer <GLIMMER_TOKEN>`, from the Modal secret `glimmer-token`; the engine sends
 GLIMMER_MODAL_TOKEN from .env. Without it anyone with the URL could spend the credits.
@@ -21,12 +21,13 @@ import modal
 REPO = "meta-models/Muse-Glimmer-30B-GGUF"
 MODEL = "Muse-Glimmer-30B-KQuant-17GB-Q4_K_M.gguf"
 MMPROJ = "mmproj-Muse-Glimmer-30B-Q4_K_M.gguf"
+DRAFT = "dflash-Muse-Glimmer-30B-Q4_K_M.gguf"   # DFlash speculative-decoding draft, ~1.6 GB
 WEIGHTS = "/weights"
 PORT = 8080
-SCALEDOWN_S = 300       # idle seconds before the GPU is released (L40S ≈ $1.95/h while up)
+SCALEDOWN_S = 300       # idle seconds before the GPU is released (L40S ≈ $1.95/h × 1.15 for the region, while up)
 MAX_TOKENS = 2048       # reasoning counts toward this; running out mid-thought returns empty content
 
-app = modal.App("ghostguide-glimmer")
+app = modal.App("ghostguide-glimmer-ap")
 volume = modal.Volume.from_name("glimmer-weights", create_if_missing=True)
 
 # Muse Glimmer needs llama.cpp b10353 or newer (dev.meta.ai/docs/muse-glimmer/deploy).
@@ -44,13 +45,16 @@ def download():
     from huggingface_hub import hf_hub_download
 
     os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
-    for name in (MODEL, MMPROJ):
+    for name in (MODEL, MMPROJ, DRAFT):
         path = hf_hub_download(REPO, name, local_dir=WEIGHTS)
         print(f"{name}: {os.path.getsize(path) / 1e9:.1f} GB")
     volume.commit()
 
 
-@app.cls(image=server_image, gpu="L40S", volumes={WEIGHTS: volume}, scaledown_window=SCALEDOWN_S,
+# region="ap" + routing via Mumbai: ~0.6 s of network per check from South-East Asia instead of ~1.6 s through us-east,
+# for 1.15x the GPU price. routing_region can only be set on a function's first deploy (hence the -ap app name).
+@app.cls(image=server_image, gpu="L40S", region="ap", routing_region="ap-south", volumes={WEIGHTS: volume},
+         scaledown_window=SCALEDOWN_S,
          timeout=600, secrets=[modal.Secret.from_name("glimmer-token")])
 @modal.concurrent(max_inputs=4)
 class Glimmer:
@@ -66,6 +70,8 @@ class Glimmer:
             "-a", "muse-glimmer", "-ngl", "99", "-c", "32768", "-np", "1",
             "--host", "127.0.0.1", "--port", str(PORT),
             "--chat-template-kwargs", '{"reasoning_strength":"low"}',
+            # DFlash draft (flags from the dev.meta.ai llama.cpp docs); a "[spec] failed to measure" warning is harmless.
+            "-md", f"{WEIGHTS}/{DRAFT}", "--spec-type", "draft-dflash", "-ngld", "99", "--spec-draft-n-max", "4",
         ])
         t0 = time.monotonic()
         while time.monotonic() - t0 < 540:
@@ -101,12 +107,14 @@ class Glimmer:
             if authorization != f"Bearer {os.environ['GLIMMER_TOKEN']}":
                 raise HTTPException(status_code=401, detail="bad token")
             t0 = time.monotonic()
+            image = body.get("image_b64") or body["image_png_b64"]     # image_png_b64: the first contract
+            mime = body.get("image_mime", "image/png")
             # No temperature: Meta advises against greedy; llama.cpp applies the checkpoint's published sampling.
             r = httpx.post(f"http://127.0.0.1:{PORT}/v1/chat/completions", timeout=120, json={
                 "model": "muse-glimmer", "max_tokens": MAX_TOKENS,
                 "messages": [{"role": "user", "content": [
                     {"type": "text", "text": body["question"]},
-                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{body['image_png_b64']}"}},
+                    {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{image}"}},
                 ]}],
             })
             r.raise_for_status()

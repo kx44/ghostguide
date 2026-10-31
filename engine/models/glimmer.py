@@ -9,7 +9,8 @@ and they cost money (Spark) or need a Modal deployment (Glimmer). With CHECK_MOD
 Spark answers from recordings only (MODEL_MODE=replay) and anything unrecorded is "unknown".
 
 Modal endpoint contract (deploy/modal_glimmer.py; header `Authorization: Bearer <GLIMMER_MODAL_TOKEN>`): POST JSON
-{"image_png_b64": "...", "question": "...", "check": "..."} → {"result": "done|not_yet|wrong", "why": "..."}.
+{"image_b64": "...", "image_mime": "image/jpeg", "question": "...", "check": "..."}
+→ {"result": "done|not_yet|wrong", "why": "..."}.
 """
 from __future__ import annotations
 
@@ -76,9 +77,20 @@ def spark_contributor(client=None) -> Callable[[Step, bytes], object]:
     return check
 
 
+def as_jpeg(png: bytes, quality: int = 85) -> bytes:
+    """Less than half the bytes of the PNG; the upload to Modal (us-east) is part of every check's time."""
+    import io
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.open(io.BytesIO(png)).convert("RGB").save(buf, "JPEG", quality=quality)
+    return buf.getvalue()
+
+
 def glimmer_modal(url: str, post=None) -> Callable[[Step, bytes], object]:
     def check(step: Step, png: bytes):
-        body = {"image_png_b64": base64.b64encode(png).decode(), "question": question(step), "check": step.check}
+        body = {"image_b64": base64.b64encode(as_jpeg(png)).decode(), "image_mime": "image/jpeg",
+                "question": question(step), "check": step.check}
         if post is None:
             import httpx
             headers = {"Authorization": f"Bearer {config.env('GLIMMER_MODAL_TOKEN')}"}
