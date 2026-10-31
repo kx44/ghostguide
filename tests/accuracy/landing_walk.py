@@ -15,6 +15,7 @@ It takes over the mouse and keyboard for about two minutes; don't touch them whi
 
     py -m tests.accuracy.landing_walk                       # reset the scratch folder, all 23 steps
     py -m tests.accuracy.landing_walk --from 14 --no-reset  # carry on from the current state
+    py -m tests.accuracy.landing_walk --tutorial tutorials/compiled/youtube-clone-vscode.compiled.md   # a compiled one
 
 Results: cache/screenshots/landing/stepNN.png and landing.json. The overlay isn't involved: it draws the
 same physical-pixel box (P2-1 checks the overlay window itself).
@@ -330,7 +331,7 @@ def act(step, box, win, folder: Path, title: str, loc, row: dict, out: Path) -> 
     if step.action == "click" and box is not None:
         click(*box.center)
         time.sleep(0.8)
-    elif step.action == "type" and t.kind == "field" and "filename" in t.label.lower() and box is not None:
+    elif step.action == "type" and t.kind == "field" and "filename" in t.label.lower().replace(" ", "") and box is not None:
         if not focused_is("Edit", "Type file name"):
             row["skipped_action"] = "filename box not focused: typed nothing"     # never type into the tree
             return
@@ -373,6 +374,8 @@ def main(argv=None) -> int:
     ap.add_argument("--from", dest="start", type=int, default=1)
     ap.add_argument("--to", dest="end", type=int, default=None)
     ap.add_argument("--no-reset", action="store_true", help="keep the folder as it is")
+    ap.add_argument("--tutorial", default=str(TUTORIAL))
+    ap.add_argument("--out", default=str(OUT), help="where the screenshots and landing.json go")
     args = ap.parse_args(argv)
     if sys.platform != "win32":
         print("The landing check needs Windows (UI Automation).")
@@ -383,8 +386,9 @@ def main(argv=None) -> int:
     folder = Path(args.folder)
     win, title = setup(folder, fresh=not args.no_reset and args.start == 1)
     loc = resolver(title)
-    tut = parse_file(TUTORIAL)
-    OUT.mkdir(parents=True, exist_ok=True)
+    tut = parse_file(args.tutorial)
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
     rows = []
     for step in tut.steps:
         if step.n < args.start or (args.end and step.n > args.end):
@@ -396,12 +400,12 @@ def main(argv=None) -> int:
             click_into_editor(win, title, (step.target.where or "").split(",")[0].strip())
             box, line = loc.locate(step)
             how = loc.last_how + " (after clicking into the editor)"
-        path = OUT / f"step{step.n:02d}.png"
+        path = out / f"step{step.n:02d}.png"
         snap(win, box, f"{step.n} {step.target.label}: {how}", path)
         print(f"[{step.n:2d}] {step.action:9s} {step.target.label!r:26s} → {how}  {box.model_dump() if box else ''} ({loc.last_seconds:.1f}s)")
         row = {"n": step.n, "action": step.action, "label": step.target.label, "how": how,
                "box": box.model_dump() if box else None, "seconds": round(loc.last_seconds, 2), "shot": str(path)}
-        act(step, box, win, folder, title, loc, row, OUT)
+        act(step, box, win, folder, title, loc, row, out)
         row["verify"] = check(step, title)
         if row["verify"] is not None:
             print(f"     verify: {'ok' if row['verify'] else 'FAILED'}")
@@ -413,10 +417,10 @@ def main(argv=None) -> int:
                "estimated": [r["n"] for r in rows if "estimated" in r["how"]],
                "missed": [f"{r['n']}: {r['label']} ({r['how']})" for r in needs if not r["box"]],
                "verify_failed": [r["n"] for r in rows if r.get("verify") is False]}
-    (OUT / "landing.json").write_text(json.dumps({"run_at": datetime.now().isoformat(timespec="seconds"),
+    (out / "landing.json").write_text(json.dumps({"run_at": datetime.now().isoformat(timespec="seconds"),
                                                   "summary": summary, "steps": rows}, indent=2), encoding="utf-8")
     print("\n" + json.dumps(summary, indent=2))
-    print(f"screenshots: {OUT}")
+    print(f"screenshots: {out}")
     return 0 if not summary["missed"] and not summary["verify_failed"] else 1
 
 

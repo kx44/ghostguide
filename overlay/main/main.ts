@@ -4,7 +4,8 @@
 //   npm start                         connect to the engine at ws://127.0.0.1:8765 (python -m engine play …)
 //   npm start -- --replay f.jsonl     a recorded session, no engine: step by step, waits for Next
 //                                     [--timed [--speed 2] [--loop]] plays it on its timestamps instead
-import { BrowserWindow, Display, app, clipboard, ipcMain, screen } from "electron";
+//   npm start -- --import             also open the import window (Ctrl+Alt+I any time)
+import { BrowserWindow, Display, app, clipboard, dialog, ipcMain, screen } from "electron";
 import { join } from "node:path";
 import type { FromOverlay, HitRect, Local, Routed, StateMsg, ToOverlay } from "../shared/messages";
 import { Link, connectEngine, replaySteps, replayTimed } from "./bridge";
@@ -19,12 +20,14 @@ const LOOP = argv.includes("--loop");
 const TIMED = argv.includes("--timed");
 const ENGINE = arg("--engine") ?? `ws://127.0.0.1:${arg("--port") ?? 8765}`;
 const HIT_POLL_MS = 30;          // cursor check for click-through (see ghost:hits)
+const IMPORT_W = 480, IMPORT_H = 500;
 
 interface Win { win: BrowserWindow; display: Display; ready: boolean; queue: Routed[]; hits: HitRect[]; clickable: boolean }
 const wins = new Map<number, Win>();
 let link: Link | undefined;
 let lastState: StateMsg | undefined;
 let guideDisplay: number | undefined;     // where the current step's guidance is drawn
+let importWin: BrowserWindow | undefined;
 
 if (!app.requestSingleInstanceLock()) app.quit();
 
@@ -55,6 +58,23 @@ function buildWindows() {
     const w = wins.get(d.id);
     if (w) { w.display = d; w.win.setBounds(d.bounds); } else wins.set(d.id, makeWindow(d));
   }
+}
+
+/** The one window that takes focus: you type a link into it. It stays above the overlay and goes when closed. */
+function openImport() {
+  if (importWin && !importWin.isDestroyed()) { importWin.show(); importWin.focus(); return; }
+  const win = new BrowserWindow({
+    width: IMPORT_W, height: IMPORT_H, resizable: false, minimizable: true, maximizable: false, fullscreenable: false,
+    title: "GhostGuide: import a tutorial", backgroundColor: "#17151D", autoHideMenuBar: true, show: false,
+    webPreferences: { preload: join(__dirname, "importPreload.js"), contextIsolation: true, nodeIntegration: false, sandbox: true },
+  });
+  win.setAlwaysOnTop(true, "pop-up-menu");
+  win.webContents.on("will-navigate", e => e.preventDefault());
+  win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  win.loadFile(join(__dirname, "..", "renderer", "import.html"));
+  win.once("ready-to-show", () => win.show());
+  win.on("closed", () => { importWin = undefined; });
+  importWin = win;
 }
 
 function deliver(w: Win, msg: ToOverlay, local: Local = {}) {
@@ -119,6 +139,11 @@ function route(msg: ToOverlay) {
       lastState = msg;
       for (const w of wins.values()) deliver(w, msg);     // every window needs the scheme; only primary draws the shell
       break;
+    case "compile_progress":
+    case "compile_done":
+      if (importWin && !importWin.isDestroyed()) importWin.webContents.send("import:msg", msg);
+      else if (msg.type === "compile_done") route({ type: "toast", text: msg.ok ? `Compiled: ${msg.title}` : `Compile stopped: ${msg.error}`, kind: msg.ok ? "ok" : "warn", ms: 5000 });
+      break;
     default:
       deliver(primaryWin(), msg);
   }
@@ -138,6 +163,13 @@ app.whenReady().then(() => {
   });
   ipcMain.on("ghost:send", (_e, msg: FromOverlay) => link?.send(msg));
   ipcMain.on("ghost:copy", (_e, text: string) => { if (typeof text === "string") clipboard.writeText(text); });
+  ipcMain.on("import:close", () => importWin?.close());
+  ipcMain.handle("import:pick", async () => {
+    const opts = { properties: ["openFile" as const], filters: [
+      { name: "Tutorials", extensions: ["html", "htm", "txt", "md", "mp4", "mkv", "webm", "mov", "avi"] }] };
+    const got = importWin ? await dialog.showOpenDialog(importWin, opts) : await dialog.showOpenDialog(opts);
+    return got.canceled ? undefined : got.filePaths[0];
+  });
   ipcMain.on("ghost:hits", (e, rects: HitRect[]) => {
     const w = [...wins.values()].find(x => x.win.webContents === e.sender);
     if (w) w.hits = rects;
@@ -165,7 +197,8 @@ app.whenReady().then(() => {
         }
       });
 
-  const failed = registerHotkeys(() => !!lastState?.hidden, m => link?.send(m), () => app.quit());
+  const failed = registerHotkeys(() => !!lastState?.hidden, m => link?.send(m), () => app.quit(), openImport);
+  if (argv.includes("--import")) openImport();
   if (failed.length) {
     console.warn("hotkeys taken by another app:", failed.join(", "));
     const keys = failed.map(a => a.replace("Control", "Ctrl").replace("Right", "→").replace("Left", "←")).join(", ");

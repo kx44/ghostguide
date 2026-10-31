@@ -20,10 +20,16 @@ live = [
   "fastapi", "uvicorn", "mss", "pillow", "pyautogui", "keyboard",
   "uiautomation; sys_platform == 'win32'",
 ]
+# Compiling tutorials (phase 5): video download, frames and audio, screenshots from web pages.
+compile = ["yt-dlp", "imageio-ffmpeg", "numpy", "pillow"]
 dev = ["pytest>=8"]
 
 # The package lives in this folder, so map the name `engine` onto it.
 # From the repo root:  pip install -e "engine[dev]"   (or just run `python -m engine` from the root)
 [tool.setuptools]
 package-dir = {"engine" = "."}
-packages = ["engine", "engine.schema", "engine.basefile", "engine.models", "engine.live", "engine.live.locate"]
+packages = ["engine", "engine.schema", "engine.basefile", "engine.models", "engine.live", "engine.live.locate",
+            "engine.appmap", "engine.compile", "engine.compile.adapters", "engine.compile.passes"]
+
+[tool.setuptools.package-data]
+"engine.compile.passes" = ["prompts/*.md"]

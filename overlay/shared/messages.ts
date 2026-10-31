@@ -9,10 +9,10 @@ export type Style = (typeof STYLES)[number];
 export type Scheme = "light" | "dark";
 
 export const TO_OVERLAY = [
-  "guide", "clear", "state", "toast", "show_me", "mark", "start_check", "compile_progress",
+  "guide", "clear", "state", "toast", "show_me", "mark", "start_check", "compile_progress", "compile_done",
 ] as const;
 export const FROM_OVERLAY = [
-  "hello", "show_me", "do_it", "next", "back", "skip", "hide", "resume", "jump", "pin", "unpin", "import", "start_ok",
+  "hello", "show_me", "do_it", "next", "back", "skip", "hide", "resume", "jump", "pin", "unpin", "import", "open_tutorial", "start_ok",
 ] as const;
 
 export interface Box { x: number; y: number; w: number; h: number }
@@ -88,8 +88,12 @@ export interface ShowMeMsg { type: "show_me"; to: Pt; path?: Pt[]; click: "left"
 export interface MarkMsg { type: "mark"; result: "ok" | "bad" }
 export interface StartCheckMsg { type: "start_check"; tutorial: string; items: { text: string; ok?: boolean }[] }
 export interface CompileProgressMsg { type: "compile_progress"; stage: string; pct: number }
+export interface CompileDoneMsg {
+  type: "compile_done"; ok: boolean; path?: string; title?: string; steps?: number; cached?: boolean; cost_usd?: number;
+  score?: string[]; error?: string; blocked?: boolean;
+}
 
-export type ToOverlay = GuideMsg | ClearMsg | StateMsg | ToastMsg | ShowMeMsg | MarkMsg | StartCheckMsg | CompileProgressMsg;
+export type ToOverlay = GuideMsg | ClearMsg | StateMsg | ToastMsg | ShowMeMsg | MarkMsg | StartCheckMsg | CompileProgressMsg | CompileDoneMsg;
 
 export interface DisplayInfo { id: number | string; x: number; y: number; w: number; h: number; scale: number; primary: boolean }
 export type FromOverlay =
@@ -97,7 +101,8 @@ export type FromOverlay =
   | { type: "show_me" | "do_it" | "next" | "back" | "skip" | "hide" | "resume" | "unpin" | "start_ok" }
   | { type: "pin"; at: Pt }
   | { type: "jump"; n: number }
-  | { type: "import"; url?: string; file?: string };
+  | { type: "import"; url?: string; file?: string; text?: string; start?: string; end?: string }
+  | { type: "open_tutorial"; path: string };
 
 // What main.ts hands a display's renderer: the message plus the same geometry in that window's DIPs.
 export interface Local {
@@ -121,3 +126,12 @@ export interface GhostBridge {
   copy(text: string): void;
 }
 export interface HitRect { x: number; y: number; w: number; h: number }
+
+// The bridge exposed by importPreload.ts as window.ghostImport (the import window, the one window that takes focus).
+export interface ImportBridge {
+  on(cb: (m: CompileProgressMsg | CompileDoneMsg) => void): void;
+  send(msg: FromOverlay): void;
+  pickFile(): Promise<string | undefined>;
+  pathOf(file: File): string;
+  close(): void;
+}

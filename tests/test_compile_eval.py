@@ -55,6 +55,26 @@ def test_typed_text_decides_type_steps():
     assert ev.score(wrong, gold)["raw"]["matched"] == 0
 
 
+def test_a_suggested_value_is_never_scored_on_its_number():
+    gold = _tut([_step(1, "type", "Radius", suggested={"value": "1"})])
+    other_number = _tut([_step(1, "type", "Radius", suggested={"value": "3"})])
+    s = ev.score(other_number, gold)
+    assert s["raw"]["matched"] == 1 and s["details"]["typed_steps"] == 0
+    assert s["details"]["suggested_marked"] == "1/1"
+    claimed = _tut([_step(1, "type", "Radius", value="3")])
+    assert ev.score(claimed, gold)["details"]["suggested_marked"] == "0/1"
+
+
+def test_by_meaning_only_changes_canvas_steps():
+    def canvas(n, label, title):
+        return Step(n=n, title=title, action="draw_line", target={"label": label, "kind": "canvas"}, check="x",
+                    source={"anchor": "#a"}, confidence="high")
+    gold = _tut([canvas(1, "Origin", "Draw the centerline through the origin"), _step(2, label="Bravo")])
+    compiled = _tut([canvas(1, "Centerline", "Sketch the vertical centerline"), _step(2, label="Zulu")])
+    s = ev.score(compiled, gold)
+    assert s["raw"]["matched"] == 0 and s["by_meaning"]["matched"] == 1      # the button still has to have the right name
+
+
 def test_fair_never_changes_raw_and_only_uses_the_list():
     gold = _tut([_step(1, label="Alpha"), _step(2, "pick", "Added line"), _step(3, label="Bravo")])
     compiled = _tut([_step(1, label="Alpha"), _step(2, label="Bravo")])

@@ -168,13 +168,26 @@ class StartCheck(_Msg):     # shell/startCheck.ts
     items: list[StartItem]
 
 
-class CompileProgress(_Msg):     # phase 5 (shell/importScreen.ts)
+class CompileProgress(_Msg):     # shell/importScreen.ts
     type: Literal["compile_progress"] = "compile_progress"
     stage: str
     pct: float
 
 
-ToOverlay = Union[Guide, Clear, State, Toast, ShowMe, Mark, StartCheck, CompileProgress]
+class CompileDone(_Msg):         # shell/importScreen.ts
+    type: Literal["compile_done"] = "compile_done"
+    ok: bool
+    path: Optional[str] = None
+    title: Optional[str] = None
+    steps: Optional[int] = None
+    cached: bool = False
+    cost_usd: Optional[float] = None
+    score: Optional[list[str]] = None   # the lines to show, raw first; None when the source has no gold file
+    error: Optional[str] = None
+    blocked: bool = False               # the site refuses automatic reading: offer a saved file
+
+
+ToOverlay = Union[Guide, Clear, State, Toast, ShowMe, Mark, StartCheck, CompileProgress, CompileDone]
 
 # ---------------- overlay → engine ----------------
 
@@ -237,16 +250,26 @@ class Unpin(_Simple):
     type: Literal["unpin"] = "unpin"
 
 
-class Import(_Msg):     # phase 5
+class Import(_Msg):
     type: Literal["import"] = "import"
     url: Optional[str] = None
     file: Optional[str] = None
+    text: Optional[str] = None
+    start: Optional[str] = None         # video: mm:ss
+    end: Optional[str] = None
 
 
-FromOverlay = Union[Hello, ShowMeReq, DoIt, Next, Back, Skip, Hide, Resume, Jump, PinReq, Unpin, Import, StartOk]
+class OpenTutorial(_Msg):
+    """Play a compiled file: the import screen's Play button."""
+    type: Literal["open_tutorial"] = "open_tutorial"
+    path: str
 
-TO_OVERLAY_TYPES = ("guide", "clear", "state", "toast", "show_me", "mark", "start_check", "compile_progress")
-FROM_OVERLAY_TYPES = ("hello", "show_me", "do_it", "next", "back", "skip", "hide", "resume", "jump", "pin", "unpin", "import", "start_ok")
+
+FromOverlay = Union[Hello, ShowMeReq, DoIt, Next, Back, Skip, Hide, Resume, Jump, PinReq, Unpin, Import, OpenTutorial, StartOk]
+
+TO_OVERLAY_TYPES = ("guide", "clear", "state", "toast", "show_me", "mark", "start_check", "compile_progress", "compile_done")
+FROM_OVERLAY_TYPES = ("hello", "show_me", "do_it", "next", "back", "skip", "hide", "resume", "jump", "pin", "unpin", "import",
+                      "open_tutorial", "start_ok")
 
 
 def parse_from_overlay(raw: Union[str, bytes, dict]) -> FromOverlay:

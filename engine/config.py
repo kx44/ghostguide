@@ -10,6 +10,7 @@ CASSETTES = CACHE / "cassettes"
 LOGS = CACHE / "logs"
 COST_LOG = LOGS / "costs.jsonl"
 TUTORIALS = ROOT / "tutorials"
+COMPILED = TUTORIALS / "compiled"
 APPMAPS = ROOT / "appmaps"
 
 
@@ -59,6 +60,15 @@ PRICES = {
     SPARK_CONTRIBUTOR: (0.10, 0.20),
     WONDER: (4.00, 20.00),
 }
+
+TRANSCRIBE_USD_PER_HOUR = 0.18
+WEB_SEARCH_USD = 0.0025     # per query the model makes
+
+
+def compile_model() -> str:
+    """Compiling runs on Spark 1.3. COMPILE_MODEL or `compile --tune` picks the Contributor rate while tuning prompts."""
+    return env("COMPILE_MODEL", SPARK)
+
 
 # Meta allows at most 50 images per request.
 MAX_IMAGES = 50

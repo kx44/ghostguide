@@ -279,10 +279,10 @@ def locate_in(step: Step, els: list[dict], editor: Optional[Editor]) -> tuple[Op
     if label.startswith("new file"):
         b, exact = new_file_box(els)
         return b, None, "New File button" if exact else "New File (estimated: hover the folder header)"
-    if t.kind == "field" and "filename" in label:
+    if t.kind == "field" and "filename" in label.replace(" ", ""):
         b = filename_box(els)
         return b, None, "filename box" if b else "filename box not open"
-    if t.kind == "field" and label == "editor":
+    if t.kind == "field" and (label == "editor" or label.endswith(" editor")):
         if editor is None:
             return None, None, "no editor (is editor.accessibilitySupport on?)"
         want = (t.where or "").split(",")[0].strip()

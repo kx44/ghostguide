@@ -3,7 +3,9 @@
     python -m engine play tutorials/youtube-clone-vscode.md          # then start the overlay
     python -m engine play … --record cache/logs/play.jsonl           # also log every message sent
 
-Only binds 127.0.0.1. REST /compile arrives with the compiler (phase 5).
+    python -m engine play                                            # nothing loaded yet: import one from the overlay
+
+Only binds 127.0.0.1. Importing a tutorial (compile_* messages) runs in the background, so the current one keeps playing.
 """
 from __future__ import annotations
 
@@ -12,7 +14,7 @@ import json
 import time
 import traceback
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 from engine.live.player import Player
 from engine.schema import messages as m
@@ -48,10 +50,11 @@ class Recorder:
             self._f.close()
 
 
-async def serve(player: Player, port: int = DEFAULT_PORT, record: Optional[Path] = None,
-                log=print, inputs=None) -> None:
+async def serve(player: Optional[Player], port: int = DEFAULT_PORT, record: Optional[Path] = None,
+                log=print, inputs=None, importer: Optional[Callable] = None, opener: Optional[Callable] = None) -> None:
     """`inputs`: a live/inputs.Recent fed by the input watcher; a click or a pause after typing wakes the
-    step check at once instead of at the next tick."""
+    step check at once instead of at the next tick. `player` may be None until a tutorial is opened.
+    `importer(msg, progress)` compiles and returns a CompileDone; `opener(path)` returns (Player, inputs)."""
     from websockets.asyncio.server import serve as ws_serve
 
     clients: set = set()
@@ -81,7 +84,8 @@ async def serve(player: Player, port: int = DEFAULT_PORT, record: Optional[Path]
         asyncio.run_coroutine_threadsafe(send_all([m.Clear(reason="capture")]), loop).result(timeout=2)
         time.sleep(CAPTURE_SETTLE_S)
 
-    player.before_capture = before_capture
+    if player is not None:
+        player.before_capture = before_capture
 
     key_timer = None
 
@@ -103,15 +107,73 @@ async def serve(player: Player, port: int = DEFAULT_PORT, record: Optional[Path]
     if inputs is not None:
         inputs.listeners.append(on_input)
 
+    compiling = False
+
+    async def start_import(data: dict) -> None:
+        nonlocal compiling
+        if importer is None or compiling:
+            await send_all([m.CompileDone(ok=False, error="A compile is already running." if compiling else "This engine can't compile.")])
+            return
+        compiling = True
+
+        def progress(stage: str, pct: float) -> None:      # compile worker thread
+            asyncio.run_coroutine_threadsafe(send_all([m.CompileProgress(stage=stage, pct=pct)]), loop)
+
+        async def run() -> None:
+            nonlocal compiling
+            try:
+                done = await asyncio.to_thread(importer, m.Import.model_validate(data), progress)
+            except Exception as e:
+                log("  compile failed:\n" + traceback.format_exc())
+                done = m.CompileDone(ok=False, error=f"Something went wrong: {e}")
+            compiling = False
+            log(f"  compile: {'done ' + str(done.path) if done.ok else done.error}")
+            await send_all([done])
+
+        asyncio.create_task(run())
+
+    async def open_tutorial(path: str) -> None:
+        nonlocal player, inputs
+        if opener is None:
+            return
+        async with busy:
+            try:
+                new, new_inputs = await asyncio.to_thread(opener, path)
+            except Exception as e:
+                log("  open failed:\n" + traceback.format_exc())
+                await send_all([m.Toast(text=f"Couldn't open that tutorial: {e}", kind="warn", ms=6000)])
+                return
+            new.before_capture = before_capture
+            player = new
+            if new_inputs is not None and new_inputs is not inputs:
+                inputs = new_inputs
+                inputs.listeners.append(on_input)
+            out = await asyncio.to_thread(player.handle, json.dumps({"type": "hello", "displays": last_displays}))
+        await send_all(out)
+        poke.set()
+
+    last_displays: list = []
+
     async def handler(ws):
         clients.add(ws)
         log(f"overlay connected ({len(clients)} client{'s' if len(clients) > 1 else ''})")
         try:
             async for raw in ws:
                 try:
-                    kind = json.loads(raw).get("type", "?")
+                    data = json.loads(raw)
+                    kind = data.get("type", "?")
                 except ValueError:
-                    kind = "?"
+                    data, kind = {}, "?"
+                if kind == "hello":
+                    last_displays[:] = data.get("displays") or []
+                if kind == "import":
+                    await start_import(data)
+                    continue
+                if kind == "open_tutorial":
+                    await open_tutorial(str(data.get("path")))
+                    continue
+                if player is None:
+                    continue
                 async with busy:
                     out = await asyncio.to_thread(player.handle, raw)
                 s = player.session
@@ -131,7 +193,7 @@ async def serve(player: Player, port: int = DEFAULT_PORT, record: Optional[Path]
             except asyncio.TimeoutError:
                 pass
             event.clear()
-            if not clients:
+            if not clients or player is None:
                 continue
             try:
                 await one_round()
@@ -145,15 +207,20 @@ async def serve(player: Player, port: int = DEFAULT_PORT, record: Optional[Path]
 
     async def locate_round() -> None:
         nonlocal last_how
+        p = player                                                   # a slow round mustn't land on a tutorial opened since
+        if p.locator is None:
+            return
         t0 = time.monotonic()
-        if player.start_open:
+        if p.start_open:
             async with busy:
-                out = await asyncio.to_thread(player.start_round)
+                out = await asyncio.to_thread(p.start_round)
             await send_all(out)
-        found = await asyncio.to_thread(player.locate_current)      # slow; buttons keep working meanwhile
+        found = await asyncio.to_thread(p.locate_current)           # slow; buttons keep working meanwhile
+        if p is not player:
+            return
         async with busy:
-            out = await asyncio.to_thread(player.apply_located, found)
-        how = getattr(player.locator, "last_how", None)
+            out = await asyncio.to_thread(p.apply_located, found)
+        how = getattr(p.locator, "last_how", None)
         if how != last_how:
             log(f"  locate step {found[0] if found else '-'}: {how} ({time.monotonic() - t0:.1f}s)")
             last_how = how
@@ -163,28 +230,30 @@ async def serve(player: Player, port: int = DEFAULT_PORT, record: Optional[Path]
 
     async def check_round() -> None:
         nonlocal last_check
-        checked = await asyncio.to_thread(player.check_round)       # rule checks reuse the locator's dump
+        p = player
+        if p.tracker is None:
+            return
+        checked = await asyncio.to_thread(p.check_round)            # rule checks reuse the locator's dump
+        if p is not player:
+            return
         async with busy:
-            out = player.apply_checked(checked)
-        v = player.tracker.cache.get(checked[0]) if checked else None
+            out = p.apply_checked(checked)
+        v = p.tracker.cache.get(checked[0]) if checked else None
         said = (checked[0], v.result, v.why) if v else None
         if said != last_check:
             log(f"  check step {said[0]}: {said[1]} ({said[2]})" if said else "  check: -")
             last_check = said
         if out:
-            s = player.session
+            s = p.session
             log(f"  ✓ auto → {'finished' if s.finished else f'step {s.current}/{s.of}'}")
         await send_all(out)
 
     async with ws_serve(handler, "127.0.0.1", port, max_size=2 ** 20):
-        log(f"engine listening on ws://127.0.0.1:{port} · {player.session.tutorial.meta.title}")
+        log(f"engine listening on ws://127.0.0.1:{port} · {player.session.tutorial.meta.title if player else 'no tutorial yet: import one'}")
         # Apart, so a slow model call in one never holds up the other: the check must see a dialog open the moment
         # it opens, even while Spark is still looking for the next step's button.
-        tasks = []
-        if player.locator is not None:
-            tasks.append(asyncio.create_task(round_loop(poke_locate, locate_round)))
-        if player.tracker is not None:
-            tasks.append(asyncio.create_task(round_loop(poke_check, check_round)))
+        tasks = [asyncio.create_task(round_loop(poke_locate, locate_round)),
+                 asyncio.create_task(round_loop(poke_check, check_round))]
         try:
             await asyncio.Future()
         finally:

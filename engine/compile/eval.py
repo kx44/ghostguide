@@ -42,6 +42,11 @@ def _value(step: Step) -> str:
     return "" if v is None else str(v)
 
 
+def _is_ours(step: Step) -> bool:
+    """Gold's value is our own suggestion: the source gives none, so no compiled number can be right or wrong."""
+    return "value" not in step.params and "suggested" in step.params
+
+
 def _squeeze(text: str) -> str:
     return re.sub(r"\s+", "", text)
 
@@ -57,7 +62,7 @@ def label_score(c: Step, g: Step, extra: Optional[list[str]] = None) -> float:
 def similarity(c: Step, g: Step, diff: Optional[dict] = None) -> float:
     """0..1: the same action on the same control with the same value. Typed text decides type steps."""
     diff = diff or {}
-    if c.action == "type" and g.action == "type" and (_value(c) or _value(g)):
+    if c.action == "type" and g.action == "type" and (_value(c) or _value(g)) and not _is_ours(g):
         text = difflib.SequenceMatcher(None, _squeeze(_value(c)), _squeeze(_value(g)), autojunk=False).ratio()
         return 0.15 + 0.15 * label_score(c, g) + 0.7 * text
     same = c.action == g.action or c.action in diff.get("actions", [])
@@ -66,11 +71,22 @@ def similarity(c: Step, g: Step, diff: Optional[dict] = None) -> float:
     return 0.3 * same + 0.5 * label + 0.2 * title
 
 
-def align(compiled: list[Step], gold: list[Step], diffs: Optional[dict[int, dict]] = None) -> list[tuple[int, int, float]]:
+def by_meaning(c: Step, g: Step, diff: Optional[dict] = None) -> float:
+    """Canvas steps have no visible name, so their "label" is only one writer's words for a spot ("origin", "centerline").
+    This reads them by what the step says it does, the same as `similarity` for everything else. Reported beside raw
+    and fair, added after the first runs showed how many right steps raw misses for that reason. Never the headline."""
+    canvas = ("canvas", "edge", "face")
+    if c.target.kind in canvas and g.target.kind in canvas and c.action == g.action:
+        words = lambda s: f"{s.title} {s.target.label} {s.target.where or ''}"
+        return 0.5 + 0.5 * min(1.0, 2 * _overlap(words(c), words(g)))
+    return similarity(c, g, diff)
+
+
+def align(compiled: list[Step], gold: list[Step], diffs: Optional[dict[int, dict]] = None, sim_fn=similarity) -> list[tuple[int, int, float]]:
     """Order-keeping alignment: (compiled index, gold index, similarity) for the pairs at or above MATCH_AT."""
     diffs = diffs or {}
     n, m = len(compiled), len(gold)
-    sim = [[similarity(c, g, diffs.get(g.n)) for g in gold] for c in compiled]
+    sim = [[sim_fn(c, g, diffs.get(g.n)) for g in gold] for c in compiled]
     best = [[0.0] * (m + 1) for _ in range(n + 1)]
     for i in range(n - 1, -1, -1):
         for j in range(m - 1, -1, -1):
@@ -103,7 +119,7 @@ def _span(t: Optional[str]) -> Optional[tuple[float, float]]:
 
 
 def _all_typed(steps: list[Step]) -> str:
-    return _squeeze("".join(_value(s) for s in steps if s.action == "type"))
+    return _squeeze("".join(_value(s) for s in steps if s.action == "type" and not _is_ours(s)))
 
 
 @dataclass
@@ -148,7 +164,7 @@ def _details(compiled: list[Step], gold: list[Step], pairs, diffs: dict[int, dic
         out["action"] += c.action == g.action or c.action in d.get("actions", [])
         out["label"] += label_score(c, g, d.get("labels")) >= 0.5
         out["check"] += _overlap(c.check, g.check)
-        if g.action == "type":
+        if g.action == "type" and not _is_ours(g):
             out["typed"] += 1
             vc, vg = _squeeze(_value(c)), _squeeze(_value(g))
             out["typed_exact"] += vc == vg
@@ -201,6 +217,8 @@ def score(compiled: Tutorial, gold: Tutorial, *, differences: Optional[dict] = N
         "verify_share": round(sum(1 for s in compiled.steps if s.verify) / (len(compiled.steps) or 1), 3),
         "pairs": [[compiled.steps[i].n, gold.steps[j].n, round(s, 2)] for i, j, s in pairs],
     }
+    meaning = _numbers(compiled.steps, gold.steps, align(compiled.steps, gold.steps, sim_fn=by_meaning))
+    result["by_meaning"] = meaning.__dict__ | {"line": meaning.line()}
     if differences:
         diffs = {d["step"]: d for d in differences.get("differences", [])}
         fair_pairs = align(compiled.steps, gold.steps, diffs)
@@ -250,6 +268,7 @@ def report(s: dict) -> str:
     out = [f"raw:   {s['raw']['line']}"]
     if "fair" in s:
         out.append(f"fair:  {s['fair']['line']}   (applied to gold steps {s['fair_applied']})")
+    out.append(f"canvas steps by meaning: {s['by_meaning']['line']}")
     d = s["details"]
     out.append(f"among matched: action {d['action']:.2f}, label {d['label']:.2f}, check words {d['check_words']:.2f}, "
                f"source time {d['source_time']}, verify kind {d['verify_same_kind']}, suggested marked {d['suggested_marked']}")

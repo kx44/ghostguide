@@ -151,8 +151,8 @@ def test_cli_record_replays_offline(tmp_path, monkeypatch, capsys):
 
     monkeypatch.setattr(config, "CASSETTES", tmp_path / "cassettes")
     monkeypatch.setattr(config, "COST_LOG", tmp_path / "costs.jsonl")
-    monkeypatch.setattr(client_mod, "_http_send", lambda request: OPENAI_REPLY)
+    monkeypatch.setattr(client_mod, "_http_send", lambda request, **kw: OPENAI_REPLY)
     assert cli.main(["record", "--mode", "record"]) == 0
-    monkeypatch.setattr(client_mod, "_http_send", lambda request: pytest.fail("network used in replay"))
+    monkeypatch.setattr(client_mod, "_http_send", lambda request, **kw: pytest.fail("network used in replay"))
     assert cli.main(["record", "--mode", "replay"]) == 0
     assert "cached=True" in capsys.readouterr().out

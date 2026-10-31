@@ -1,4 +1,4 @@
-"""python -m engine validate|record|spend|play|pin (compile/eval in phase 5)"""
+"""python -m engine validate|record|spend|play|pin|appmap|compile|eval"""
 from __future__ import annotations
 
 import argparse
@@ -230,7 +230,8 @@ def _tracker(tut, app_window: str, args):
     from engine.live.verify import Ladder, Tracker
     from engine.models.glimmer import check_stages
 
-    watcher = Watcher().start()
+    watcher = getattr(args, "_watcher", None) or Watcher().start()     # one per engine, kept when another tutorial opens
+    args._watcher = watcher
     args._inputs = watcher.recent
 
     def dump(window: str) -> list[dict]:
@@ -277,20 +278,63 @@ def _describe(msg) -> str:
 CONSOLE_KEYS = {"n": "next", "b": "back", "s": "skip", "m": "show_me", "d": "do_it"}
 
 
+def _importer(msg, progress):
+    """The import screen's compile: a link, a dropped file or pasted text. Runs on the compile worker thread."""
+    from engine.compile.adapters import SourceBlocked, SourceError
+    from engine.compile.eval import report
+    from engine.compile.passes import CompileError
+    from engine.compile.pipeline import Options, compile_tutorial
+    from engine.models.client import BudgetExceeded, ModelError
+    from engine.schema.messages import CompileDone
+
+    src = msg.url or msg.file or msg.text
+    if not src or not src.strip():
+        return CompileDone(ok=False, error="Paste a link or some text, or drop a file.")
+    try:
+        r = compile_tutorial(src.strip(), Options(start=msg.start or None, end=msg.end or None), progress=progress)
+    except SourceBlocked as e:
+        return CompileDone(ok=False, error=str(e), blocked=True)
+    except (SourceError, CompileError, ModelError) as e:
+        return CompileDone(ok=False, error=str(e))
+    except BudgetExceeded:
+        return CompileDone(ok=False, error="This would pass the spending cap (BUDGET_USD), so it wasn't started.")
+    return CompileDone(ok=True, path=str(r.path), title=r.title, steps=r.steps, cached=r.cached,
+                       cost_usd=round(r.cost_usd, 4), score=report(r.score).splitlines() if r.score else None)
+
+
 def cmd_play(args) -> int:
+    if not args.tutorial:
+        return _serve(None, args)
     player = _load_play(args)
     if args.walk:
         return _walk(player, Path(args.walk), args.every, args.displays)
     if args.console:
         return _console(player)
+    return _serve(player, args)
+
+
+def _serve(player, args) -> int:
     import asyncio
 
     from engine.server import serve
-    args._player_box = lambda n: (lambda b: (b.x, b.y, b.w, b.h) if b else None)(player.target(n)[0])
+
+    def box_of(n):
+        b = current["player"].target(n)[0]
+        return (b.x, b.y, b.w, b.h) if b else None
+
+    current = {"player": player}
+    args._player_box = box_of
+
+    def opener(path: str):
+        """The import screen's Play: this file, from its saved place, on the same watcher."""
+        args.tutorial = path
+        current["player"] = _load_play(args)
+        return current["player"], getattr(args, "_inputs", None)
+
     print("start the overlay: cd overlay && npm start   (Ctrl+C here to stop)")
     try:
         asyncio.run(serve(player, port=args.port, record=Path(args.record) if args.record else None,
-                          inputs=getattr(args, "_inputs", None)))
+                          inputs=getattr(args, "_inputs", None), importer=_importer, opener=opener))
     except KeyboardInterrupt:
         pass
     return 0
@@ -389,11 +433,49 @@ def cmd_appmap(args) -> int:
     return 0
 
 
-def _later(phase: int):
-    def run(args) -> int:
-        print(f"`{args.cmd}` arrives in phase {phase} (see 05 Architecture, Build phases).", file=sys.stderr)
-        return 2
-    return run
+def cmd_compile(args) -> int:
+    """A tutorial source → tutorials/compiled/*.md, scored when it has a gold file. Replies are recorded, so changing
+    one prompt pays only for what that prompt touches."""
+    from engine.compile.adapters import SourceError
+    from engine.compile.eval import report
+    from engine.compile.passes import CompileError
+    from engine.compile.pipeline import Options, compile_tutorial
+    from engine.models.client import BudgetExceeded, ModelClient, ModelError
+
+    mode = args.mode or ("replay" if config.model_mode() == "replay" else "record")
+    client = ModelClient(mode=mode)
+    model = args.model or (config.SPARK_CONTRIBUTOR if args.tune else None)
+    opts = Options(start=args.start, end=args.end, narration=args.narration, max_frames=args.max_frames, model=model,
+                   enrich=not args.no_enrich, fresh=args.fresh, out=Path(args.out) if args.out else None,
+                   gold=Path(args.gold) if args.gold else None, version=args.version)
+    last = [""]
+
+    def progress(stage: str, pct: float) -> None:
+        if stage != last[0]:
+            print(f"[{pct:4.0%}] {stage}", flush=True)
+            last[0] = stage
+
+    try:
+        r = compile_tutorial(args.source, opts, client=client, progress=progress, log=print)
+    except (SourceError, CompileError, BudgetExceeded, ModelError) as e:
+        print(f"compile failed: {e}", file=sys.stderr)
+        return 1
+    print(f"{r.path}: {r.steps} steps, model {r.model}" + (" (from cache)" if r.cached else f", ${r.cost_usd:.4f} this run"))
+    for w in r.warnings:
+        print(f"  warn: {w}")
+    if r.score:
+        print(report(r.score))
+    print(f"total logged spend: ${client.spent_usd():.4f} of ${client.budget_usd:.2f}")
+    return 0
+
+
+def cmd_eval(args) -> int:
+    """Score a compiled file against a gold file. No model, so it's free and gives the same answer every time."""
+    from engine.compile import eval as ev
+
+    s = ev.score_files(args.compiled, args.gold)
+    print(json.dumps(s, indent=1, ensure_ascii=False) if args.json else ev.report(s))
+    return 0
 
 
 def main(argv=None) -> int:
@@ -416,7 +498,7 @@ def main(argv=None) -> int:
     s.set_defaults(func=cmd_spend)
 
     pl = sub.add_parser("play", help="play a tutorial on screen: engine side (start the overlay too)")
-    pl.add_argument("tutorial")
+    pl.add_argument("tutorial", nargs="?", help="leave out to start empty and import one from the overlay")
     pl.add_argument("--pins", help="pinned boxes (default cache/pins/<tutorial>.yaml)")
     pl.add_argument("--port", type=int, default=8765)
     pl.add_argument("--record", help="also write every message sent to this .jsonl (overlay --replay format)")
@@ -453,10 +535,27 @@ def main(argv=None) -> int:
     am.add_argument("--source", help="add: the docs page the fact comes from")
     am.set_defaults(func=cmd_appmap)
 
-    for name, phase in (("compile", 5), ("eval", 5)):
-        p = sub.add_parser(name, help=f"phase {phase}")
-        p.add_argument("rest", nargs="*")
-        p.set_defaults(func=_later(phase))
+    c = sub.add_parser("compile", help="turn a tutorial (link, video, saved page or text file) into a base .md file")
+    c.add_argument("source")
+    c.add_argument("--start", help="video: where the tutorial starts, e.g. 01:28")
+    c.add_argument("--end", help="video: where it ends, e.g. 10:25")
+    c.add_argument("--narration", choices=("auto", "captions", "transcribe"), default="auto")
+    c.add_argument("--max-frames", type=int, default=150, help="video: most keyframes to read")
+    c.add_argument("--tune", action="store_true", help="use Spark 1.3 Contributor (cheaper; Meta may train on what's sent)")
+    c.add_argument("--model", help="overrides the model (default COMPILE_MODEL, else Spark 1.3)")
+    c.add_argument("--no-enrich", action="store_true", help="skip the docs lookup")
+    c.add_argument("--fresh", action="store_true", help="ignore the compile cache and the kept video reading")
+    c.add_argument("--out", help="output file (default tutorials/compiled/)")
+    c.add_argument("--gold", help="gold file to score against (default: found by the source's URL)")
+    c.add_argument("--version", help="the app version to look up in its docs")
+    c.add_argument("--mode", choices=config.MODEL_MODES, help="default record; replay spends nothing")
+    c.set_defaults(func=cmd_compile)
+
+    e = sub.add_parser("eval", help="score a compiled tutorial against a gold file (free)")
+    e.add_argument("compiled")
+    e.add_argument("gold")
+    e.add_argument("--json", action="store_true")
+    e.set_defaults(func=cmd_eval)
 
     args = ap.parse_args(argv)
     for stream in (sys.stdout, sys.stderr):

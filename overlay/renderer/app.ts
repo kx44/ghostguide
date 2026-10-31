@@ -126,7 +126,7 @@ function onMessage(r: Routed) {
       if (r.primary) { bar.render(m, rail.open); rail.render(m); }
       break;
     default:
-      break;     // compile_progress (phase 5)
+      break;     // compile_progress, compile_done: main sends those to the import window
   }
 }
 

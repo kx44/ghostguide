@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<title>GhostGuide: import a tutorial</title>
+<style>
+  :root { --bg:#17151D; --fg:#FFFFFF; --mute:rgba(255,255,255,.62); --line:rgba(255,255,255,.28); --acc:#C4B5FD; --on-acc:#17151D; --warn:#FDBA74; --ok:#A7E3A0; --field:#221F2B; }
+  * { box-sizing:border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:13px/1.45 Inter, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+  main { padding:18px 20px; display:flex; flex-direction:column; gap:12px; height:100%; }
+  h1 { font-size:15px; font-weight:500; margin:0; }
+  label { display:block; color:var(--mute); font-size:12px; margin-bottom:4px; }
+  input, textarea { width:100%; font:inherit; color:var(--fg); background:var(--field); border:1px solid var(--line); border-radius:8px; padding:7px 10px; outline:none; }
+  input:focus, textarea:focus { border-color:var(--acc); }
+  textarea { height:64px; resize:none; }
+  .times { display:flex; gap:10px; }
+  .times div { flex:1; }
+  .drop { border:1px dashed var(--line); border-radius:8px; padding:10px; text-align:center; color:var(--mute); cursor:pointer; }
+  .drop.over { border-color:var(--acc); color:var(--fg); }
+  .acts { display:flex; gap:8px; margin-top:auto; align-items:center; }
+  button { font:inherit; font-size:13px; padding:6px 14px; border:1px solid var(--line); border-radius:8px; background:transparent; color:var(--fg); cursor:pointer; }
+  button.pri { background:var(--acc); color:var(--on-acc); border-color:var(--acc); }
+  button:disabled { opacity:.45; cursor:default; }
+  .bar { height:4px; border-radius:2px; background:var(--field); overflow:hidden; }
+  .bar i { display:block; height:100%; width:0; background:var(--acc); transition:width .3s; }
+  .stage { color:var(--mute); font-size:12px; min-height:18px; }
+  .err { color:var(--warn); white-space:pre-wrap; }
+  .done b { display:block; font-size:14px; font-weight:500; margin-bottom:2px; }
+  .score { margin-top:6px; font-size:12px; color:var(--mute); white-space:pre-wrap; max-height:150px; overflow:auto; }
+  .ok { color:var(--ok); }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Import a tutorial</h1>
+  <section id="form" style="display:flex;flex-direction:column;gap:12px;flex:1">
+    <div><label for="link">Link to a video or article</label><input id="link" type="text" placeholder="https://" spellcheck="false"></div>
+    <div class="times" id="times">
+      <div><label for="start">Video starts at (optional)</label><input id="start" type="text" placeholder="01:28" spellcheck="false"></div>
+      <div><label for="end">Ends at (optional)</label><input id="end" type="text" placeholder="10:25" spellcheck="false"></div>
+    </div>
+    <div class="drop" id="drop">Drop a saved web page, video or text file here, or click to choose</div>
+    <div><label for="text">Or paste the tutorial's text</label><textarea id="text" spellcheck="false"></textarea></div>
+    <div class="err" id="err" hidden></div>
+    <div class="acts"><button class="pri" id="go">Compile</button><button id="close">Close</button></div>
+  </section>
+  <section id="work" style="display:flex;flex-direction:column;gap:8px;flex:1" hidden>
+    <div class="bar"><i id="fill"></i></div>
+    <div class="stage" id="stage">Starting</div>
+    <div class="done" id="result" hidden></div>
+    <div class="err" id="err2" hidden></div>
+    <div class="acts"><button class="pri" id="play" hidden>Play it</button><button id="again" hidden>Import another</button><button id="close2">Close</button></div>
+  </section>
+</main>
+<script src="importScreen.js"></script>
+</body>
+</html>
