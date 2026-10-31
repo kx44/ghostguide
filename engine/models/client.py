@@ -10,9 +10,10 @@ the call's worst case (input from the request size, output = max_tokens) and ref
 spend plus that estimate would pass BUDGET_USD (default $4). Actual cost is logged from the response's
 usage to cache/logs/costs.jsonl, which is the running total across runs.
 
-Wire format: OpenAI-style chat completions (`messages`, `tools`, `max_tokens`). The parser also reads
-Llama-API-style replies (`completion_message`, `metrics`). Confirm the endpoint against dev.meta.ai
-when credits land and set META_BASE_URL / META_CHAT_PATH.
+Wire format: OpenAI-style chat completions at https://api.meta.ai/v1/chat/completions (dev.meta.ai docs,
+confirmed 31 Oct). The parser also reads Llama-API-style replies (`completion_message`, `metrics`).
+Muse Spark always reasons and the reasoning counts toward max_tokens, so short answers need
+`reasoning_effort` ("minimal" / "low") and some headroom in max_tokens, or the reply can come back empty.
 """
 from __future__ import annotations
 
@@ -193,7 +194,8 @@ class ModelClient:
     # ---- calls -------------------------------------------------------------------------------
     def chat(self, model: str, messages: list[dict], *, max_tokens: int, tools: Optional[list[dict]] = None,
              tool_choice: Optional[Any] = None, temperature: Optional[float] = 0.0,
-             response_format: Optional[dict] = None, tag: str = "") -> Reply:
+             response_format: Optional[dict] = None, reasoning_effort: Optional[str] = None,
+             tag: str = "") -> Reply:
         if not 1 <= max_tokens <= MAX_TOKENS_CEILING:
             raise ValueError(f"max_tokens must be 1..{MAX_TOKENS_CEILING} (it bounds the budget estimate)")
         if _count_images(messages) > config.MAX_IMAGES:
@@ -208,6 +210,8 @@ class ModelClient:
             request["temperature"] = temperature
         if response_format is not None:
             request["response_format"] = response_format
+        if reasoning_effort is not None:
+            request["reasoning_effort"] = reasoning_effort
         key = request_key(request)
 
         if self.mode == "replay" or (self.mode == "record" and self.cassettes.has(key)):
@@ -259,7 +263,7 @@ def _http_send(request: dict, retries: int = 2) -> dict:
     key = config.env("META_API_KEY")
     if not key:
         raise ModelError("META_API_KEY is not set (needed for MODEL_MODE=live/record)")
-    url = config.env("META_BASE_URL", "https://api.llama.com/v1").rstrip("/") + config.env("META_CHAT_PATH", "/chat/completions")
+    url = config.env("META_BASE_URL", "https://api.meta.ai/v1").rstrip("/") + config.env("META_CHAT_PATH", "/chat/completions")
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     for attempt in range(retries + 1):
         try:

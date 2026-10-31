@@ -17,7 +17,8 @@ _INT = {"type": "integer"}
 _CONF = {"type": "string", "enum": ["high", "low"]}
 
 POINT_AT = _fn(
-    "point_at", "Point at the on-screen control that matches the description. Coordinates are screenshot pixels.",
+    "point_at", "Point at the on-screen control that matches the description. x, y = the center of the control; "
+    "w, h = its width and height. Screenshot pixels, (0, 0) = top-left corner.",
     {"x": _INT, "y": _INT, "w": _INT, "h": _INT, "label_seen": {"type": "string"}, "confidence": _CONF},
     ["x", "y", "w", "h", "confidence"])
 DRAW_LINE = _fn(
@@ -38,7 +39,7 @@ WEB_SEARCH = {"type": "web_search"}   # Meta built-in tool, used by enrichment (
 
 @dataclass
 class PointAt:
-    x: int
+    x: int          # center of the control (Spark answers centers; tested 31 Oct), screenshot px
     y: int
     w: int
     h: int

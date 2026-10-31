@@ -138,4 +138,4 @@ def test_generic_uia_uses_aliases_from_the_app_map(tmp_path):
 def test_route_and_vision_mapping():
     assert menu.route(VS.step(7)) == {"path": ["index.html (right-click)", "Open with Live Server"], "shortcut": "Alt+L Alt+O"}
     assert menu.route(VS.step(2)) is None
-    assert to_screen(PointAt(x=64, y=32, w=10, h=10, confidence="high"), 0.5, (100, 50)) == Box(x=228, y=114, w=20, h=20)
+    assert to_screen(PointAt(x=64, y=32, w=10, h=10, confidence="high"), 0.5, (100, 50)) == Box(x=218, y=104, w=20, h=20)

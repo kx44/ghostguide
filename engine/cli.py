@@ -39,6 +39,7 @@ def cmd_record(args) -> int:
         model=args.model,
         messages=[{"role": "user", "content": args.prompt}],
         max_tokens=args.max_tokens,
+        reasoning_effort=args.effort,
         tag="cli-record",
     )
     print(f"mode={client.mode} model={args.model} cost=${reply.cost_usd:.6f} cached={reply.from_cassette}")
@@ -326,7 +327,8 @@ def main(argv=None) -> int:
     r = sub.add_parser("record", help="make one model call (records it in record mode, replays it in replay mode)")
     r.add_argument("--model", default=config.SPARK)
     r.add_argument("--prompt", default="Reply with exactly: GhostGuide ready.")
-    r.add_argument("--max-tokens", type=int, default=16)
+    r.add_argument("--max-tokens", type=int, default=256, help="reasoning counts toward this too")
+    r.add_argument("--effort", default="minimal", help="reasoning_effort (Spark always reasons)")
     r.add_argument("--mode", choices=config.MODEL_MODES, default=None, help="overrides MODEL_MODE")
     r.set_defaults(func=cmd_record)
 
