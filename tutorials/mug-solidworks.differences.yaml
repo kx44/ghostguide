@@ -1,0 +1,21 @@
+# Where the gold mug (corrected for SOLIDWORKS 2026) goes beyond its 2016 source article.
+# Used only for the "source-fair" score; the raw score against all 45 gold steps is always shown next to it.
+# Frozen before the first compile. Any later change must be logged in the phase note with its reason.
+gold: mug-solidworks.md
+targets: {steps_f1_raw: 0.70, steps_f1_fair: 0.80}
+differences:
+  - step: 6
+    why: "The article clicks up, then back down; 2026 needs one line through the origin. One line or two both follow a source."
+    extra_ok: {action: draw_line}          # a second draw_line right next to this step isn't counted as extra
+  - step: 10
+    why: "The article only says to make sure the line is selected; a separate pick step is our 2026 addition."
+    missing_ok: true                       # credit if present, no penalty if missing
+  - step: 17
+    why: "The article selects the profile's outer edge before Revolve; 2026 wants the sketch selected in the tree."
+    labels: [outer edge, profile, sketch]  # following the article's selection counts as this step
+    actions: [click, pick]
+  - step: 29
+    why: "The article goes through the Insert menu; 2026 folds that away, so the gold route uses the ribbon. Same control."
+    actions: [click, menu_path]
+    route_free: true
+suggested: "The article gives no dimensions: a suggested value is scored on being marked as ours, never on the number."
