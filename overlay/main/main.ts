@@ -103,7 +103,6 @@ function setKeyBar(show: boolean) {
   settings = { ...settings, keyBar: show };
   saveSettings(SETTINGS, settings);
   for (const w of wins.values()) if (w.ready) sendShell(w);
-  if (!show) route({ type: "toast", text: "Shortcuts hidden. Ctrl+Alt+K or the tray icon brings them back.", kind: "ok", ms: 3500 });
   tray?.update();
 }
 
@@ -259,6 +258,7 @@ app.whenReady().then(() => {
     next: () => link?.send({ type: "next" }),
     back: () => link?.send({ type: "back" }),
     source: toggleSource,
+    scheme: () => link?.send({ type: "toggle_scheme" }),
     importTutorial: openImport,
     setKeyBar,
     quit: () => app.quit(),

@@ -1,9 +1,9 @@
-// What the person chose, kept between runs: only whether the shortcut bar shows, for now.
+// What the person chose, kept between runs: only whether the shortcuts panel is open, for now.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
 export interface Settings { keyBar: boolean }
-const DEFAULTS: Settings = { keyBar: true };
+const DEFAULTS: Settings = { keyBar: false };     // the shortcuts panel stays closed until you open it
 
 /** Anything missing or unreadable is the default: a bad settings file must never stop the overlay. */
 export function parseSettings(text: string | undefined): Settings {

@@ -18,21 +18,21 @@ await build({
 const L = await import(pathToFileURL(out));
 process.on("exit", () => rmSync(dir, { recursive: true, force: true }));
 
-test("settings: the bar shows by default, and a bad file changes nothing", () => {
-  assert.deepEqual(L.parseSettings(undefined), { keyBar: true });
-  assert.deepEqual(L.parseSettings("{not json"), { keyBar: true });
-  assert.deepEqual(L.parseSettings('{"keyBar":"no"}'), { keyBar: true });
-  assert.deepEqual(L.parseSettings("null"), { keyBar: true });
-  assert.deepEqual(L.parseSettings('{"keyBar":false}'), { keyBar: false });
+test("settings: the panel starts closed, and a bad file changes nothing", () => {
+  assert.deepEqual(L.parseSettings(undefined), { keyBar: false });
+  assert.deepEqual(L.parseSettings("{not json"), { keyBar: false });
+  assert.deepEqual(L.parseSettings('{"keyBar":"no"}'), { keyBar: false });
+  assert.deepEqual(L.parseSettings("null"), { keyBar: false });
+  assert.deepEqual(L.parseSettings('{"keyBar":true}'), { keyBar: true });
 });
 
 test("settings: the choice survives a restart", () => {
   const p = join(dir, "deep", "er", "s.json");
-  assert.equal(L.loadSettings(p).keyBar, true);
-  L.saveSettings(p, { keyBar: false });
   assert.equal(L.loadSettings(p).keyBar, false);
-  writeFileSync(p, "garbage");
+  L.saveSettings(p, { keyBar: true });
   assert.equal(L.loadSettings(p).keyBar, true);
+  writeFileSync(p, "garbage");
+  assert.equal(L.loadSettings(p).keyBar, false);
 });
 
 test("hotkeys: one job each, all Ctrl+Alt, nothing that eats typing", () => {
@@ -50,7 +50,7 @@ test("hotkeys: the pin keys are for development only", () => {
 
 test("hotkey bar: shows every key a person has, marks one another app holds", () => {
   const hints = L.keyHints(["Control+Alt+O"]);
-  assert.deepEqual(hints.map(h => h.key), ["→", "←", "S", "G", "O", "H", "I", "K", "Q"]);
+  assert.deepEqual(hints.map(h => h.key), ["→", "←", "S", "G", "O", "H", "D", "I", "K", "Q"]);
   assert.deepEqual(hints.filter(h => h.taken).map(h => h.label), ["Source"]);
 });
 
@@ -95,7 +95,7 @@ test("source window: its title is the one the engine leaves out", () => assert.o
 
 const state = o => ({ type: "state", tutorial: "T", current: 3, of: 9, hidden: false, finished: false, titles: [], statuses: [], scheme: "dark", ...o });
 const noop = () => {};
-const actions = { hideResume: noop, next: noop, back: noop, source: noop, importTutorial: noop, setKeyBar: noop, quit: noop };
+const actions = { hideResume: noop, next: noop, back: noop, source: noop, scheme: noop, importTutorial: noop, setKeyBar: noop, quit: noop };
 const item = (menu, label) => menu.find(i => (i.label ?? "").startsWith(label));
 
 test("tray: says where you are", () => {
@@ -124,7 +124,7 @@ test("tray: the menu matches what can be done now", () => {
   const paused = L.trayMenu({ engineUp: true, state: state({ hidden: true }), keyBar: false, sourceOpen: false }, actions);
   assert.ok(item(paused, "Resume"));
   assert.equal(item(paused, "Next").enabled, false);
-  assert.equal(item(paused, "Show the shortcut bar").checked, false);
+  assert.equal(item(paused, "Show the shortcuts").checked, false);
 
   const first = L.trayMenu({ engineUp: true, state: state({ current: 1 }), keyBar: true, sourceOpen: true }, actions);
   assert.ok(item(first, "Hide"));

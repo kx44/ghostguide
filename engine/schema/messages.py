@@ -310,13 +310,18 @@ class SourceFile(_Msg):
     path: str
 
 
+class ToggleScheme(_Simple):
+    """Force the other colours, or go back to choosing them from the app behind the target."""
+    type: Literal["toggle_scheme"] = "toggle_scheme"
+
+
 FromOverlay = Union[Hello, ShowMeReq, DoIt, Next, Back, Skip, Hide, Resume, Jump, PinReq, Unpin, Import, OpenTutorial, StartOk,
-                    SourceReq, SourceFile]
+                    SourceReq, SourceFile, ToggleScheme]
 
 TO_OVERLAY_TYPES = ("guide", "clear", "state", "toast", "show_me", "mark", "start_check", "compile_progress", "compile_done",
                     "source_view")
 FROM_OVERLAY_TYPES = ("hello", "show_me", "do_it", "next", "back", "skip", "hide", "resume", "jump", "pin", "unpin", "import",
-                      "open_tutorial", "start_ok", "source", "source_file")
+                      "open_tutorial", "start_ok", "source", "source_file", "toggle_scheme")
 
 
 def parse_from_overlay(raw: Union[str, bytes, dict]) -> FromOverlay:

@@ -1,4 +1,4 @@
-// Control bar (primary display, bottom-right): Back · step n/N (opens the step rail) · Skip · Next · Source · Hide.
+// Control bar (primary display, bottom-right): Back · step n/N (opens the step rail) · Skip · Next · Source · Keys · Hide.
 // Every button has a global hotkey too (main/hotkeys.ts), since the overlay never takes focus.
 import type { FromOverlay, StateMsg } from "../../shared/messages";
 import { el, esc } from "../dom";
@@ -7,6 +7,7 @@ export class ControlBar {
   private bar?: HTMLDivElement;
   onToggleRail: () => void = () => {};
   onSource: () => void = () => {};
+  onKeys: () => void = () => {};
 
   constructor(private layer: HTMLElement, private send: (m: FromOverlay) => void) {}
 
@@ -25,6 +26,7 @@ export class ControlBar {
         `<button data-a="skip" title="Skip (Ctrl+Alt+S)">Skip »</button>` +
         `<button data-a="next" title="Next (Ctrl+Alt+→)">Next ›</button><span class="sep"></span>` +
         `<button data-a="source" title="This step in the original tutorial (Ctrl+Alt+O)">Source</button>` +
+        `<button data-a="keys" title="The shortcuts (Ctrl+Alt+K)">Keys</button>` +
         `<button data-a="hide" title="Hide (Ctrl+Alt+H)">Hide</button>`;
     }
     this.bar = el(this.layer, "bar-ctl hit", "", html);
@@ -32,6 +34,7 @@ export class ControlBar {
       const a = b.dataset.a!;
       if (a === "rail") this.onToggleRail();
       else if (a === "source") this.onSource();
+      else if (a === "keys") this.onKeys();
       else this.send({ type: a } as FromOverlay);
     }));
   }

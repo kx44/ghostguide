@@ -285,6 +285,20 @@ def test_source_doesnt_move_the_step_or_call_a_model():
     assert p.session.current == 1 and p.session.statuses[0] == "pending"
 
 
+def test_ctrl_alt_d_forces_the_other_colours_then_goes_back_to_automatic():
+    p = _player()
+    p._scheme_fn = lambda box: ("dark", 0.1)
+    p.handle({"type": "hello"})
+    assert p.scheme == "dark"
+    out = p.handle({"type": "toggle_scheme"})
+    assert p.scheme == "light" and next(x for x in out if isinstance(x, m.Guide)).scheme == "light"
+    assert "automatic" in next(x for x in out if isinstance(x, m.Toast)).text
+    p.handle({"type": "next"})
+    assert p.scheme == "light"                  # it stays that way on the next step
+    out = p.handle({"type": "toggle_scheme"})
+    assert p.scheme == "dark" and next(x for x in out if isinstance(x, m.Guide)).scheme == "dark"
+
+
 def test_messages_on_the_wire():
     v = m.SourceView(kind="text", n=1, of=2, title="t", tutorial="T", blocks=[m.SourceBlock(kind="text", text="a")])
     assert json.loads(m.dumps(v))["blocks"] == [{"kind": "text", "text": "a"}]

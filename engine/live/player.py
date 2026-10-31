@@ -364,6 +364,8 @@ class Player:
             return self._do_it()
         if t in ("source", "source_file"):
             return self._source(msg)
+        if t == "toggle_scheme":
+            return self._toggle_scheme()
         if t == "start_ok":
             self.start_open = False
             return self.current()
@@ -395,6 +397,17 @@ class Player:
             s.checker = None
             return self._after(ev)
         return []
+
+    def _toggle_scheme(self) -> list[m._Msg]:
+        """Ctrl+Alt+D: the other colours from now on; again: back to matching the app behind each target."""
+        if self.scheme_override:
+            self.scheme_override = None
+            text = "Colours: automatic, matching the app."
+        else:
+            self.scheme_override = "light" if self.scheme == "dark" else "dark"
+            text = f"Colours: {self.scheme_override}. Ctrl+Alt+D goes back to automatic."
+        self._scheme_cache.clear()
+        return self.current() + [m.Toast(text=text, ms=2500)]
 
     def _source(self, msg) -> list[m._Msg]:
         """The current step's source; the last step's once the tutorial has finished."""

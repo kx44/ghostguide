@@ -90,6 +90,7 @@ export function replaySteps(path: string, onMsg: (m: ToOverlay) => void): Link {
         case "resume": hidden = false; show(); break;
         case "show_me": { const sm = frames[i]?.showMe; if (sm && !hidden) onMsg(sm); break; }
         case "hello": break;
+        case "toggle_scheme": onMsg({ type: "toast", text: "Light / dark needs the engine (replay only plays the recording).", kind: "warn", ms: 2000 }); break;
         case "source": if (!msg.follow) onMsg({ type: "toast", text: "The source needs the engine (replay only plays the recording).", kind: "warn", ms: 2000 }); break;
         default: onMsg({ type: "toast", text: `${msg.type} needs the engine (replay only plays the recording).`, kind: "warn", ms: 2000 });
       }

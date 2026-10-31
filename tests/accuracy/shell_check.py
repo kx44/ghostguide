@@ -1,10 +1,11 @@
-"""The source window, the shortcut bar and the tray, on the real overlay and engine (Windows). No model calls, no GPU.
+"""The source window, the shortcuts panel and the tray, on the real overlay and engine (Windows). No model calls, no GPU.
 Takes the mouse and keyboard for about 2 minutes. It looks inside the windows over Chromium's debug port.
 
 A small test window stands in for the app. It counts its clicks and keeps what's typed, which is how this knows that
 focus never left it and that clicks reached it:
 
-  bar       shows every key; a click on it reaches the app; × hides it; a restart remembers; Ctrl+Alt+K brings it back
+  panel     closed at first; Ctrl+Alt+K or Keys opens it above the control bar; clicks go through it; a restart remembers
+  colours   Ctrl+Alt+D flips light and dark, then goes back to automatic
   video     Ctrl+Alt+O opens the clip at the step's time without taking focus; it plays and stops at the step's end;
             the step moving on cues the next clip; the card's button and the control bar's close and open it
   text      a saved page opens at the step's section; a page never read is fetched once; a refusing site is explained
@@ -39,14 +40,14 @@ VIDEO = "tutorials/youtube-clone-vscode.md"
 MUG = "tutorials/mug-solidworks.md"
 VENV = "tutorials/compiled/12-virtual-environments-and-packages.compiled.md"
 IDLE_S = 45
-VK = {"right": 0x27, "left": 0x25, "o": 0x4F, "k": 0x4B, "q": 0x51}
+VK = {"right": 0x27, "left": 0x25, "o": 0x4F, "k": 0x4B, "q": 0x51, "d": 0x44}
 u32 = ctypes.windll.user32 if sys.platform == "win32" else None
 
 PROBE_APP = r'''
 import sys, json, tkinter as tk
 out = sys.argv[1]
 r = tk.Tk(); r.title("GG shell probe"); r.attributes("-fullscreen", False)
-w, h = r.winfo_screenwidth(), r.winfo_screenheight(); r.geometry(f"{w//2}x{h-85}+0+0")
+w, h = r.winfo_screenwidth(), r.winfo_screenheight(); r.geometry(f"{w}x{h-85}+0+0")
 t = tk.Text(r, font=("Consolas", 20)); t.pack(fill="both", expand=True); t.focus_set()
 clicks = [0]
 def save(_=None):
@@ -277,42 +278,58 @@ def main(argv=None) -> int:
         record("no key is held by another app", "hotkeys taken" not in taken,
                taken=[l for l in taken.splitlines() if "hotkeys taken" in l])
 
-        # ---------- the shortcut bar ----------
-        text = ov.js("document.querySelector('.keybar')?.innerText") or ""
-        record("bar: shows at first, with every key", all(w in text for w in ("Next", "Back", "Skip", "Show me", "Source", "Hide", "Import", "Keys", "Quit")), text=text.replace("\n", " "))
-        shot("1-bar")
-        bar = rect_of(ov, ".keybar")
-        x_btn = rect_of(ov, ".keybar .x")
-        at = (bar["x"] + bar["w"] * 0.4, bar["y"] + bar["h"] / 2)
+        # ---------- the shortcuts panel ----------
+        panel = ".keypanel"
+        record("panel: closed at first", ov.js(f"!document.querySelector('{panel}')"))
+        hotkey("k")
+        wait(lambda: ov.js(f"!!document.querySelector('{panel}')"), 3)
+        text = ov.js(f"document.querySelector('{panel}')?.innerText") or ""
+        record("panel: Ctrl+Alt+K opens it, with every key", all(w in text for w in ("Next", "Back", "Skip", "Show me", "Source", "Hide", "Light / dark", "Import", "shortcuts", "Quit")), text=text.replace("\n", " "))
+        time.sleep(0.4)      # let it finish fading in
+        shot("1-panel")
+        box, ctl = rect_of(ov, panel), rect_of(ov, ".bar-ctl")
+        record("panel: stands right above the control bar", box["y"] + box["h"] <= ctl["y"] and abs(box["x"] + box["w"] - ctl["x"] - ctl["w"]) < 4, panel=box, control=ctl)
+        record("panel: one key per line", box["h"] > box["w"])
         before = probe()["clicks"]
-        real_click(*at)
-        record("bar: a click on it reaches the app under it", probe()["clicks"] == before + 1 and front_is_probe(), clicks=probe()["clicks"] - before)
-        record("bar: typing stays in the app", types_into_probe())
+        real_click(box["x"] + box["w"] / 2, box["y"] + box["h"] / 2)
+        record("panel: a click on it reaches the app under it", probe()["clicks"] == before + 1 and front_is_probe(), clicks=probe()["clicks"] - before)
+        record("panel: typing stays in the app", types_into_probe())
+        record("panel: the choice is saved", json.loads(settings.read_text(encoding="utf-8")).get("keyBar") is True)
+        click_el(ov, ".bar-ctl button[data-a=rail]")
+        wait(lambda: ov.js("!!document.querySelector('.rail')"), 3)
+        time.sleep(0.3)
+        side, rail = rect_of(ov, panel), rect_of(ov, ".rail")
+        record("panel: moves aside for the step list", side["x"] + side["w"] <= rail["x"], panel=side, rail=rail)
+        click_el(ov, ".bar-ctl button[data-a=rail]")
+        click_el(ov, ".bar-ctl button[data-a=keys]")
         park()
-        ctl = rect_of(ov, ".bar-ctl")
-        record("bar: clear of the control bar", bar["x"] + bar["w"] < ctl["x"], bar=bar, control=ctl)
-
-        click_el(ov, ".keybar .x")
-        park()
-        gone = wait(lambda: ov.js("!document.querySelector('.keybar')"), 3)
-        record("bar: × hides it without taking focus", bool(gone) and front_is_probe() and types_into_probe())
-        record("bar: the choice is saved", json.loads(settings.read_text(encoding="utf-8")).get("keyBar") is False)
-        hotkey("k")
-        back = wait(lambda: ov.js("!!document.querySelector('.keybar')"), 3)
-        hotkey("k")
-        again = wait(lambda: ov.js("!document.querySelector('.keybar')"), 3)
-        record("bar: Ctrl+Alt+K brings it back and hides it", bool(back) and bool(again))
+        record("panel: Keys on the control bar closes it, focus stays", bool(wait(lambda: ov.js(f"!document.querySelector('{panel}')"), 3)) and front_is_probe() and types_into_probe())
         ov.close()
         rig.start_overlay()
         time.sleep(2.0)
         ov = overlay_page()
         bring_probe()
-        record("bar: stays hidden after a restart", bool(ov) and ov.js("!document.querySelector('.keybar')"))
+        record("panel: stays closed after a restart", bool(ov) and ov.js(f"!document.querySelector('{panel}')"))
         hotkey("k")
-        wait(lambda: ov.js("!!document.querySelector('.keybar')"), 3)
+        wait(lambda: ov.js(f"!!document.querySelector('{panel}')"), 3)
+        ov.close()
+        rig.start_overlay()
+        time.sleep(2.0)
+        ov = overlay_page()
+        bring_probe()
+        record("panel: and open, if you left it open", bool(ov) and bool(wait(lambda: ov.js(f"!!document.querySelector('{panel}')"), 5)))
+        scheme = "document.getElementById('root').dataset.scheme"
+        wait(lambda: ov.js("!!document.querySelector('.card')"), 15)
+        s0 = ov.js(scheme)
+        hotkey("d")
+        s1 = wait(lambda: (lambda v: v if v != s0 else None)(ov.js(scheme)), 4)
+        shot("1b-scheme")
+        hotkey("d")
+        s2 = wait(lambda: (lambda v: v if v == s0 else None)(ov.js(scheme)), 6)
+        record("Ctrl+Alt+D: flips the colours, then back to automatic", bool(s1) and bool(s2) and front_is_probe(), was=s0, flipped=s1, back=s2)
         auto.MoveTo(u32.GetSystemMetrics(0) * 3 // 4, u32.GetSystemMetrics(1) // 10, moveSpeed=4)     # off every card and bar
         time.sleep(0.3)
-        record("bar: click-through flag intact over the rest of the overlay", bool(u32.GetWindowLongW(overlay_win().hwnd, -20) & 0x20))
+        record("click-through flag intact over the rest of the overlay", bool(u32.GetWindowLongW(overlay_win().hwnd, -20) & 0x20))
 
         # ---------- the clip ----------
         step1 = wait(lambda: ov.js("document.querySelector('.card .meta .src')?.innerText"), 15)
@@ -487,7 +504,7 @@ def main(argv=None) -> int:
             # The menu isn't in the accessibility tree. It opens up and right from the click; Next step sits this far up it.
             scale = ov.js("devicePixelRatio")
             r = icon.BoundingRectangle
-            real_click((r.left + r.right) / 2 + 69 * scale, (r.top + r.bottom) / 2 - 203 * scale)
+            real_click((r.left + r.right) / 2 + 69 * scale, (r.top + r.bottom) / 2 - 231 * scale)
             moved = wait(lambda: "Step 2 of" in (ov.js("document.querySelector('.bar-ctl')?.innerText") or ""), 5)
             record("tray: its menu opens and moves the step", bool(moved))
             u32.keybd_event(0x1B, 0, 0, 0)

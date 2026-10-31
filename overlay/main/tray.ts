@@ -8,6 +8,7 @@ export interface TrayActions {
   next(): void;
   back(): void;
   source(): void;
+  scheme(): void;
   importTutorial(): void;
   setKeyBar(show: boolean): void;
   quit(): void;
@@ -33,9 +34,10 @@ export function trayMenu(v: TrayView, a: TrayActions): MenuItemConstructorOption
     { label: "Next step", accelerator: "Ctrl+Alt+Right", enabled: playing && !s?.hidden, registerAccelerator: false, click: a.next },
     { label: "Back", accelerator: "Ctrl+Alt+Left", enabled: playing && !s?.hidden && (s?.current ?? 1) > 1, registerAccelerator: false, click: a.back },
     { label: v.sourceOpen ? "Close the source" : "Open this step's source", accelerator: "Ctrl+Alt+O", enabled: v.engineUp && !!s, registerAccelerator: false, click: a.source },
+    { label: "Light / dark", accelerator: "Ctrl+Alt+D", enabled: playing, registerAccelerator: false, click: a.scheme },
     { type: "separator" },
     { label: "Import a tutorial…", accelerator: "Ctrl+Alt+I", registerAccelerator: false, click: a.importTutorial },
-    { label: "Show the shortcut bar", type: "checkbox", checked: v.keyBar, accelerator: "Ctrl+Alt+K", registerAccelerator: false, click: item => a.setKeyBar(item.checked) },
+    { label: "Show the shortcuts", type: "checkbox", checked: v.keyBar, accelerator: "Ctrl+Alt+K", registerAccelerator: false, click: item => a.setKeyBar(item.checked) },
     { type: "separator" },
     { label: "Quit GhostGuide", accelerator: "Ctrl+Alt+Q", registerAccelerator: false, click: a.quit },
   ];

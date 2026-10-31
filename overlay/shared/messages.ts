@@ -14,7 +14,7 @@ export const TO_OVERLAY = [
 ] as const;
 export const FROM_OVERLAY = [
   "hello", "show_me", "do_it", "next", "back", "skip", "hide", "resume", "jump", "pin", "unpin", "import", "open_tutorial", "start_ok",
-  "source", "source_file",
+  "source", "source_file", "toggle_scheme",
 ] as const;
 
 export interface Box { x: number; y: number; w: number; h: number }
@@ -119,7 +119,7 @@ export type ToOverlay = GuideMsg | ClearMsg | StateMsg | ToastMsg | ShowMeMsg | 
 export interface DisplayInfo { id: number | string; x: number; y: number; w: number; h: number; scale: number; primary: boolean }
 export type FromOverlay =
   | { type: "hello"; displays: DisplayInfo[]; version?: string; replay?: boolean }
-  | { type: "show_me" | "do_it" | "next" | "back" | "skip" | "hide" | "resume" | "unpin" | "start_ok" }
+  | { type: "show_me" | "do_it" | "next" | "back" | "skip" | "hide" | "resume" | "unpin" | "start_ok" | "toggle_scheme" }
   | { type: "pin"; at: Pt }
   | { type: "jump"; n: number }
   | { type: "import"; url?: string; file?: string; text?: string; start?: string; end?: string }
@@ -149,7 +149,7 @@ export interface GhostBridge {
   copy(text: string): void;
   /** Open the source window for this step, or close it if it's open. */
   toggleSource(): void;
-  /** The shortcut bar: what it shows, and whether it's wanted. Main keeps the choice. */
+  /** The shortcuts panel: what it shows, and whether it's wanted. Main keeps the choice. */
   onShell(cb: (s: ShellInfo) => void): void;
   setKeyBar(show: boolean): void;
 }
