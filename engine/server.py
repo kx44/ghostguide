@@ -131,6 +131,10 @@ async def serve(player: Player, port: int = DEFAULT_PORT, record: Optional[Path]
                 continue
             try:
                 t0 = time.monotonic()
+                if player.start_open:
+                    async with busy:
+                        out = await asyncio.to_thread(player.start_round)
+                    await send_all(out)
                 if player.locator is not None:
                     found = await asyncio.to_thread(player.locate_current)      # slow; buttons keep working meanwhile
                     async with busy:

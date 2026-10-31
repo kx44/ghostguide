@@ -36,16 +36,31 @@ class Win:
         return self.rect[2] * self.rect[3]
 
 
+def foreign_browser(title: str, wanted: str) -> bool:
+    """A browser window that merely shows a page about the app ("… SOLIDWORKS … - Google Chrome"), when the app
+    itself is what's wanted."""
+    names = APP_KINDS["browser"]
+    if any(n.casefold() in wanted.casefold() for n in names) or wanted.strip().casefold() == "browser":
+        return False
+    return any(title.casefold().endswith(n.casefold()) for n in names)
+
+
 def pick(wins: list[Win], label: str) -> Optional[Win]:
     """The window a step's label means: an app kind ("Browser") → its front window, else the front window whose
-    title contains the label. `wins` is in z-order (front first); our overlay and minimised windows never count."""
+    title contains the label. `wins` is in z-order (front first); our overlay and minimised windows never count,
+    and neither does a browser tab that happens to mention the app."""
     names = APP_KINDS.get(label.strip().casefold(), (label,))
     for w in wins:
-        if w.minimized or w.title == OVERLAY_TITLE or w.area <= 0:
+        if w.minimized or w.title == OVERLAY_TITLE or w.area <= 0 or foreign_browser(w.title, label):
             continue
         if any(n.casefold() in w.title.casefold() for n in names):
             return w
     return None
+
+
+def document_open(title: str) -> bool:
+    """SOLIDWORKS names the open document in brackets: "SOLIDWORKS … - [Part1 *]"."""
+    return bool(re.search(r"\[[^\]]+\]\s*$", title))
 
 
 def folder_from_title(title: str) -> Optional[str]:
@@ -137,6 +152,43 @@ def frame(hwnd: int) -> tuple[int, int, int, int]:
     if ctypes.windll.dwmapi.DwmGetWindowAttribute(hwnd, 9, ctypes.byref(r), ctypes.sizeof(r)) != 0:
         _user32().GetWindowRect(hwnd, ctypes.byref(r))
     return r.left, r.top, r.right - r.left, r.bottom - r.top
+
+
+def same_process(hwnd: int) -> list[Win]:
+    """The other visible top-level windows of hwnd's process, back to front: its dialogs, flyouts and menus."""
+    if sys.platform != "win32":
+        return []
+    import ctypes
+    import ctypes.wintypes as wt
+
+    u32 = _user32()
+    pid = wt.DWORD()
+    u32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    out: list[Win] = []
+    proto = ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
+
+    def cb(h, _):
+        if int(h) == hwnd or not u32.IsWindowVisible(h) or u32.IsIconic(h):
+            return True
+        p = wt.DWORD()
+        u32.GetWindowThreadProcessId(h, ctypes.byref(p))
+        if p.value == pid.value:
+            r = frame(int(h))
+            if r[2] > 4 and r[3] > 4:
+                out.append(Win(hwnd=int(h), title="", rect=r))
+        return True
+
+    u32.EnumWindows(proto(cb), 0)
+    out.reverse()
+    return out
+
+
+def display_scale(hwnd: int) -> float:
+    """Windows' display scale for the window: 1.5 at 150 %."""
+    try:
+        return (_user32().GetDpiForWindow(hwnd) or 96) / 96
+    except Exception:
+        return 1.0
 
 
 def foreground() -> Optional[Win]:

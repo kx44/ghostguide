@@ -40,6 +40,18 @@ def changed(a, b, share: float = CHANGED_SHARE) -> bool:
     return changed_share(a, b) > share
 
 
+LOOK_SIDE = 8           # a control's remembered look: this many grey cells a side
+LOOK_DELTA = 28         # mean grey levels two looks may differ by and still be the same control
+
+
+def look_of(img) -> list[int]:
+    return list(img.convert("L").resize((LOOK_SIDE, LOOK_SIDE)).tobytes())
+
+
+def same_look(a: list[int], b: list[int], delta: int = LOOK_DELTA) -> bool:
+    return len(a) == len(b) and sum(abs(x - y) for x, y in zip(a, b)) / max(1, len(a)) <= delta
+
+
 def for_model(img, width: int = MODEL_W):
     """(PNG bytes, scale) of a copy at most `width` wide; screen px = model px / scale."""
     import io
@@ -122,6 +134,31 @@ def window(hwnd: int):
     # GetWindowRect includes the invisible resize border; cut down to the visible frame.
     fx, fy, fw, fh = frame(hwnd)
     return img.crop((fx - wr.left, fy - wr.top, fx - wr.left + fw, fy - wr.top + fh))
+
+
+def with_popups(hwnd: int):
+    """The window plus its process's dialogs and open menus (their own top-level windows, which PrintWindow on the
+    main window doesn't show), each from its own pixels, on one picture. → (image, screen origin), or None."""
+    from PIL import Image
+
+    from engine.live.windows import frame, same_process
+
+    base = window(hwnd)
+    if base is None:
+        return None
+    fx, fy, fw, fh = frame(hwnd)
+    pops = [(p, window(p.hwnd)) for p in same_process(hwnd)]
+    pops = [(p, im) for p, im in pops if im is not None]
+    if not pops:
+        return base, (fx, fy)
+    x0, y0 = min([fx] + [p.rect[0] for p, _ in pops]), min([fy] + [p.rect[1] for p, _ in pops])
+    x1 = max([fx + fw] + [p.rect[0] + p.rect[2] for p, _ in pops])
+    y1 = max([fy + fh] + [p.rect[1] + p.rect[3] for p, _ in pops])
+    out = Image.new("RGB", (x1 - x0, y1 - y0), (32, 32, 32))
+    out.paste(base, (fx - x0, fy - y0))
+    for p, im in pops:
+        out.paste(im, (p.rect[0] - x0, p.rect[1] - y0))
+    return out, (x0, y0)
 
 
 def region(box: tuple[int, int, int, int]):

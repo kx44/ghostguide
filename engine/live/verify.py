@@ -36,6 +36,9 @@ TYPE_SETTLE_S = 1.2      # no keys or clicks for this long before a typing step 
 WAIT_SETTLE_S = 1.5      # a wait step's window must stay still this long
 WAIT_MIN_S = 1.0         # …and the wait card must have been up at least this long
 LOOK_AHEAD = 3           # steps after the current one that each tick also looks at (keeps `seen_false` fresh)
+MODEL_IDLE_S = 1.0       # no keys or clicks for this long before a model looks
+MODEL_GAP_S = 4.0        # at least this long between two looks at one step
+MODEL_MAX_ASKS = 6       # …and this many in all; after that Next is the way on
 
 
 @dataclass
@@ -262,6 +265,10 @@ class _StepWatch:
     baseline: object = None              # PIL image
     last: object = None
     last_change: float = 0.0
+    asked: object = None                 # the picture the models last looked at
+    asked_t: float = -1e9
+    asks: int = 0
+    answer: Optional[Verdict] = None     # …and what they said
 
 
 class Tracker:
@@ -288,6 +295,8 @@ class Tracker:
         self._watch: dict[int, _StepWatch] = {}
         self.primed = False
         self.last_snapshot: Optional[Snapshot] = None
+        self.current_n: Optional[int] = None      # models only ever look at the step showing
+        self.hidden = False                       # …and never while hidden (free checks only)
 
     def snapshot(self, seed: Optional[list[dict]] = None) -> Snapshot:
         snap = Snapshot(self.app_window, self.dump, self.folder, t=self.clock())
@@ -348,6 +357,10 @@ class Tracker:
         the model stages (off without credits) or unknown."""
         if self.grab is None:
             return Verdict("unknown", "diff", why="no hint and no screen capture")
+        if step.action == "look":
+            return Verdict("not_yet", "diff", why="you say when")
+        if self.current_n is not None and step.n != self.current_n:
+            return Verdict("not_yet", "diff", why="not its turn")
         img = self.grab(step)
         if img is None:
             return Verdict("unknown", "diff", why="can't see the window")
@@ -357,8 +370,22 @@ class Tracker:
         from engine.live.capture import changed, for_model
         if not changed(w.baseline, img):
             return Verdict("not_yet", "diff", why="nothing changed yet")
-        png = for_model(img)[0] if (self.ladder.glimmer or self.ladder.spark) else None
-        return self.ladder.model(step, png)
+        if self.hidden or not (self.ladder.glimmer or self.ladder.spark):
+            return Verdict("unknown", "diff", why="changed; no model to ask")
+        return self._ask_model(step, w, now, img, for_model)
+
+    def _ask_model(self, step: Step, w: _StepWatch, now: float, img, for_model) -> Verdict:
+        """The window changed and no rule can tell, so look. Models are slow and cost money, and this runs every
+        tick: ask only when you've paused, when the window has changed since the last answer, and not too often."""
+        from engine.live.capture import changed
+        idle = self.idle_s() if self.idle_s is not None else 1e9
+        unchanged = w.asked is not None and not changed(w.asked, img)
+        if (idle < MODEL_IDLE_S or unchanged or now - w.asked_t < MODEL_GAP_S or w.asks >= MODEL_MAX_ASKS):
+            return w.answer or Verdict("unknown", "diff", why="waiting to look")
+        w.asked, w.asked_t = img, now
+        w.asks += 1
+        w.answer = self.ladder.model(step, for_model(img)[0])
+        return w.answer
 
     def forget(self, n: int) -> None:
         """The step is showing again (Back, Jump, resume): start its timers and baseline over."""
@@ -368,6 +395,7 @@ class Tracker:
         """Verdicts for the current step and the next LOOK_AHEAD (keeps the trust guard fresh)."""
         if not self.primed:
             self.prime(snap)
+        self.current_n, self.hidden = session.current, session.hidden
         out = {}
         for n in range(session.current, min(session.of, session.current + LOOK_AHEAD) + 1):
             out[n] = self.check(session.tutorial.step(n), snap)

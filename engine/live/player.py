@@ -13,9 +13,11 @@ from typing import Callable, Optional, Protocol
 
 from pydantic import ValidationError
 
+from engine.live.execute import can_do, needs_confirm, plan as plan_ops, say_done
 from engine.live.locate.pinned import Pin, Pins
 from engine.live.plan import Planner
 from engine.live.session import Event, Session
+from engine.live.startcheck import holds_back
 from engine.schema import messages as m
 
 # Steps that need no on-screen target (their card alone is the guidance), so no "not pinned" hint.
@@ -35,8 +37,16 @@ class Player:
     def __init__(self, session: Session, pins: Optional[Pins] = None, scheme_fn: Optional[SchemeFn] = None,
                  scheme_override: Optional[str] = None, before_capture: Optional[Callable[[], None]] = None,
                  pins_path=None, locator: Optional[Locator] = None, tracker=None,
-                 folder_fn: Optional[Callable[[], object]] = None, inputs=None):
+                 folder_fn: Optional[Callable[[], object]] = None, inputs=None, executor=None,
+                 start_items: Optional[Callable[[], list[dict]]] = None):
         self.session = session
+        self._acted: set[int] = set()            # steps Do it for me acted on
+        self.executor = executor                # live/execute.Executor: Do it for me; None = not offered
+        self._armed: Optional[int] = None        # the step whose Do it for me is waiting for its second press
+        # The start check: only for a tutorial that hasn't begun. start_items() reads the real screen.
+        self.start_items = start_items
+        self.start_open = start_items is not None and session.current == 1 and session.statuses[0] == "pending"
+        self._start_said: Optional[list[dict]] = None
         self.inputs = inputs                     # live/inputs.Recent: recent clicks (acted_on, card placement)
         self._drawn: dict[int, list[m.Box]] = {} # every box a step's guide was drawn at
         # Checks steps (live/verify.py Tracker). Slow like the locator, so the server runs check_round()
@@ -89,6 +99,14 @@ class Player:
         s = self.session
         out: list[m._Msg] = []
         guide: Optional[m.Guide] = None
+        if self.start_open and not s.hidden:
+            items = self._start_read()
+            if holds_back(items):
+                self._start_said = items
+                self.last_guide = None
+                return [self.state(), m.Clear(reason="start"),
+                        m.StartCheck(tutorial=s.tutorial.meta.title, items=[m.StartItem(**i) for i in items])]
+            self.start_open = False
         if not s.finished and not s.hidden:
             step = s.step
             assert step is not None
@@ -102,11 +120,19 @@ class Player:
             avoid = avoid_areas(step, box, guide.extra if guide.style == "code_card" else located)
             if avoid:
                 guide.extra["avoid"] = avoid
-            if box is None and located.get("route") and guide.card is not None:
+            if located.get("route") and guide.card is not None:
                 from engine.live.locate.menu import describe
-                guide.card.detail = describe(located["route"])      # nothing on screen: say how to get there
+                guide.card.detail = describe(located["route"])      # not on screen: say how to get there
+                guide.card.compact = False
                 guide.extra["route"] = located["route"]
-            if guide.card is not None and box is None and step.action not in NO_PIN_NEEDED:
+                if located["route"].get("path"):
+                    guide.extra.update(path=located["route"]["path"], path_done=0)
+            if "path_done" in located:
+                guide.extra["path_done"] = located["path_done"]
+            if guide.card is not None and self.executor is not None and can_do(step, box) and not located.get("route"):
+                at = 1 if "show_me" in guide.card.actions else 0
+                guide.card.actions.insert(at, "do_it")
+            if guide.card is not None and box is None and step.action not in NO_PIN_NEEDED and not located.get("route"):
                 first = "start point" if step.action in LINE_ACTIONS else "top-left corner"
                 second = "end point" if step.action in LINE_ACTIONS else "bottom-right corner"
                 found = ("Not pinned yet: " if self.locator is None else
@@ -126,11 +152,54 @@ class Player:
         self.last_guide = guide
         return out
 
+    # ---------- the start check ----------
+    def _start_read(self) -> list[dict]:
+        try:
+            return self.start_items()
+        except Exception:      # reading windows must never stop the tutorial from starting
+            return []
+
+    def start_round(self) -> list[m._Msg]:
+        """While the start check is up: redraw when a tick changed, and go to step 1 once nothing holds it back."""
+        if not self.start_open or self.session.hidden:
+            return []
+        items = self._start_read()
+        if items == self._start_said and holds_back(items):
+            return []
+        was_up = self._start_said is not None
+        out = self.current()
+        if was_up and not self.start_open:
+            out.append(m.Toast(text="✓ Ready. Here we go.", ms=1600))
+        return out
+
+    # ---------- Do it for me ----------
+    def _do_it(self) -> list[m._Msg]:
+        s = self.session
+        if self.executor is None:
+            return [m.Toast(text="Do it for me isn't available for this app.", kind="warn")]
+        if s.finished or s.hidden or s.step is None:
+            return []
+        step = s.step
+        box, _ = self.target(step.n)
+        if not can_do(step, box):
+            return [m.Toast(text="There's nothing sure to act on for this step, so it's yours.", kind="warn")]
+        stage = getattr(self.locator, "last_stage", "")
+        if needs_confirm(step, stage) and step.n not in self.pins.steps and self._armed != step.n:
+            self._armed = step.n
+            return [m.Toast(text="Found by sight, not by name. Check the outline, then press Do it for me again.", ms=5000)]
+        self._armed = None
+        why = self.executor.run(plan_ops(step, box))
+        if why:
+            return [m.Toast(text=why, kind="warn", ms=4000)]
+        if self.tracker is not None:     # we just acted on this step's target: a hint already true now counts
+            self._acted.add(step.n)
+        return [m.Toast(text=say_done(step), ms=2000)]
+
     def locate_current(self) -> Optional[tuple]:
         """Ask the locator about the current step: (step, box, line, extra), or None when there's nothing to ask.
         Reads the session but changes nothing, so the server runs it outside its lock."""
         s = self.session
-        if self.locator is None or s.finished or s.hidden or s.step is None or s.step.n in self.pins.steps:
+        if self.start_open or self.locator is None or s.finished or s.hidden or s.step is None or s.step.n in self.pins.steps:
             return None
         step = s.step
         try:
@@ -163,7 +232,7 @@ class Player:
         """Run the check ladder on the current step and the next few: (current step, hidden, steps done).
         Reads the session but changes nothing, so the server runs it outside its lock."""
         s, t = self.session, self.tracker
-        if t is None or s.finished:
+        if t is None or s.finished or self.start_open:
             return None
         if t.folder is None and self.folder_fn is not None:
             try:
@@ -214,6 +283,8 @@ class Player:
     def acted_on(self, n: int, since: float, pad: int = 6) -> bool:
         """Did you click inside one of step n's drawn targets since `since`? (A click is never proof on its own:
         the tracker only uses this next to a hint that holds.)"""
+        if n in self._acted:
+            return True
         if self.inputs is None:
             return False
         boxes = self._drawn.get(n, [])
@@ -221,8 +292,15 @@ class Player:
                                         for b in boxes) for e in self.inputs.clicks(within_s=600))
 
     def _step_changed(self) -> None:
-        if self.tracker is not None and not self.session.finished:
+        self._armed = None
+        if self.session.finished:
+            return
+        if self.tracker is not None:
             self.tracker.forget(self.session.current)
+        forget = getattr(self.locator, "forget", None)
+        if forget is not None:
+            self._acted.discard(self.session.current)
+            forget(self.session.current)
 
     def refresh(self) -> list[m._Msg]:
         """locate_current + apply_located in one go (tests, console mode)."""
@@ -262,9 +340,16 @@ class Player:
             self._save_pins()
             return self.current() + [m.Toast(text=f"Pin removed from step {s.step.n}.", kind="warn")]
         if t == "do_it":
-            return [m.Toast(text="Do it for me arrives in phase 4.", kind="warn")]
+            return self._do_it()
+        if t == "start_ok":
+            self.start_open = False
+            return self.current()
         if t == "import":
             return [m.Toast(text="Importing tutorials arrives in phase 5.", kind="warn")]
+        if self.start_open and t in ("next", "skip", "back", "jump"):      # moving at all means you're past the checklist
+            self.start_open = False
+            if t == "next":
+                return self.current()
         if t == "next":
             had_target = self.last_guide is not None and self.last_guide.box is not None
             ev = s.next()

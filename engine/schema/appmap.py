@@ -13,6 +13,7 @@ class Seen(BaseModel):
     model_config = ConfigDict(extra="forbid")
     window: str
     rel_box: tuple[float, float, float, float]   # x, y, w, h as fractions of the window
+    look: Optional[list[int]] = None             # 8×8 grey thumbnail of the control, to tell it from its neighbours
 
     @field_validator("rel_box")
     @classmethod

@@ -156,9 +156,16 @@ class Mark(_Msg):
     result: Literal["ok", "bad"]
 
 
-class StartCheck(_Msg):     # phase 4 (shell/startCheck.ts)
+class StartItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    text: str
+    ok: Optional[bool] = None          # None = yours to look at; the engine can't read it
+
+
+class StartCheck(_Msg):     # shell/startCheck.ts
     type: Literal["start_check"] = "start_check"
-    items: list[str]
+    tutorial: str
+    items: list[StartItem]
 
 
 class CompileProgress(_Msg):     # phase 5 (shell/importScreen.ts)
@@ -203,6 +210,10 @@ class Skip(_Simple):
     type: Literal["skip"] = "skip"
 
 
+class StartOk(_Simple):
+    type: Literal["start_ok"] = "start_ok"
+
+
 class Hide(_Simple):
     type: Literal["hide"] = "hide"
 
@@ -232,10 +243,10 @@ class Import(_Msg):     # phase 5
     file: Optional[str] = None
 
 
-FromOverlay = Union[Hello, ShowMeReq, DoIt, Next, Back, Skip, Hide, Resume, Jump, PinReq, Unpin, Import]
+FromOverlay = Union[Hello, ShowMeReq, DoIt, Next, Back, Skip, Hide, Resume, Jump, PinReq, Unpin, Import, StartOk]
 
 TO_OVERLAY_TYPES = ("guide", "clear", "state", "toast", "show_me", "mark", "start_check", "compile_progress")
-FROM_OVERLAY_TYPES = ("hello", "show_me", "do_it", "next", "back", "skip", "hide", "resume", "jump", "pin", "unpin", "import")
+FROM_OVERLAY_TYPES = ("hello", "show_me", "do_it", "next", "back", "skip", "hide", "resume", "jump", "pin", "unpin", "import", "start_ok")
 
 
 def parse_from_overlay(raw: Union[str, bytes, dict]) -> FromOverlay:

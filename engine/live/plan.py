@@ -32,6 +32,8 @@ _COMPACT = {"beacon", "static_line"}   # repeats: the light guide + a one-line c
 # Wait steps advance by themselves (live/verify.py: the window settles, plus the step's hint if it has one).
 WAIT_AUTO = True
 EDGE_INSET = 28      # px from the display edge for the off-screen pill
+GEOMETRY = {"canvas", "edge", "face"}
+MASK_MIN_PX = 44     # a picked point is tiny: the mask stays big enough to see
 
 
 def click_type(params: dict) -> Optional[dict]:
@@ -82,6 +84,8 @@ class Planner:
     # ---------- the rule ----------
     def style(self, step: Step) -> str:
         style = _FIRST[step.action]
+        if style == "mask" and step.target.kind not in GEOMETRY:     # a row in a list isn't geometry: outline it
+            style = "outline"
         if self.is_repeat(step.n) and style in _REPEAT:
             style = _REPEAT[style]
         if style == "outline" and self._first_click_type.get(step.n):
@@ -98,6 +102,9 @@ class Planner:
             if style == "beacon":
                 extra = self._extra(step, "outline")
             style = "card"
+
+        if style == "mask" and box is not None:
+            box = grown(box, MASK_MIN_PX)
 
         if box is not None and displays and not any(_intersects(box, d) for d in displays):
             extra = {**extra, **_edge(box, displays), "original_style": style}
@@ -155,7 +162,7 @@ class Planner:
         actions = []
         if has_target and style not in ("signal_card", "card", "offscreen"):
             actions.append("show_me")
-        # Do it for me arrives in phase 4 (live/execute.py); only offered when we can act with confidence.
+        # Do it for me (live/execute.py) is added by the player: it depends on what was found, right now.
         actions.append("skip_wait" if style == "signal_card" and WAIT_AUTO else "next")
         suggested = p.get("suggested")
         return Card(
@@ -164,7 +171,7 @@ class Planner:
             why=step.why,
             detail=_detail(step, style),
             done_when=step.check,
-            suggested=_fmt_suggested(suggested) if suggested else None,
+            suggested=_fmt_suggested(suggested, self.tutorial.meta.units) if suggested else None,
             actions=actions,
             low_confidence=step.confidence in ("low", "inferred"),
         )
@@ -208,6 +215,12 @@ def avoid_areas(step: Step, box: Optional[Box], extra: dict) -> list[dict]:
     return out
 
 
+def grown(box: Box, side: int) -> Box:
+    """The box, centred where it was, at least `side` px each way."""
+    w, h = max(box.w, side), max(box.h, side)
+    return Box(x=box.x - (w - box.w) // 2, y=box.y - (h - box.h) // 2, w=w, h=h)
+
+
 def line_start(box: Box) -> tuple[int, int]:
     """Where to click to type on an editor line: its very start. An empty VS Code file shows hint links
     across its first lines ("Generate code", "select a language"); a click on one opens a picker instead of
@@ -236,10 +249,17 @@ def _detail(step: Step, style: str) -> Optional[str]:
         return f"{label} is off-screen. Scroll, zoom out or move the window so it shows."
     if a == "type":
         v = p.get("value")
-        then = f", then press {p['then_key']}" if p.get("then_key") else ""
+        then = f", then press {p['then_key']}" if p.get("then_key") else f", then {p['then']}" if p.get("then") else ""
+        how = f" ({p['how']})" if p.get("how") else ""
+        if v is None and isinstance(p.get("suggested"), dict):
+            v = p["suggested"].get("value")
+            if v is not None:
+                return f"Type {v} in {label}{then}."     # labelled as ours just below, under Suggested
         if v is None:
             return f"Type the value in {label}{then}."
         v = str(v)
+        if how:
+            return f"Type “{v}”{how}{then}."
         if "\n" in v.rstrip("\n") or len(v) > 40:
             where = _where(step)
             return f"Copy this, or type it, {where}{then}." if where else f"Copy this, or type it, in {label}{then}."
@@ -268,9 +288,11 @@ def _detail(step: Step, style: str) -> Optional[str]:
     return None
 
 
-def _fmt_suggested(s) -> str:
+def _fmt_suggested(s, units: Optional[str] = None) -> str:
+    """{value: "2", side: inside} → "2 mm, side inside"; {length: 100mm} → "length 100mm"."""
     if isinstance(s, dict):
-        return ", ".join(f"{k.replace('_', ' ')} {v}" for k, v in s.items())
+        return ", ".join((f"{v} {units}" if units else str(v)) if k == "value" else f"{k.replace('_', ' ')} {v}"
+                         for k, v in s.items())
     return str(s)
 
 

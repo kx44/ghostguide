@@ -57,7 +57,7 @@ def test_show_me_and_unbuilt_features():
     p.handle(HELLO)
     sm = p.handle({"type": "show_me"})[0]
     assert sm.type == "show_me" and sm.to == (225, 95)
-    assert "phase 4" in p.handle({"type": "do_it"})[0].text
+    assert "isn't available" in p.handle({"type": "do_it"})[0].text
     assert p.handle("garbage")[0].kind == "warn"
 
 

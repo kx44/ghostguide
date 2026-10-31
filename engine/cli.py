@@ -82,6 +82,8 @@ def _load_play(args):
                     locator=locator, tracker=tracker, folder_fn=folder_fn, inputs=getattr(args, "_inputs", None))
     if tracker is not None:
         tracker.acted = player.acted_on
+    if locator is not None and "visual studio code" not in tut.meta.app.casefold():
+        _for_hard_apps(player, tut, locator, args)
     pinned = len(pins.steps)
     print(f"{tut.meta.title}: {session.of} steps, {pinned} pinned ({pins_path})"
           + (f", resuming at step {session.current}" if restored else ""))
@@ -95,19 +97,25 @@ def _load_play(args):
 
 
 def _resolver(tut, args):
-    """The finder chain for `play`: app map → UIA (VS Code's rule pack, else names + aliases) → Spark vision
-    (FINDER_VISION=on only) → route from the app map."""
+    """The finder chain for `play`: app map → UIA (VS Code's rule pack, SolidWorks', else names + aliases) → Spark
+    vision (FINDER_VISION=on only) → route from the app map → Muse Wonder (same switch)."""
     from engine.appmap.store import AppMapStore
     from engine.live import capture, windows
+    from engine.live.locate.menu import Hops, Wonder
     from engine.live.locate.resolver import GenericUIA, Resolver
     from engine.live.locate.vision import SparkVision, enabled
 
     vscode = "visual studio code" in tut.meta.app.casefold()
+    solidworks = "solidworks" in tut.meta.app.casefold()
     window = args.window or ("Visual Studio Code" if vscode else tut.meta.app)
-    store = AppMapStore(tut.meta.app, version=_app_version(tut.meta.app))
+    version = _app_version(tut.meta.app)
+    store = AppMapStore(tut.meta.app, version=version)
     if vscode:
         from engine.live.locate.vscode import VSCodeLocator
         stage = VSCodeLocator(window)
+    elif solidworks:
+        from engine.live.locate.solidworks import SolidWorksUIA
+        stage = SolidWorksUIA(window, store)
     else:
         stage = GenericUIA(window, store)
 
@@ -115,22 +123,74 @@ def _resolver(tut, args):
         w = windows.find(part)
         return w.rect if w else None
 
-    vision = None
+    def grab():
+        """The app with its dialogs and open menus: (image, screen origin, display scale)."""
+        w = windows.find(window)
+        got = capture.with_popups(w.hwnd) if w else None
+        return (got[0], got[1], windows.display_scale(w.hwnd)) if got else None
+
+    def box_pixels(box):
+        got = grab()
+        return capture.crop(got[0], (box.x, box.y, box.w, box.h), got[1]) if got else None
+
+    def looks(box, look) -> bool:
+        now = box_pixels(box)
+        return now is not None and bool(look) and capture.same_look(capture.look_of(now), look)
+
+    def look_of(box):
+        now = box_pixels(box)
+        return capture.look_of(now) if now is not None else None
+
+    vision = wonder = None
     if enabled():
-        def grab():
-            w = windows.find(window)
-            img = capture.window(w.hwnd) if w else None
-            if img is None:
-                return None
-            png, scale = capture.for_model(img)
-            return png, scale, w.rect[:2]
-        vision = SparkVision(tut.meta.app, grab=grab)
+        vision = SparkVision(tut.meta.app, grab=grab, regions=solidworks)
+        wonder = Wonder(tut.meta.app, version=version or "", grab=grab, store=store)
     print(f"  app map: {store.builtin_path or 'no built-in map'} + local {store.local_path}")
-    return Resolver(stage, store, find_window, vision)
+
+    def clicked(box, since: float) -> bool:
+        recent = getattr(args, "_inputs", None)
+        return recent is not None and any(e.t >= since and box.x <= e.x <= box.x + box.w and box.y <= e.y <= box.y + box.h
+                                          for e in recent.clicks(within_s=60))
+
+    return Resolver(stage, store, find_window, vision, wonder, Hops(clicked),
+                    looks=looks if solidworks else None, look_of=look_of if solidworks else None)
+
+
+def _for_hard_apps(player, tut, locator, args) -> None:
+    """What only the apps we can't read as well as VS Code get: the start check and Do it for me. The tracker's
+    pictures take the whole app, since a click's result (a panel opening) shows far from what was clicked."""
+    from engine.live import capture, windows
+    from engine.live.execute import Executor
+    from engine.live.startcheck import evaluate
+
+    window = locator.window
+
+    def start_items():
+        titles = [w.title for w in windows.top_windows()     # the app's main window, not its dialogs
+                  if w.title.startswith(window) and not windows.foreign_browser(w.title, window)]
+        return evaluate(tut.meta.start_state, tut.meta.app, titles, windows.document_open)
+
+    player.executor = Executor(window)
+    player.start_items = start_items
+    player.start_open = player.session.current == 1 and player.session.statuses[0] == "pending"
+    if player.tracker is not None:
+        def grab(step):
+            w = windows.find(window)
+            got = capture.with_popups(w.hwnd) if w else None
+            return got[0] if got else None
+        player.tracker.grab = grab
 
 
 def _app_version(app: str):
-    """The installed version, to pick the matching built-in map (VS Code: `code --version`)."""
+    """The installed version, to pick the matching built-in map (VS Code: `code --version`, SolidWorks: from its
+    window title)."""
+    if "solidworks" in app.casefold():
+        import re
+
+        from engine.live import windows
+        w = windows.find("SOLIDWORKS")
+        m = re.search(r"\b(20\d\d)\b", w.title) if w else None
+        return m.group(1) if m else "2026"
     if "visual studio code" not in app.casefold():
         return None
     import subprocess

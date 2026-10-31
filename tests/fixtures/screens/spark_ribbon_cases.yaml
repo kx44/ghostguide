@@ -1,0 +1,14 @@
+# Cases for tests/accuracy/spark_ribbon.py: can Spark find a control on the SOLIDWORKS ribbon? Boxes are in image
+# pixels, labelled by hand from the screenshot (2560 px wide, 150 % display scale). `box: null` = the control isn't
+# on this ribbon tab, so Spark must not point at it. Screenshots stay local (git-excluded).
+images:
+  sw-ribbon-features.png:
+    - {label: Revolved Boss/Base, kind: button, where: "Features tab, CommandManager", box: [98, 60, 80, 78]}
+    - {label: Swept Boss/Base, kind: button, where: "Features tab, CommandManager", box: [184, 60, 168, 28]}
+    - {label: Extruded Cut, kind: button, where: "Features tab, CommandManager", box: [392, 60, 70, 78]}
+    - {label: Fillet, kind: button, where: "Features tab, CommandManager", box: [768, 60, 38, 56]}
+    - {label: Shell, kind: button, where: "Features tab, CommandManager", box: [878, 136, 74, 28]}
+    - {label: Reference Geometry, kind: button, where: "Features tab, CommandManager", box: [1086, 60, 78, 78]}
+    - {label: Sketch, kind: tab, where: "CommandManager tabs", box: [284, 172, 70, 28]}
+    - {label: Offset Entities, kind: button, where: "Sketch tab, CommandManager", box: null}
+    - {label: Line, kind: button, where: "Sketch tab, CommandManager", box: null}

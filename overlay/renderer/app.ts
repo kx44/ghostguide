@@ -18,6 +18,7 @@ import { mountSignalCard } from "./guidance/signalCard";
 import { mountTaskbar } from "./guidance/taskbar";
 import { toast } from "./guidance/toast";
 import { ControlBar } from "./shell/controlBar";
+import { StartCheck } from "./shell/startCheck";
 import { StepRail } from "./shell/stepRail";
 
 declare global { interface Window { ghost: GhostBridge } }
@@ -55,6 +56,7 @@ let pending: ReturnType<typeof setTimeout> | undefined;
 const cursor = ghostCursor(fx);
 const bar = new ControlBar(shell, send);
 const rail = new StepRail(shell, send);
+const startCheck = new StartCheck(shell, send);
 bar.onToggleRail = () => { rail.open = !rail.open; if (lastState) { bar.render(lastState, rail.open); rail.render(lastState); } };
 
 function ctx(): Ctx { return { ov, svg: geo, W: window.innerWidth, H: window.innerHeight }; }
@@ -92,6 +94,7 @@ function onMessage(r: Routed) {
   isPrimary = r.primary;
   switch (m.type) {
     case "guide": {
+      startCheck.clear();
       const wait = holdUntil - Date.now();
       if (pending) clearTimeout(pending);
       if (wait > 0) pending = setTimeout(() => drawGuide(m, r.local), wait);
@@ -101,7 +104,11 @@ function onMessage(r: Routed) {
     case "clear":
       if (pending) clearTimeout(pending);
       clearGuide();
+      if (m.reason !== "capture") startCheck.clear();
       lastGuide = undefined;
+      break;
+    case "start_check":
+      startCheck.render(m);
       break;
     case "mark":
       mounted?.mark?.(m.result);
@@ -119,7 +126,7 @@ function onMessage(r: Routed) {
       if (r.primary) { bar.render(m, rail.open); rail.render(m); }
       break;
     default:
-      break;     // start_check (phase 4), compile_progress (phase 5)
+      break;     // compile_progress (phase 5)
   }
 }
 

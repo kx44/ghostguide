@@ -102,7 +102,8 @@ class AppMapStore:
         return [label] + (list(c.aliases) if c else [])
 
     # ---------- writing (local only) ----------
-    def learn(self, label: str, window: str, box: tuple[int, int, int, int], win_rect: tuple[int, int, int, int]) -> bool:
+    def learn(self, label: str, window: str, box: tuple[int, int, int, int], win_rect: tuple[int, int, int, int],
+              look: Optional[list[int]] = None) -> bool:
         """Save where a control was when its step was checked done, relative to its window, so it survives
         moving the window. Returns False when the box isn't inside the window (nothing saved)."""
         bx, by, bw, bh = box
@@ -111,7 +112,7 @@ class AppMapStore:
             return False
         rel = (round((bx - wx) / ww, 4), round((by - wy) / wh, 4), round(bw / ww, 4), round(bh / wh, 4))
         c = self.local.root.get(label) or Control()
-        c.seen = Seen(window=window, rel_box=rel)
+        c.seen = Seen(window=window, rel_box=rel, look=look)
         self.local.root[label] = c
         self.save_local()
         return True
