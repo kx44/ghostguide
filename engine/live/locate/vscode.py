@@ -160,6 +160,13 @@ def _find(lines: list[str], needle: str, start: int = 0) -> Optional[int]:
     for i in range(max(0, start), len(lines)):
         if n in re.sub(r"\s+", "", lines[i]):
             return i
+    # `<a class="x">` also means `<a href="#" class="x">`: the same tag with those attributes, among any others.
+    tag = re.match(r"<([a-zA-Z][\w-]*)", needle.strip())
+    attrs = re.findall(r'[\w-]+="[^"]*"', needle)
+    if tag and attrs:
+        for i in range(max(0, start), len(lines)):
+            if re.search(rf"<{tag.group(1)}\b", lines[i]) and all(a in lines[i] for a in attrs):
+                return i
     return None
 
 
@@ -180,7 +187,7 @@ def target_line(text: str, where: Optional[str], caret_line: Optional[int] = Non
     m = re.search(r"\bline (\d+)", lw)
     if m:
         return int(m.group(1))
-    if re.fullmatch(r"(at the )?(top|start)", lw):
+    if re.fullmatch(r"(at the )?(top|start)|(in the |an )?empty file", lw):
         return 1
     if re.fullmatch(r"(at the )?(end|bottom)", lw):
         last = _last_code_line(lines)
@@ -205,13 +212,13 @@ def target_line(text: str, where: Optional[str], caret_line: Optional[int] = Non
     rel, rest = m.group(1).casefold(), m.group(2)
     toks = _tokens(rest)
     words = [x for x in re.sub(_TOKEN, " ", rest).split() if len(x) > 2 and x.casefold() not in ("the", "link")]
-    if "link" in rest.casefold() and not toks:
-        toks = ["</a>"]
     i = start
     for wd in words:                                                # context words narrow the search first
         j = _find(lines, wd, i)
         if j is not None:
             i = j
+    if "link" in rest.casefold() and not toks and (i >= len(lines) or "<link" not in lines[i]):
+        toks = ["</a>"]                                             # an anchor; "stylesheet link" is that <link> line itself
     if toks:
         j = _find(lines, toks[0], i)
         if j is None:

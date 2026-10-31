@@ -1,15 +1,15 @@
 ---
-title: 12. Virtual Environments and Packages
+title: 12. Virtual Environments and Packages — Python 3.15.2 documentation
 app: Terminal
 author_version: 3.15.2
 source:
   type: web
   url: https://docs.python.org/3/tutorial/venv.html
   hash: c135e049d3147cef
-start_state: Terminal open in working directory with Python 3 installed
+start_state: Terminal open with Python installed and working directory ready
 compiled:
   model: muse-spark-1.3
-  prompts: 716bb2afd62b
+  prompts: aea7adb90a1d
 ---
 
 # Creating virtual environments
@@ -24,10 +24,6 @@ params:
   then_key: Enter
   value: python -m venv tutorial-env
 check: tutorial-env folder is created in the current directory
-verify:
-  file:
-    path: tutorial-env
-    exists: true
 source:
   anchor: '#12-2-creating-virtual-environments'
 confidence: high
@@ -41,8 +37,7 @@ target:
 params:
   then_key: Enter
   value: tutorial-env\Scripts\activate
-why: Use this instead of the Unix command on Windows.
-check: command prompt shows tutorial-env as active
+check: prompt shows (tutorial-env) prefix
 source:
   anchor: '#12-2-creating-virtual-environments'
 confidence: high
@@ -57,7 +52,7 @@ target:
 params:
   then_key: Enter
   value: source tutorial-env/bin/activate
-check: prompt shows tutorial-env as active
+check: prompt shows (tutorial-env) prefix
 source:
   anchor: '#12-2-creating-virtual-environments'
 confidence: high
@@ -71,7 +66,7 @@ target:
 params:
   then_key: Enter
   value: deactivate
-check: prompt no longer shows tutorial-env as active
+check: prompt no longer shows (tutorial-env) prefix
 source:
   anchor: '#12-2-creating-virtual-environments'
 confidence: high
@@ -88,7 +83,7 @@ target:
 params:
   then_key: Enter
   value: python -m pip install novas
-check: terminal reports novas installed successfully
+check: terminal reports successful install of novas
 source:
   anchor: '#12-3-managing-packages-with-pip'
 confidence: high
@@ -102,7 +97,7 @@ target:
 params:
   then_key: Enter
   value: python -m pip install requests==2.6.0
-check: terminal reports requests 2.6.0 installed successfully
+check: terminal reports successful install of requests 2.6.0
 source:
   anchor: '#12-3-managing-packages-with-pip'
 confidence: high
@@ -116,7 +111,7 @@ target:
 params:
   then_key: Enter
   value: python -m pip install --upgrade requests
-check: terminal reports requests upgraded successfully
+check: terminal reports successful upgrade of requests
 source:
   anchor: '#12-3-managing-packages-with-pip'
 confidence: high
@@ -130,7 +125,7 @@ target:
 params:
   then_key: Enter
   value: python -m pip show requests
-check: details for requests such as Name and Version are displayed
+check: terminal shows requests version, location and requirements
 source:
   anchor: '#12-3-managing-packages-with-pip'
 confidence: high
@@ -144,7 +139,7 @@ target:
 params:
   then_key: Enter
   value: python -m pip list
-check: list of installed packages is displayed
+check: terminal lists installed packages
 source:
   anchor: '#12-3-managing-packages-with-pip'
 confidence: high
@@ -158,10 +153,11 @@ target:
 params:
   then_key: Enter
   value: python -m pip freeze > requirements.txt
-check: requirements.txt file is created in the current directory
+check: requirements.txt file appears in working directory
 verify:
   file:
     path: requirements.txt
+    contains: requests
     exists: true
 source:
   anchor: '#12-3-managing-packages-with-pip'
@@ -176,7 +172,7 @@ target:
 params:
   then_key: Enter
   value: cat requirements.txt
-check: contents of requirements.txt are displayed
+check: terminal displays contents of requirements.txt
 source:
   anchor: '#12-3-managing-packages-with-pip'
 confidence: high
@@ -190,7 +186,7 @@ target:
 params:
   then_key: Enter
   value: python -m pip install -r requirements.txt
-check: terminal reports packages from requirements.txt installed successfully
+check: terminal reports successful install from requirements.txt
 source:
   anchor: '#12-3-managing-packages-with-pip'
 confidence: high

@@ -241,6 +241,42 @@ def test_bad_steps_are_reported_not_dropped(bad, why):
     assert errors and any(why.casefold() in e.casefold() or "step 1" in e for e in errors)
 
 
+def test_a_first_step_inside_an_unopened_dialog_goes_back():
+    inside = {**STEP, "target": {"label": "Part", "kind": "button", "where": "New document dialog"}}
+    ev = Evidence("web", "h", [])
+    _, errors = to_tutorial({"title": "T", "app": "A", "steps": [inside]}, ev)
+    assert errors and "nothing has opened it" in errors[0]
+    _, errors = to_tutorial({"title": "T", "app": "A", "steps": [STEP, {**inside, "repeat_of": None}]}, ev)
+    assert not errors
+
+
+def test_a_last_choice_in_a_dialog_closes_it():
+    def click(label, where):
+        return {**STEP, "target": {"label": label, "kind": "button", "where": where}}
+    ev = Evidence("web", "h", [])
+    tut, errors = to_tutorial({"title": "T", "app": "A", "steps": [
+        STEP, click("Part", "New dialog"), click("Plane", "tree"), click("Big", "Size dialog"), click("OK", "Size dialog"), STEP]}, ev)
+    assert not errors
+    assert tut.steps[1].params == {"click_type": "double"}      # nothing after it in the dialog
+    assert tut.steps[3].params == {} and tut.steps[4].params == {}     # its own OK follows
+
+
+def test_typing_in_another_file_clicks_its_tab_first():
+    def typed(where, value="x"):
+        return {**STEP, "action": "type", "target": {"label": "Editor", "kind": "field", "where": where}, "params": {"value": value}}
+    new = {**STEP, "action": "type", "target": {"label": "File name field", "kind": "field"}, "params": {"value": "b.css"}}
+    tab = {**STEP, "target": {"label": "a.html", "kind": "tab"}}
+    again = {**STEP, "repeat_of": 1}
+    tut, errors = to_tutorial({"title": "T", "app": "A", "steps": [
+        typed("a.html, top"), new, typed("a.html, inside <head>"), typed("b.css, top"), tab, typed("a.html, end"), again]}, Evidence("web", "h", []))
+    assert not errors
+    labels = [s.target.label for s in tut.steps]
+    assert labels == ["Editor", "File name field", "a.html", "Editor", "b.css", "Editor", "a.html", "Editor", "New"]
+    added = tut.steps[2]
+    assert added.confidence == "inferred" and added.verify.uia.selected and added.target.kind == "tab"
+    assert tut.steps[8].repeat_of == 1
+
+
 def test_a_failing_draft_goes_back_once_with_its_errors(tmp_path):
     seen = []
 
@@ -339,6 +375,47 @@ def test_search_queries_are_billed(tmp_path):
     row = json.loads((tmp_path / "costs.jsonl").read_text().splitlines()[0])
     assert row["searches"] == 1
     assert row["cost_usd"] == pytest.approx((10 * 1.25 + 5 * 4.25) / 1e6 + 0.0025, abs=1e-6)
+
+
+# ---- a compiled `where` on the live finder ----
+def test_where_finds_a_tag_by_its_attributes_among_others():
+    from engine.live.locate.vscode import target_line
+    code = '<body>\n<a href="#" class="thumbnail">\n<img />\n</a>\n</body>'
+    assert target_line(code, 'index.html, in <a class="thumbnail"> after the class attribute', 1) == 2
+    assert target_line(code, 'index.html, inside <a class="thumbnail">', 1) == 3
+    assert target_line(code, 'index.html, in <a class="nope"> after the class attribute', 5) == 5
+    assert target_line("", "styles.css, empty file", 7) == 1
+    head = '<head>\n<link rel="stylesheet" href="s.css">\n<title>x</title>\n</head>\n<a>\n</a>'
+    assert target_line(head, "index.html, inside <head> after stylesheet link", 9) == 3
+    assert target_line('<div>\n<a href="#">thumb</a>\n<p></p>', "index.html, after the thumb link", 9) == 3
+
+
+def test_a_toolbar_named_like_a_ribbon_tab_routes_through_it():
+    from engine.live.locate.menu import named_tab
+    assert named_tab("Features tab, CommandManager") == "Features"
+    assert named_tab("Sketch Toolbar") == "Sketch" and named_tab("Features toolbar, top") == "Features"
+    assert named_tab("Standard toolbar at top of window") is None and named_tab(None) is None
+
+
+def test_solidworks_rules_read_a_tutorials_own_words():
+    from engine.live.locate.solidworks import OK_LABEL, in_new_dialog
+    assert in_new_dialog("New SOLIDWORKS Document dialog") and in_new_dialog("New document dialog")
+    assert not in_new_dialog("Standard toolbar at top of window") and not in_new_dialog(None)
+    for label in ("OK (green check)", "green check mark", "Green check mark", "OK"):
+        assert OK_LABEL.match(label), label
+
+
+def test_the_import_window_gets_the_score_in_plain_words():
+    from engine.cli import _score_lines
+    gold = parse_file(ROOT / "tutorials/mug-solidworks.md")
+    lines = _score_lines(ev_score(gold))
+    assert lines[0].startswith("Matches the hand-checked version: 100%") and "45 of 45" in lines[0]
+    assert any("Allowing for" in x for x in lines)
+
+
+def ev_score(gold):
+    from engine.compile import eval as ev
+    return ev.score(gold, gold, differences=ev.load_differences(ROOT / "tutorials/mug-solidworks.md"))
 
 
 # ---- transcribe ----

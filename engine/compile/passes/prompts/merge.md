@@ -5,7 +5,7 @@ You get the source's details, then the raw actions in order, part by part.
 Steps
 - One step = one change you could see on screen. Split anything bigger. Join what the raw list split across two parts, and drop duplicates where two parts report the same action.
 - Keep the source's order and its meaning. Don't improve the tutorial, and don't add steps it has no need of.
-- Add a step the source skips when the next step can't work without it. Mark it `confidence: inferred`. Authors skip more than you'd think, so walk through the app in your head, one screen at a time. A command that opens a dialog needs the choice made in that dialog. A tool that opens a panel needs each value it requires entered, then the panel confirmed, each as a step of its own. A tool that stays active may need releasing.
+- Add a step the source skips when the next step can't work without it. Mark it `confidence: inferred`. Authors skip more than you'd think, so walk through the app in your head, one screen at a time. A command that opens a dialog needs the choice made in that dialog, and the dialog closed: a choice is a `double` `click_type` if double-clicking it is how that dialog goes on, otherwise add the step pressing its OK. A tool that opens a panel needs each value it requires entered, then the panel confirmed, each as a step of its own. A tool that stays active may need releasing.
 - Each separate thing drawn is its own step. "Close off both ends" is two lines, so two steps.
 - A sentence offering a choice or an optional extra ("you could also round the corners") is an `optional: true` step. Advice to look something over is a `look` step.
 - Opening the program itself is not a step: it goes in `start_state`.
@@ -51,3 +51,4 @@ Before you answer, read your steps through once more and fix these:
 - Two `type` steps in a row in one file, where the second goes inside what the first typed: make them one step. Keep going until no step's `where` says "inside" something an earlier step of the same stretch typed. Saves between them don't count as a break when the author goes straight back to typing in the same block: keep one save, at the end.
 - A roundabout way of getting a piece of text (copying a symbol out of a web page, looking it up in another window) isn't steps to follow: the follower just types the result.
 - A step the source states that you lost: put it back.
+- `start_state` says only what's true before the source's first action. Anything the source tells the reader to do or open, such as a new document or the dialog that creates it, is a step, starting with the command that opens it, and never part of `start_state`. A tool that opens with no document yet: step 1 is creating the document.

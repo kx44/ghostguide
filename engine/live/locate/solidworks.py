@@ -26,7 +26,7 @@ NEW_DIALOG = "New SOLIDWORKS Document"
 DIALOG_CHOICES = ("part", "assembly", "drawing")
 PANEL_MAX_X = 500        # physical px: the PropertyManager's right edge is well inside this at any common scale
 _STATE = re.compile(r"^\((?:-|\+|\?|f)\)\s*")          # "(-) Sketch1": how defined the sketch is
-OK_LABEL = re.compile(r"^ok\b", re.I)
+OK_LABEL = re.compile(r"^(ok\b|green check)", re.I)
 
 
 def dump_all(window: str) -> list[dict]:
@@ -119,6 +119,11 @@ def pm_field(els: list[dict], where: Optional[str]) -> Optional[dict]:
     return edits[0] if edits else None
 
 
+def in_new_dialog(where: Optional[str]) -> bool:
+    """"New SOLIDWORKS Document dialog", or as a tutorial says it, "the New document dialog"."""
+    return bool(re.search(r"\bnew\b.*\b(document|dialog)\b", where or "", re.I))
+
+
 class SolidWorksUIA(GenericUIA):
     def __init__(self, window: str = WINDOW, store=None, dump=None):
         super().__init__(window, store, dump or dump_all)
@@ -136,7 +141,7 @@ class SolidWorksUIA(GenericUIA):
                 el, how = pm_field(els, t.where), "PropertyManager field"
             elif OK_LABEL.match(t.label):
                 el, how = pm_ok(els), "PropertyManager's green check"
-            elif NEW_DIALOG.casefold() in (t.where or "").casefold():
+            elif in_new_dialog(t.where):
                 el, how = dialog_choice(els, t.label), "the New Document dialog"
             if el is not None:
                 self.last_how = how

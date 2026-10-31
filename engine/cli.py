@@ -278,6 +278,17 @@ def _describe(msg) -> str:
 CONSOLE_KEYS = {"n": "next", "b": "back", "s": "skip", "m": "show_me", "d": "do_it"}
 
 
+def _score_lines(s: dict) -> list[str]:
+    """What the import window shows: the score in plain words, raw first. The full report stays in `engine eval`."""
+    lines = [f"Matches the hand-checked version: {s['raw']['f1']:.0%} ({s['raw']['matched']} of {s['raw']['gold_steps']} steps)"]
+    if "fair" in s:
+        lines.append(f"Allowing for what that version changed since the source: {s['fair']['f1']:.0%}")
+    if s["details"]["typed_steps"]:
+        lines.append(f"Typed text: {s['all_typed_text']:.0%} the same")
+    lines.append(f"Steps the engine can check by itself: {s['verify_share']:.0%}")
+    return lines
+
+
 def _importer(msg, progress):
     """The import screen's compile: a link, a dropped file or pasted text. Runs on the compile worker thread."""
     from engine.compile.adapters import SourceBlocked, SourceError
@@ -299,7 +310,7 @@ def _importer(msg, progress):
     except BudgetExceeded:
         return CompileDone(ok=False, error="This would pass the spending cap (BUDGET_USD), so it wasn't started.")
     return CompileDone(ok=True, path=str(r.path), title=r.title, steps=r.steps, cached=r.cached,
-                       cost_usd=round(r.cost_usd, 4), score=report(r.score).splitlines() if r.score else None)
+                       cost_usd=round(r.cost_usd, 4), score=_score_lines(r.score) if r.score else None)
 
 
 def cmd_play(args) -> int:

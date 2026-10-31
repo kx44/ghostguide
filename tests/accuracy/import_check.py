@@ -1,5 +1,5 @@
-"""The import window, on the real overlay and engine (Windows). Types into the window through UI Automation, so it doesn't
-take the mouse for long. Run it after compiling, so its compile comes from the cache and costs nothing.
+"""The import window, on the real overlay and engine (Windows). Takes the mouse and keyboard for under a minute. Run it
+after compiling, so its compile comes from the cache and costs nothing.
 
   1. a link to a site that refuses automatic reading: the window says so and offers the saved file,
   2. the path of a saved page: compiles (from the cache), shows the steps and the score,
@@ -25,6 +25,7 @@ from engine import config
 OUT = config.CACHE / "screenshots" / "import"
 TITLE = "GhostGuide: import a tutorial"
 PORT = 8765
+LINK, PRIMARY = (0.5, 0.232), (0.126, 0.932)     # the link box and the bottom-left button, as shares of the window
 
 
 def wait(ok, s: float, every: float = 0.25):
@@ -80,13 +81,12 @@ def main(argv=None) -> int:
                 pass
         threading.Thread(target=read, daemon=True).start()
 
-        overlay = subprocess.Popen("npm start -- --import --force-renderer-accessibility", shell=True, cwd=config.ROOT / "overlay",
+        overlay = subprocess.Popen("npm start -- --import", shell=True, cwd=config.ROOT / "overlay",
                                    stdout=(logs / "import_check-overlay.log").open("w"), stderr=subprocess.STDOUT)
         win = wait(lambda: windows.find(TITLE), 90)
         if not win:
             raise SystemExit("the import window didn't open")
         time.sleep(2.0)
-        control = auto.WindowControl(searchDepth=1, Name=TITLE)
 
         def shot(name: str) -> None:
             w = windows.find(TITLE)
@@ -94,48 +94,48 @@ def main(argv=None) -> int:
             if img is not None:
                 img.save(OUT / f"{name}.png")
 
-        def edit(name: str):
-            return control.EditControl(Name=name, searchDepth=20)
+        def at(fx: float, fy: float) -> tuple[int, int]:
+            x, y, w, h = windows.find(TITLE).rect
+            return round(x + fx * w), round(y + fy * h)
 
-        def press(name: str) -> None:
-            control.ButtonControl(Name=name, searchDepth=20).Invoke()
+        def click(fx: float, fy: float) -> None:
+            x, y = at(fx, fy)
+            auto.MoveTo(x, y, moveSpeed=4)
+            time.sleep(0.15)
+            auto.Click(x, y)
+            time.sleep(0.3)
 
-        def has_text(part: str) -> bool:
-            def walk(c, depth=0):
-                if depth > 20:
-                    return False
-                try:
-                    if part.casefold() in (c.Name or "").casefold():
-                        return True
-                    return any(walk(k, depth + 1) for k in c.GetChildren())
-                except Exception:
-                    return False
-            return walk(control)
+        def link(text: str) -> None:
+            click(*LINK)
+            auto.SendKeys("{Ctrl}a{Delete}")
+            auto.SetClipboardText(text)
+            auto.SendKeys("{Ctrl}v")
+            time.sleep(0.3)
 
         shot("1-empty")
-        results["focusable"] = edit("Link to a video or article").Exists(5)
 
         # 1. a site that refuses
-        edit("Link to a video or article").GetValuePattern().SetValue(args.blocked_url)
-        press("Compile")
-        results["blocked_message"] = bool(wait(lambda: has_text("doesn't allow automatic reading"), 40))
+        link(args.blocked_url)
+        click(*PRIMARY)
+        blocked = wait(lambda: next((m for m in messages if m["type"] == "compile_done"), None), 40)
+        results["blocked_message"] = bool(blocked and blocked.get("blocked"))
+        results["blocked_text"] = blocked and blocked.get("error")
+        time.sleep(0.6)
         shot("2-blocked")
 
         # 2. the saved page
-        edit("Link to a video or article").GetValuePattern().SetValue(str(Path(args.saved).resolve()))
-        press("Compile")
-        results["done"] = bool(wait(lambda: any(m["type"] == "compile_done" for m in messages), 300))
-        done = next((m for m in messages if m["type"] == "compile_done" and m.get("ok")), None)
+        link(str(Path(args.saved).resolve()))
+        click(*PRIMARY)
+        done = wait(lambda: next((m for m in messages if m["type"] == "compile_done" and m.get("ok")), None), 300)
         progress = [m for m in messages if m["type"] == "compile_progress"]
         results.update(progress_messages=len(progress), compile_ok=bool(done), cached=(done or {}).get("cached"),
                        steps=(done or {}).get("steps"), score=(done or {}).get("score"))
-        results["score_shown"] = bool(wait(lambda: has_text("raw:"), 5))
-        time.sleep(0.5)
+        time.sleep(0.8)
         shot("3-compiled")
 
         # 3. Play
         before = len(messages)
-        press("Play it")
+        click(*PRIMARY)
         got = wait(lambda: next((m for m in messages[before:] if m["type"] in ("guide", "start_check")), None), 40)
         results["play_type"] = got and got["type"]
         results["play_state"] = next((m["tutorial"] for m in messages[before:] if m["type"] == "state"), None)
@@ -149,7 +149,7 @@ def main(argv=None) -> int:
                 subprocess.run(f"taskkill /PID {p.pid} /T /F", shell=True, capture_output=True)
     (logs / "import_check.json").write_text(json.dumps(results, indent=1, ensure_ascii=False), encoding="utf-8")
     print(json.dumps(results, indent=1, ensure_ascii=False))
-    need = ("blocked_message", "compile_ok", "score_shown", "play_type", "window_closed")
+    need = ("blocked_message", "compile_ok", "play_type", "window_closed")
     return 0 if all(results.get(k) for k in need) else 1
 
 

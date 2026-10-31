@@ -3,6 +3,7 @@ back once with the errors listed, then the compile stops and says why (compile s
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from pydantic import ValidationError
@@ -69,9 +70,8 @@ def to_tutorial(data: dict, ev: Evidence) -> tuple[Tutorial, list[str]]:
     """The draft as a Tutorial, and what's wrong with it: bad steps are reported, never dropped quietly."""
     errors: list[str] = []
     steps: list[Step] = []
-    raw_steps = data.get("steps") or []
+    raw_steps = _switch_files([_clean(r) for r in data.get("steps") or []])
     for n, raw in enumerate(raw_steps, start=1):
-        raw = _clean(raw)
         v = raw.get("verify")
         if v:      # a one-item list reads better in the file, and validates the same
             for k in ("uia", "file"):
@@ -91,9 +91,66 @@ def to_tutorial(data: dict, ev: Evidence) -> tuple[Tutorial, list[str]]:
                         author_version=data.get("author_version"), source=source, start_state=data.get("start_state"),
                         units=data.get("units"))
     tut = Tutorial(meta=meta, steps=steps)
+    _close_dialogs(tut)
     if not errors:
-        errors = validate_tutorial(tut).errors
+        errors = validate_tutorial(tut).errors + _can_start(tut)
     return tut, errors
+
+
+_FILE = re.compile(r"^\s*([\w.-]+\.\w+)\s*(,|$)")
+
+
+def _switch_files(steps: list[dict]) -> list[dict]:
+    """Typing into a file that isn't the one showing needs its tab clicked first. Authors change tabs without a word and
+    the model doesn't always notice, so it's a rule. Follows what's showing through created files and tab clicks."""
+    out: list[dict] = []
+    moved: dict[int, int] = {}
+    showing = None
+    for n, s in enumerate(steps, start=1):
+        t = s.get("target") or {}
+        file = _FILE.match(t.get("where") or "")
+        typing = s.get("action") == "type" and (t.get("label") or "").casefold() == "editor" and file
+        if typing and showing and file.group(1) != showing:
+            name = file.group(1)
+            out.append({"title": f"Open {name}", "action": "click", "part": s.get("part"),
+                        "target": {"label": name, "kind": "tab", "where": "editor tab bar"}, "check": f"{name} is showing in the editor",
+                        "verify": {"uia": [{"name_contains": name, "type": "TabItem", "selected": True}]},
+                        "source": s.get("source"), "confidence": "inferred"})
+            showing = name
+        moved[n] = len(out) + 1
+        out.append(s)
+        value = str((s.get("params") or {}).get("value", ""))
+        if typing:
+            showing = file.group(1)
+        elif s.get("action") == "type" and "file" in (t.get("label") or "").casefold() and re.fullmatch(r"[\w.-]+\.\w+", value):
+            showing = value                     # a new file opens as soon as it's named
+        elif s.get("action") == "click" and re.fullmatch(r"[\w.-]+\.\w+", (t.get("label") or "").strip()):
+            showing = t["label"].strip()
+    for s in out:
+        if s.get("repeat_of") in moved:
+            s["repeat_of"] = moved[s["repeat_of"]]
+    return out
+
+
+def _close_dialogs(tut: Tutorial) -> None:
+    """A choice in a dialog with nothing after it in that dialog would leave the dialog open and every later step stuck.
+    The model doesn't reliably add this, so it's a rule: double-clicking a choice takes the dialog's default action."""
+    for s, after in zip(tut.steps, tut.steps[1:]):
+        in_dialog = "dialog" in (s.target.where or "").casefold()
+        if s.action == "click" and in_dialog and "click_type" not in s.params and "dialog" not in (after.target.where or "").casefold():
+            if s.target.label.strip().casefold() not in ("ok", "open", "save", "yes", "no", "cancel", "close", "finish", "done"):
+                s.params["click_type"] = "double"
+
+
+def _can_start(tut: Tutorial) -> list[str]:
+    """Step 1 can't be inside a dialog nothing has opened: it would have nothing to point at, and neither would the rest."""
+    if not tut.steps:
+        return []
+    first = tut.steps[0]
+    if "dialog" in (first.target.where or "").casefold():
+        return [f"step 1 is inside a dialog ({first.target.where}), but nothing has opened it: add the step that opens it, with the "
+                "command's visible name as its label, before this one, and leave the dialog out of start_state"]
+    return []
 
 
 def _source_lines(ev: Evidence) -> str:

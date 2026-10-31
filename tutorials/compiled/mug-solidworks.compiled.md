@@ -8,50 +8,72 @@ source:
   hash: 90f61d03161b01ef
   author: Simon Martin
   published: '2016-07-28'
-start_state: SOLIDWORKS open with New document dialog open
+start_state: SOLIDWORKS open with no document open
 compiled:
   model: muse-spark-1.3
-  prompts: 716bb2afd62b
+  prompts: aea7adb90a1d
 ---
 
-# Create a new part
+# Mug body
 
-## Step 1 — Create new Part document
+## Step 1 — Open New document dialog
+```yaml
+action: click
+target:
+  label: New
+  kind: button
+  where: Standard toolbar at top of window
+check: New dialog opens showing document types
+verify:
+  uia:
+    name_contains: New
+    type: Window
+    window: SOLIDWORKS
+    exists: true
+source:
+  anchor: '#1-create-a-new-part'
+confidence: inferred
+```
+## Step 2 — Create new Part document
 ```yaml
 action: click
 target:
   label: Part
   kind: button
   where: New document dialog
+params:
+  click_type: double
 check: New Part document opens with Feature Tree showing Front Plane
 verify:
   uia:
     name: Front Plane
     type: TreeItem
+    window: SOLIDWORKS
     exists: true
 source:
   anchor: '#1-create-a-new-part'
 confidence: high
 ```
-## Step 2 — Select Front Plane
+## Step 3 — Select Front Plane
 ```yaml
 action: click
 target:
   label: Front Plane
   kind: tree_item
   where: Feature Tree to the left of workspace
-check: Front Plane highlights as selected in Feature Tree
+check: Front Plane is highlighted in Feature Tree
 verify:
   uia:
     name: Front Plane
     type: TreeItem
+    window: SOLIDWORKS
     selected: true
     exists: true
 source:
   anchor: '#1-create-a-new-part'
 confidence: high
 ```
-## Step 3 — Orient view to Front
+## Step 4 — Orient view to Front
 ```yaml
 action: menu_path
 target:
@@ -61,15 +83,25 @@ target:
   menu_path:
   - View Orientation
   - Front
-check: View is square to Front Plane
+check: View faces Front Plane straight on
 source:
   anchor: '#1-create-a-new-part'
 confidence: high
 ```
-
-# Draw a centerline
-
-## Step 4 — Select Centerline tool
+## Step 5 — Start sketch on Front Plane
+```yaml
+action: click
+target:
+  label: Sketch
+  kind: button
+  where: Sketch toolbar
+why: sketch must be active to draw centerline
+check: Sketch editing starts on Front Plane
+source:
+  anchor: '#2-draw-a-centerline'
+confidence: inferred
+```
+## Step 6 — Open Centerline tool
 ```yaml
 action: menu_path
 target:
@@ -79,25 +111,28 @@ target:
   menu_path:
   - Line
   - Centerline
-check: Centerline tool is active in Sketch Toolbar
+check: Centerline tool is active
 source:
   anchor: '#2-draw-a-centerline'
 confidence: high
 ```
-## Step 5 — Draw vertical centerline
+## Step 7 — Draw vertical centerline
 ```yaml
 action: draw_line
 target:
   label: Centerline
   kind: canvas
   where: Front Plane sketch
-why: to reference revolve axis and mug profile
-check: Vertical centerline appears through Front Plane boundary box
+params:
+  from: center over the red arrows straight up along blue dotted guideline to just above the Front Plane boundary
+    box
+  to: just as far below the Front Plane boundary box over the red arrow
+check: Vertical centerline crosses Front Plane boundary box
 source:
   anchor: '#2-draw-a-centerline'
 confidence: high
 ```
-## Step 6 — Exit Centerline tool
+## Step 8 — Drop Centerline tool
 ```yaml
 action: shortcut
 target:
@@ -107,68 +142,70 @@ params:
   keys:
   - Escape
 why: to drop the Centerline tool
-check: Centerline tool drops, cursor returns to select
+check: Centerline tool is dropped
 source:
   anchor: '#2-draw-a-centerline'
 confidence: high
 ```
-
-# Sketch mug profile
-
-## Step 7 — Select Line tool
+## Step 9 — Open Line tool
 ```yaml
 action: click
 target:
   label: Line
   kind: button
   where: Sketch Toolbar
-check: Line tool is active in Sketch Toolbar
+check: Line tool is active
 source:
   anchor: '#3-sketch-a-camping-mug-profile'
 confidence: high
 ```
-## Step 8 — Sketch outer wall profile
+## Step 10 — Sketch outer wall profile
 ```yaml
 action: draw_line
 target:
   label: outer wall profile
   kind: canvas
   where: Front Plane sketch using Centerline as reference
-check: Outer wall profile line appears beside Centerline
+params:
+  suggested:
+    note: exact shape, bottom edges and outer wall angle are up to you
+    value: outer wall profile offset from centerline
+check: Outer wall profile line appears beside centerline
 source:
   anchor: '#3-sketch-a-camping-mug-profile'
 confidence: high
 ```
-## Step 9 — Select outer wall profile
+## Step 11 — Select outer wall profile
 ```yaml
 action: pick
 target:
   label: outer wall profile sketch
   kind: edge
   where: Front Plane sketch
-check: Outer wall profile highlights as selected
+check: Outer wall profile is selected
 source:
   anchor: '#3-sketch-a-camping-mug-profile'
 confidence: high
 ```
-## Step 10 — Open Offset Entities
+## Step 12 — Open Offset Entities
 ```yaml
 action: click
 target:
   label: Offset Entities
   kind: button
   where: Sketch toolbar
-check: Offset Entities PropertyManager opens on left
+check: Offset Entities PropertyManager opens
 verify:
   uia:
-    name_contains: Offset Entities
-    type: Window
+    name_contains: Offset
+    type: Text
+    window: SOLIDWORKS
     exists: true
 source:
   anchor: '#3-sketch-a-camping-mug-profile'
 confidence: high
 ```
-## Step 11 — Enter offset distance
+## Step 13 — Enter offset distance
 ```yaml
 action: type
 target:
@@ -177,88 +214,95 @@ target:
   where: Offset Entities PropertyManager
 params:
   suggested:
-    note: any small value works
+    note: any small wall thickness works
     value: '3'
 why: to duplicate to inner-wall side
-check: Offset distance value appears in PropertyManager
+check: Inner-wall preview appears on inner side
 source:
   anchor: '#3-sketch-a-camping-mug-profile'
 confidence: inferred
 ```
-## Step 12 — Confirm offset
+## Step 14 — Confirm offset
 ```yaml
 action: click
 target:
   label: green check mark
   kind: button
-  where: upper right-hand corner of workspace
-check: Inner-wall parallel line appears and Offset dialog closes
+  where: Offset Entities PropertyManager
+check: Parallel inner-wall line is created and dialog closes
 verify:
   uia:
     name_contains: Offset
-    type: Window
+    type: Text
+    window: SOLIDWORKS
     exists: false
 source:
   anchor: '#3-sketch-a-camping-mug-profile'
 confidence: inferred
 ```
-## Step 13 — Draw top closing line
+## Step 15 — Draw top closing line
 ```yaml
 action: draw_line
 target:
   label: top closing line
   kind: canvas
   where: Front Plane sketch at one end of parallel lines
-check: Top gap between parallel lines is closed
+params:
+  suggested:
+    note: exact position follows your profile
+    value: line closing inner and outer wall at one end
+check: Gap at one end of parallel lines is closed
 source:
   anchor: '#3-sketch-a-camping-mug-profile'
 confidence: high
 ```
-## Step 14 — Draw bottom closing line
+## Step 16 — Draw bottom closing line
 ```yaml
 action: draw_line
 target:
   label: bottom closing line
   kind: canvas
   where: Front Plane sketch at other end of parallel lines
-check: Closed mug-wall cross-section profile appears
+params:
+  suggested:
+    note: exact position follows your profile
+    value: line closing inner and outer wall at other end
+check: Profile is a closed loop between inner and outer walls
 source:
   anchor: '#3-sketch-a-camping-mug-profile'
 confidence: high
 ```
-## Step 15 — Exit sketch
+## Step 17 — Exit sketch
 ```yaml
 action: click
 target:
   label: Exit Sketch
   kind: button
   where: upper right-hand corner of workspace
-check: Sketch mode exits, profile remains in workspace
+check: Sketch mode ends
 verify:
   uia:
     name: Exit Sketch
     type: Button
+    window: SOLIDWORKS
     exists: false
 source:
   anchor: '#3-sketch-a-camping-mug-profile'
 confidence: high
 ```
-
-# Revolve the profile
-
-## Step 16 — Select profile outer edge
+## Step 18 — Select profile outer edge
 ```yaml
 action: pick
 target:
   label: outer edge of profile sketch
   kind: edge
   where: workspace sketch
-check: Outer edge of profile highlights
+check: Outer edge of profile is highlighted
 source:
   anchor: '#4-revolve-the-profile'
 confidence: high
 ```
-## Step 17 — Start Revolved Boss Base
+## Step 19 — Open Revolved Boss/Base
 ```yaml
 action: click
 target:
@@ -269,47 +313,71 @@ check: Revolve PropertyManager opens
 verify:
   uia:
     name_contains: Revolve
-    type: Window
+    type: Text
+    window: SOLIDWORKS
     exists: true
 source:
   anchor: '#4-revolve-the-profile'
 confidence: high
 ```
-## Step 18 — Confirm revolve
+## Step 20 — Select axis of revolution
+```yaml
+action: pick
+target:
+  label: Centerline
+  kind: edge
+  where: workspace
+params:
+  field: Axis of Revolution
+why: revolve needs centerline as axis
+check: Centerline fills Axis of Revolution
+source:
+  anchor: '#4-revolve-the-profile'
+confidence: inferred
+```
+## Step 21 — Confirm revolve
 ```yaml
 action: click
 target:
   label: green check mark
   kind: button
-  where: upper right-hand corner of workspace
-check: Mug body solid appears and Revolve dialog closes
+  where: Revolve PropertyManager
+check: Mug body solid appears and Revolve closes
 verify:
   uia:
     name_contains: Revolve
-    type: Window
-    exists: false
+    type: TreeItem
+    window: SOLIDWORKS
+    exists: true
 source:
   anchor: '#4-revolve-the-profile'
 confidence: inferred
-repeat_of: 12
+repeat_of: 14
 ```
 
-# Sketch handle profile
+# Handle path and plane
 
-## Step 19 — Select Front Plane for handle
+## Step 22 — Select Front Plane
 ```yaml
 action: click
 target:
   label: Front Plane
   kind: tree_item
   where: Feature Tree on left side of screen
-check: Front Plane highlights as selected
+check: Front Plane is highlighted in Feature Tree
+verify:
+  uia:
+    name: Front Plane
+    type: TreeItem
+    window: SOLIDWORKS
+    selected: true
+    exists: true
 source:
   anchor: '#5-sketch-the-handle-profile'
 confidence: high
-repeat_of: 2
+repeat_of: 3
 ```
-## Step 20 — Orient view to Front for handle
+## Step 23 — Orient view to Front
 ```yaml
 action: menu_path
 target:
@@ -319,13 +387,13 @@ target:
   menu_path:
   - View Orientation
   - Front
-check: View is square to Front
+check: View faces Front straight on
 source:
   anchor: '#5-sketch-the-handle-profile'
 confidence: high
-repeat_of: 3
+repeat_of: 4
 ```
-## Step 21 — Show hidden lines
+## Step 24 — Show hidden lines
 ```yaml
 action: menu_path
 target:
@@ -336,12 +404,12 @@ target:
   - Display Style
   - Hidden Lines Visible
 why: to see both inner and outer edges of the mug
-check: Inner and outer mug edges show as dashed hidden lines
+check: Inner and outer edges of mug show as hidden lines
 source:
   anchor: '#5-sketch-the-handle-profile'
 confidence: high
 ```
-## Step 22 — Select Line tool for handle
+## Step 25 — Open Line tool
 ```yaml
 action: click
 target:
@@ -352,74 +420,78 @@ check: Line tool is active
 source:
   anchor: '#5-sketch-the-handle-profile'
 confidence: high
-repeat_of: 7
+repeat_of: 9
 ```
-## Step 23 — Draw handle profile
+## Step 26 — Draw handle profile
 ```yaml
 action: draw_line
 target:
   label: handle profile
   kind: canvas
   where: Front Plane sketch
-check: Handle loop sketch appears attached to inner wall
+params:
+  from: first point on inner edge of mug where highlight turns orange
+  suggested:
+    note: exact handle shape up to you
+    value: natural handle loop out from wall and back
+  to: last point on same inner wall
+check: Handle loop sketch connects back to same inner wall
 source:
   anchor: '#5-sketch-the-handle-profile'
 confidence: high
 ```
-## Step 24 — Round handle corners
+## Step 27 — Round handle corners
 ```yaml
 action: click
 target:
   label: Sketch Fillet
   kind: button
   where: Sketch toolbar
-check: Handle corners appear rounded
+check: Handle corners are rounded
 source:
   anchor: '#5-sketch-the-handle-profile'
 confidence: high
 optional: true
 ```
-## Step 25 — Exit handle sketch
+## Step 28 — Exit sketch
 ```yaml
 action: click
 target:
   label: Exit Sketch
   kind: button
   where: upper right-hand corner of workspace
-check: Handle sketch exits, loop remains visible
+check: Handle sketch closes so plane can be created
 source:
   anchor: '#5-sketch-the-handle-profile'
 confidence: inferred
-repeat_of: 15
+repeat_of: 17
 ```
-
-# Create a new plane
-
-## Step 26 — Select Right Plane
+## Step 29 — Select Right Plane
 ```yaml
 action: click
 target:
   label: Right Plane
   kind: tree_item
   where: Feature Tree
-check: Right Plane highlights as selected
+check: Right Plane is highlighted in Feature Tree
 verify:
   uia:
     name: Right Plane
     type: TreeItem
+    window: SOLIDWORKS
     selected: true
     exists: true
 source:
   anchor: '#6-create-a-new-plane'
 confidence: high
 ```
-## Step 27 — Insert new Plane
+## Step 30 — Open Plane dialog
 ```yaml
 action: menu_path
 target:
   label: Plane
   kind: menu_item
-  where: Insert menu after hovering SOLIDWORKS logo in upper left
+  where: Insert menu after hovering SOLIDWORKS logo in upper left to show File, Edit, View, etc.
   menu_path:
   - Insert
   - Reference Geometry
@@ -428,13 +500,14 @@ check: Plane PropertyManager opens
 verify:
   uia:
     name_contains: Plane
-    type: Window
+    type: Text
+    window: SOLIDWORKS
     exists: true
 source:
   anchor: '#6-create-a-new-plane'
 confidence: high
 ```
-## Step 28 — Select handle endpoint reference
+## Step 31 — Select handle endpoint for plane
 ```yaml
 action: pick
 target:
@@ -446,7 +519,7 @@ source:
   anchor: '#6-create-a-new-plane'
 confidence: high
 ```
-## Step 29 — Confirm new plane
+## Step 32 — Confirm new plane
 ```yaml
 action: click
 target:
@@ -454,13 +527,19 @@ target:
   kind: button
   where: upper right-hand corner of workspace
 why: to create new working plane on edge of mug parallel to Right Plane
-check: New working plane parallel to Right Plane appears on mug edge
+check: New working plane parallel to Right Plane appears at mug edge
+verify:
+  uia:
+    name_contains: Plane
+    type: TreeItem
+    window: SOLIDWORKS
+    exists: true
 source:
   anchor: '#6-create-a-new-plane'
 confidence: high
-repeat_of: 12
+repeat_of: 14
 ```
-## Step 30 — Rename plane to MugEdge
+## Step 33 — Rename plane to MugEdge
 ```yaml
 action: type
 target:
@@ -469,20 +548,21 @@ target:
   where: Feature Tree
 params:
   value: MugEdge
-check: Feature Tree shows plane named MugEdge
+check: Feature Tree shows MugEdge plane name
 verify:
   uia:
     name: MugEdge
     type: TreeItem
+    window: SOLIDWORKS
     exists: true
 source:
   anchor: '#6-create-a-new-plane'
 confidence: high
 ```
 
-# Sketch handle body profile
+# Handle body and finish
 
-## Step 31 — Orient view Normal To
+## Step 34 — Orient view Normal To
 ```yaml
 action: menu_path
 target:
@@ -498,7 +578,20 @@ source:
   anchor: '#7-sketch-a-handle-body-profile'
 confidence: high
 ```
-## Step 32 — Select Centerpoint Straight Slot tool
+## Step 35 — Start sketch on MugEdge plane
+```yaml
+action: click
+target:
+  label: Sketch
+  kind: button
+  where: Sketch toolbar
+check: Sketch editing starts on MugEdge plane
+source:
+  anchor: '#7-sketch-a-handle-body-profile'
+confidence: inferred
+repeat_of: 5
+```
+## Step 36 — Open Centerpoint Straight Slot tool
 ```yaml
 action: menu_path
 target:
@@ -513,100 +606,120 @@ source:
   anchor: '#7-sketch-a-handle-body-profile'
 confidence: high
 ```
-## Step 33 — Select slot center point
+## Step 37 — Place slot centerpoint
 ```yaml
 action: pick
 target:
   label: first sketch point of handle
   kind: canvas
   where: MugEdge plane sketch where line turns orange
-check: Slot centerpoint attaches to handle point with orange highlight
+check: Slot centerpoint is placed at handle endpoint
 source:
   anchor: '#7-sketch-a-handle-body-profile'
 confidence: high
 ```
-## Step 34 — Drag slot width
+## Step 38 — Drag slot width
 ```yaml
 action: drag
 target:
   label: slot width
   kind: canvas
   where: MugEdge plane sketch
+params:
+  from: slot centerpoint
+  suggested:
+    note: keep narrow, any small width works
+    value: narrow width
+  to: width position using guidelines
 check: Narrow slot width preview appears
 source:
   anchor: '#7-sketch-a-handle-body-profile'
 confidence: high
 ```
-## Step 35 — Drag slot length
+## Step 39 — Drag slot length
 ```yaml
 action: drag
 target:
   label: slot length
   kind: canvas
   where: MugEdge plane sketch
-check: Straight slot profile appears at mug height
+params:
+  from: slot width position
+  suggested:
+    note: height up to you, avoid design requiring too much material
+    value: short length up or down to mug height
+  to: up or down to mug height position
+check: Slot length extends to mug height
 source:
   anchor: '#7-sketch-a-handle-body-profile'
 confidence: high
 ```
-## Step 36 — Exit slot sketch
+## Step 40 — Exit sketch
 ```yaml
 action: click
 target:
   label: Exit Sketch
   kind: button
   where: upper right-hand area of workspace
-check: Slot sketch exits, profile remains
+check: Sketch mode ends with slot profile saved
+verify:
+  uia:
+    name: Exit Sketch
+    type: Button
+    window: SOLIDWORKS
+    exists: false
 source:
   anchor: '#7-sketch-a-handle-body-profile'
 confidence: high
-repeat_of: 15
+repeat_of: 17
 ```
-
-# Sweep the handle body
-
-## Step 37 — Start Swept Boss Base
+## Step 41 — Open Swept Boss/Base
 ```yaml
 action: click
 target:
   label: Swept Boss/Base
   kind: button
   where: Features toolbar
-check: Sweep PropertyManager opens with Profile and Path boxes
+check: Sweep PropertyManager opens
 verify:
   uia:
     name_contains: Sweep
-    type: Window
+    type: Text
+    window: SOLIDWORKS
     exists: true
 source:
   anchor: '#8-sweep-the-handle-body'
 confidence: high
 ```
-## Step 38 — Select sweep profile
+## Step 42 — Select sweep profile
 ```yaml
 action: pick
 target:
   label: handle body profile created with Centerpoint Straight Slot
   kind: face
   where: blue Profile dialog box / workspace
-check: Slot profile fills blue Profile box
+params:
+  field: Profile
+check: Slot profile fills Profile box
 source:
   anchor: '#8-sweep-the-handle-body'
 confidence: high
 ```
-## Step 39 — Select sweep path
+## Step 43 — Select sweep path
 ```yaml
 action: pick
 target:
   label: handle profile sketch
   kind: edge
   where: pink Path dialog box / workspace
-check: Handle loop fills pink Path box with sweep preview
+params:
+  field: Path
+check: Handle sketch fills Path box with preview
 source:
   anchor: '#8-sweep-the-handle-body'
 confidence: high
 ```
-## Step 40 — Confirm sweep
+## Step 44 — Confirm sweep
 ```yaml
 action: click
 target:
@@ -614,16 +727,19 @@ target:
   kind: button
   where: upper right-hand corner of workspace
 why: to confirm Sweep and create yellow handle
-check: Yellow handle solid appears and Sweep dialog closes
+check: Yellow handle solid appears and Sweep closes
+verify:
+  uia:
+    name_contains: Sweep
+    type: TreeItem
+    window: SOLIDWORKS
+    exists: true
 source:
   anchor: '#8-sweep-the-handle-body'
 confidence: high
-repeat_of: 12
+repeat_of: 14
 ```
-
-# Add fillets
-
-## Step 41 — Start Fillet
+## Step 45 — Open Fillet tool
 ```yaml
 action: click
 target:
@@ -634,55 +750,57 @@ check: Fillet PropertyManager opens
 verify:
   uia:
     name_contains: Fillet
-    type: Window
+    type: Text
+    window: SOLIDWORKS
     exists: true
 source:
   anchor: '#10-add-fillets-and-design-details'
 confidence: high
 ```
-## Step 42 — Select fillet edges
+## Step 46 — Select edges to fillet
 ```yaml
 action: pick
 target:
-  label: sharp mug edges
+  label: sharp edges
   kind: edge
-  where: workspace model
-check: Sharp mug and handle edges highlight for fillet
+  where: mug and handle
+check: Sharp edges highlight for fillet
 source:
   anchor: '#10-add-fillets-and-design-details'
 confidence: inferred
 ```
-## Step 43 — Enter fillet radius
+## Step 47 — Enter fillet radius
 ```yaml
 action: type
 target:
-  label: Fillet Radius
+  label: Radius
   kind: field
   where: Fillet PropertyManager
 params:
   suggested:
-    note: any small value works
+    note: any small radius works
     value: '2'
-check: Fillet radius value appears in PropertyManager
+check: Fillet preview updates
 source:
   anchor: '#10-add-fillets-and-design-details'
 confidence: inferred
 ```
-## Step 44 — Confirm fillet
+## Step 48 — Confirm fillet
 ```yaml
 action: click
 target:
   label: green check mark
   kind: button
-  where: upper right-hand corner of workspace
-check: Sharp edges appear rounded and Fillet dialog closes
+  where: Fillet PropertyManager
+check: Sharp edges are refined and Fillet closes
 verify:
   uia:
     name_contains: Fillet
-    type: Window
-    exists: false
+    type: TreeItem
+    window: SOLIDWORKS
+    exists: true
 source:
   anchor: '#10-add-fillets-and-design-details'
 confidence: inferred
-repeat_of: 12
+repeat_of: 14
 ```

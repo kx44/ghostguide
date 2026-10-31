@@ -19,6 +19,7 @@ WONDER_MAX_TOKENS = 2048
 WONDER_EFFORT = "low"
 WONDER_W = 2048
 WONDER_KINDS = ("button", "menu_item", "field", "tab")
+RIBBON_TOOLBARS = r"\s*(sketch|features|surfaces|evaluate)\s+toolbar\b"    # not "Standard toolbar", which has no tab
 WONDER_PROMPT = ("This is a screenshot of {app} ({version}). A tutorial written for an older version asks for this "
                  "control, and it can't be found on the screen by name.\nStep: {title}\nControl: {label} ({kind})\n"
                  "The tutorial says: {where}\nIf you can see the control, or what replaced it in this version, call "
@@ -46,10 +47,16 @@ def route(step: Step, store=None) -> Optional[dict]:
     return out
 
 
+def named_tab(where: Optional[str]) -> Optional[str]:
+    """The ribbon tab a `where` names: "Features tab, CommandManager", or as tutorials often say, "Sketch toolbar"."""
+    m = re.match(r"\s*([\w ]+?) tab\b", where or "", re.I) or re.match(RIBBON_TOOLBARS, where or "", re.I)
+    return m.group(1).strip() if m else None
+
+
 def tab_route(step: Step) -> Optional[list[str]]:
-    """A ribbon control on a named tab ("Features tab, CommandManager") that isn't showing: that tab, then it."""
-    m = re.match(r"\s*([\w ]+?) tab\b", step.target.where or "", re.I)
-    return [m.group(1).strip(), step.target.label] if m else None
+    """A ribbon control on a named tab that isn't showing: that tab, then it."""
+    tab = named_tab(step.target.where)
+    return [tab, step.target.label] if tab else None
 
 
 def describe(r: dict) -> str:

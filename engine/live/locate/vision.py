@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from typing import Callable, Optional
 
 from engine import config
+from engine.live.locate.menu import named_tab
 from engine.models.tools import LOCATE_TOOLS, DrawLine, MenuPath, PointAt
 from engine.schema.messages import Box, Line
 from engine.schema.tutorial import Step
@@ -232,8 +233,8 @@ class SparkVision:
         line_step = step.action in ("draw_line", "drag") and t.kind in ("canvas", "edge", "face")
         is_tab = False
         if route:
-            m = re.match(r"\s*([\w ]+?) tab\b", t.where or "", re.I)
-            is_tab = bool(hop == 0 and m and m.group(1).casefold() == label.casefold())
+            tab = named_tab(t.where)
+            is_tab = bool(hop == 0 and tab and tab.casefold() == label.casefold())
             if is_tab:
                 fields["label"] = f"the {label} tab, in the row of ribbon tab names under the ribbon (not a button called {label})"
             text = PROMPT_HOP.format(route=" › ".join(route), **fields)

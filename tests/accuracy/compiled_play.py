@@ -19,6 +19,8 @@ import os
 import re
 import time
 
+from engine import config
+from engine.appmap.store import AppMapStore
 from engine.basefile.parse import parse_file
 from engine.dpi import make_dpi_aware
 from tests.accuracy import mug_walk as mw
@@ -58,14 +60,17 @@ def act(step, w: mw.Walk) -> dict:
         pts = sketch_line(step, w)
         if not pts:
             return {"how": "no hands for this line", "stop": True}
+        if w.mm(44, 50) in pts and w.mm(42, 50.08) in pts or w.mm(38, -49.92) in pts:
+            d.keys("L", settle=0.6)     # Offset drops the Line tool; the article says "using the line tool" here
         w.chain(*pts, end=False)
         d.keys("Esc", settle=0.3)
         d.keys("Esc", settle=0.5)
         return {"how": f"drew it, {len(pts)} points"}
     if step.action == "pick":
-        wall = w.mm(42, 0)
-        d.click(*wall, settle=0.8)
-        return {"how": "picked the wall line"}
+        words = f"{step.title} {t.label}".casefold()
+        spot = w.origin if "centerline" in words or "axis" in words else w.mm(42, 0)
+        d.click(*spot, settle=0.8)
+        return {"how": f"picked {'the centerline' if spot == w.origin else 'the wall line'}"}
     if step.action == "type":
         out = w.do_it(n, presses=1)
         return {"how": "Fill it for me", **out}
@@ -85,6 +90,7 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     print("DPI:", make_dpi_aware())
     tut = parse_file(args.tutorial)
+    store = AppMapStore(tut.meta.app, version="2026", local=config.CACHE / "appmaps-check")
     mw.TUTORIAL = args.tutorial
     os.environ["CHECK_MODELS"] = "off"      # rules and pixels only: no GPU starts for this
     d.front()
@@ -115,13 +121,20 @@ def main(argv=None) -> int:
                 row.update(act(step, w))
             except mw.Missing as e:
                 row["missing"] = str(e)
+                row["stop"] = True      # everything after it would run on the wrong screen
             g = w.g(n)
             if g and g.get("box"):
                 row["box"] = g["box"]
             d.hover(1400, 1450, settle=0.1)
             mw.overlay_shot(n)
-            row["auto"] = w.wait(lambda: eng.current != n, AUTO_WAIT_S)
-            if not row["auto"] and eng.current == n:
+            row["auto"] = False if row.get("stop") else w.wait(lambda: eng.current != n, AUTO_WAIT_S)
+            short = step.target.shortcut or (store.get(step.target.label).shortcut if store.get(step.target.label) else None)
+            if not row["auto"] and not row.get("stop") and step.action == "click" and short and step.verify:
+                d.front()                # the click missed and the rule still says no: what a person does next
+                d.keys(*[k.strip() for k in short.split("+")], settle=1.0)
+                row["shortcut_after_miss"] = short
+                row["auto"] = w.wait(lambda: eng.current != n, AUTO_WAIT_S)
+            if not row["auto"] and eng.current == n and not row.get("stop"):
                 eng.send("next")
                 w.wait(lambda: eng.current != n, 5)
             print(f"    {json.dumps({k: v for k, v in row.items() if k not in ('n', 'action', 'label', 'title')}, ensure_ascii=False)[:260]}", flush=True)
