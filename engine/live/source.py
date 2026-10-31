@@ -250,6 +250,8 @@ class Sources:
                             "Open it in the browser, or choose a copy you saved.")
         except SourceError:
             self.refused = f"This page isn't saved on this PC, and {host} can't be reached right now."
+        except Exception as e:    # a malformed link in a file, a full disk: a message, never "Reading the page…" for ever
+            self.refused = f"This page isn't saved on this PC, and it couldn't be read here ({type(e).__name__})."
 
     def choose(self, path: str, step, of: int) -> m.SourceView:
         """A copy the person picked: a video, a saved page or a text file. Goes with this tutorial from now on."""

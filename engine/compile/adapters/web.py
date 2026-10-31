@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import hashlib
 import io
+import ipaddress
 import re
+import socket
 from dataclasses import dataclass, field
 from html import unescape
 from html.parser import HTMLParser
@@ -28,6 +30,9 @@ MAIN_SHARE = 0.6            # the main part: the deepest element holding at leas
 MIN_IMAGE_SIDE = 200        # logos and icons aren't evidence
 MAX_IMAGE_W = 1280
 USER_AGENT = "GhostGuide/0.1 (tutorial importer)"
+MAX_PAGE_BYTES = 8 * 2 ** 20
+MAX_IMAGE_BYTES = 20 * 2 ** 20
+MAX_REDIRECTS = 5
 CHALLENGE = ("just a moment", "performing security verification", "verify you are human", "enable javascript and cookies")
 
 
@@ -166,21 +171,64 @@ def looks_blocked(status: int, html: str) -> bool:
     return any(c in head for c in CHALLENGE)
 
 
+def is_public_host(host: Optional[str]) -> bool:
+    """A name that resolves only to addresses on the internet. An address that can't be resolved isn't a local one: the
+    request just fails by itself."""
+    if not host:
+        return False
+    if host.casefold() == "localhost" or host.casefold().endswith((".localhost", ".local", ".internal")):
+        return False
+    try:
+        addrs = {info[4][0] for info in socket.getaddrinfo(host, None)}
+    except OSError:
+        return True
+    return all(ipaddress.ip_address(a.split("%")[0]).is_global for a in addrs)
+
+
+def guard_url(url: str) -> None:
+    """A link in a tutorial file is someone else's text, and a page can redirect anywhere: this PC only fetches web pages
+    on the internet, never its own services or the local network."""
+    u = urlparse(url)
+    if u.scheme not in ("http", "https") or not is_public_host(u.hostname):
+        raise SourceError(f"{u.hostname or url} is on this PC or its local network, so it isn't fetched. Save the page "
+                          "from your browser and drop the file here.")
+
+
+def fetch_limited(url: str, limit: int, timeout: float) -> tuple[int, bytes, Optional[str]]:
+    """(status, body, encoding), following redirects by hand so each one is checked, and stopping at `limit` bytes."""
+    import httpx
+
+    for _ in range(MAX_REDIRECTS + 1):
+        guard_url(url)
+        with httpx.stream("GET", url, headers={"User-Agent": USER_AGENT}, timeout=timeout) as r:
+            if r.is_redirect and r.headers.get("location"):
+                url = urljoin(url, r.headers["location"])
+                continue
+            body = bytearray()
+            for chunk in r.iter_bytes():
+                body += chunk
+                if len(body) > limit:
+                    raise SourceError(f"{urlparse(url).hostname} sent more than {limit // 2 ** 20} MB, so it was left unread.")
+            return r.status_code, bytes(body), r.encoding
+    raise SourceError(f"{urlparse(url).hostname} redirected too many times.")
+
+
 def fetch_page(url: str, timeout: float = 30) -> str:
     import httpx
 
     host = urlparse(url).netloc
     try:
-        r = httpx.get(url, headers={"User-Agent": USER_AGENT}, follow_redirects=True, timeout=timeout)
-    except httpx.HTTPError as e:
+        status, body, encoding = fetch_limited(url, MAX_PAGE_BYTES, timeout)
+    except (httpx.HTTPError, httpx.InvalidURL) as e:
         raise SourceError(f"Couldn't reach {host} ({e.__class__.__name__}). Check the link, or save the page "
                           "from your browser and drop the file here.") from e
-    if looks_blocked(r.status_code, r.text):
+    text = body.decode(encoding or "utf-8", errors="replace")
+    if looks_blocked(status, text):
         raise SourceBlocked(f"{host} doesn't allow automatic reading. Open the page in your browser, save it "
                             "(Save as → Webpage, Complete) and drop the file here.")
-    if r.status_code != 200:
-        raise SourceError(f"{host} answered {r.status_code} for that link.")
-    return r.text
+    if status != 200:
+        raise SourceError(f"{host} answered {status} for that link.")
+    return text
 
 
 def to_jpeg(data: bytes, max_w: int = MAX_IMAGE_W) -> Optional[bytes]:
@@ -203,10 +251,12 @@ def to_jpeg(data: bytes, max_w: int = MAX_IMAGE_W) -> Optional[bytes]:
 
 def _local_loader(html_path: Path) -> Callable[[str], Optional[bytes]]:
     def load(src: str) -> Optional[bytes]:
-        if src.startswith(("http:", "https:", "data:")):
+        if src.startswith(("http:", "https:", "data:", "file:")):
             return None     # a saved page keeps what it needs beside it; nothing more is fetched
-        p = (html_path.parent / unquote(src.split("?")[0])).resolve()
-        return p.read_bytes() if p.is_file() else None
+        folder = html_path.parent.resolve()
+        p = (folder / unquote(src.split("?")[0])).resolve()
+        # Beside the page only: `src` is the page's text, and these pictures go to a model.
+        return p.read_bytes() if p.is_relative_to(folder) and p.is_file() else None
     return load
 
 
@@ -217,10 +267,10 @@ def _web_loader(base: str) -> Callable[[str], Optional[bytes]]:
         if src.startswith("data:"):
             return None
         try:
-            r = httpx.get(urljoin(base, src), headers={"User-Agent": USER_AGENT}, follow_redirects=True, timeout=30)
-        except httpx.HTTPError:
+            status, body, _ = fetch_limited(urljoin(base, src), MAX_IMAGE_BYTES, 30)
+        except (httpx.HTTPError, httpx.InvalidURL, SourceError):
             return None
-        return r.content if r.status_code == 200 else None
+        return body if status == 200 else None
     return load
 
 

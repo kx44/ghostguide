@@ -27,6 +27,21 @@ PORT = 8080
 SCALEDOWN_S = 300       # idle seconds before the GPU is released (L40S ≈ $1.95/h × 1.15 for the region, while up)
 MAX_TOKENS = 2048       # reasoning counts toward this; running out mid-thought returns empty content
 
+MAX_IMAGE_B64 = 16 * 2 ** 20    # a 1920 px screenshot as a JPEG is far below this
+IMAGE_MIMES = ("image/jpeg", "image/png")
+
+
+def authorised(header, token: str) -> bool:
+    """Fails closed when the secret is missing, and takes the same time however much of the token is right."""
+    import hmac
+
+    return bool(token) and isinstance(header, str) and hmac.compare_digest(header.encode(), f"Bearer {token}".encode())
+
+
+def acceptable(image, mime) -> bool:
+    return isinstance(image, str) and 0 < len(image) <= MAX_IMAGE_B64 and mime in IMAGE_MIMES
+
+
 app = modal.App("ghostguide-glimmer-ap")
 volume = modal.Volume.from_name("glimmer-weights", create_if_missing=True)
 
@@ -104,11 +119,13 @@ class Glimmer:
 
         @api.post("/")
         def check(body: dict, authorization: str | None = Header(None)):
-            if authorization != f"Bearer {os.environ['GLIMMER_TOKEN']}":
+            if not authorised(authorization, os.environ.get("GLIMMER_TOKEN", "")):
                 raise HTTPException(status_code=401, detail="bad token")
             t0 = time.monotonic()
-            image = body.get("image_b64") or body["image_png_b64"]     # image_png_b64: the first contract
+            image = body.get("image_b64") or body.get("image_png_b64") or ""     # image_png_b64: the first contract
             mime = body.get("image_mime", "image/png")
+            if not acceptable(image, mime):
+                raise HTTPException(status_code=413, detail="that isn't a picture of a sensible size")
             # No temperature: Meta advises against greedy; llama.cpp applies the checkpoint's published sampling.
             r = httpx.post(f"http://127.0.0.1:{PORT}/v1/chat/completions", timeout=120, json={
                 "model": "muse-glimmer", "max_tokens": MAX_TOKENS,

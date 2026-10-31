@@ -1,4 +1,4 @@
-"""python -m engine validate|record|spend|play|pin|appmap|compile|eval"""
+"""python -m engine validate|record|spend|activity|forget|play|pin|appmap|compile|eval"""
 from __future__ import annotations
 
 import argparse
@@ -7,7 +7,7 @@ import json
 import sys
 from pathlib import Path
 
-from engine import config
+from engine import activity, config
 
 
 def cmd_validate(args) -> int:
@@ -57,14 +57,54 @@ def cmd_spend(args) -> int:
     return 0
 
 
+def cmd_activity(args) -> int:
+    """What was sent and what was done, from the log: never the contents, because the log doesn't hold them."""
+    rows = activity.read()
+    sent = [r for r in rows if r.get("kind") == "sent"]
+    screens = [r for r in sent if r.get("screen")]
+    print(f"{activity.LOG}\n{len(sent)} sends in all. Pictures of your screen: {sum(r.get('images', 0) for r in screens)}, "
+          f"in {len(screens)} sends. Withheld: {sum(r.get('kind') == 'withheld' for r in rows)}. "
+          f"Do it for me: {sum(r.get('kind') == 'acted' for r in rows)}.")
+    for r in rows[-args.last:]:
+        if r.get("kind") == "sent":
+            print(f"  {r['ts']}  sent to {r['to']}  {r['model']}  {r['tag']}  {r['images']} pictures  {r['bytes'] // 1024} KB")
+        elif r.get("kind") == "withheld":
+            print(f"  {r['ts']}  not sent: {r['why']}")
+        elif r.get("kind") == "acted":
+            print(f"  {r['ts']}  Do it for me, step {r['step']}: {r['title']} ({', '.join(r['ops'])})")
+    return 0
+
+
+def cmd_forget(args) -> int:
+    """What this PC holds for GhostGuide, and removing it."""
+    from engine.forget import holdings, remove
+
+    items = holdings()
+    total = sum(i["bytes"] for i in items)
+    for i in items:
+        print(f"  {i['bytes'] / 2 ** 20:8.1f} MB  {i['what']}\n              {i['path']}")
+    print(f"{total / 2 ** 20:.1f} MB held. The spend log stays, because the budget cap depends on it. Your tutorials stay too.")
+    if not args.yes:
+        print("Nothing removed. Add --yes to remove these.")
+        return 0
+    for i in items:
+        remove(Path(i["path"]))
+    print("Removed.")
+    return 0
+
+
 def _load_play(args):
     from engine.basefile.parse import parse_file
+    from engine.basefile.validate import validate_tutorial
     from engine.live.locate.pinned import Pins, default_path
     from engine.live.player import Player
     from engine.live.scheme import pick_scheme
     from engine.live.session import Session
 
     tut = parse_file(args.tutorial)
+    report = validate_tutorial(tut, Path(args.tutorial).name)     # a file is someone else's text: its rules hold for every file played
+    if not report.ok:
+        raise ValueError(f"{report.name} doesn't pass the checks, so it won't play: " + "; ".join(report.errors[:3]))
     pins_path = Path(args.pins) if args.pins else default_path(args.tutorial)
     pins = Pins.load(pins_path)
     session = Session(tut, save_path=config.CACHE / "sessions" / (Path(args.tutorial).stem + ".json"))
@@ -97,6 +137,16 @@ def _load_play(args):
     elif not pinned:
         print("  no pins yet: each card says how to pin its target as you go (hover, Ctrl+Alt+P twice)")
     return player
+
+
+def _kept_on_pc(window: str):
+    """Why a picture of this window must not go to a model right now, or None."""
+    from engine.live import windows
+
+    if activity.local_only():
+        return "set to stay on this PC"
+    w = windows.find(window)
+    return activity.title_withheld(w.title) if w else None
 
 
 def _resolver(tut, args):
@@ -148,10 +198,18 @@ def _resolver(tut, args):
         got = grab()
         return capture.dropdown_arrow(got[0], (box.x, box.y, box.w, box.h), got[1]) if got else None
 
+    def grab_for_model():
+        """The same picture, unless it should stay on this PC. Nothing to look at is a miss, and the card's route takes over."""
+        why = _kept_on_pc(window)
+        if why:
+            activity.withheld(why)
+            return None
+        return grab()
+
     vision = wonder = None
     if enabled():
-        vision = SparkVision(tut.meta.app, grab=grab, regions=solidworks)
-        wonder = Wonder(tut.meta.app, version=version or "", grab=grab, store=store)
+        vision = SparkVision(tut.meta.app, grab=grab_for_model, regions=solidworks)
+        wonder = Wonder(tut.meta.app, version=version or "", grab=grab_for_model, store=store)
     print(f"  app map: {store.builtin_path or 'no built-in map'} + local {store.local_path}")
 
     def clicked(box, since: float) -> bool:
@@ -255,8 +313,10 @@ def _tracker(tut, app_window: str, args):
         return windows.vscode_folder(w.title) if w else None
 
     glimmer, spark = check_stages()
-    return Tracker(tut, app_window, Path(args.folder) if args.folder else None, dump,
-                   ladder=Ladder(glimmer=glimmer, spark=spark), idle_s=watcher.recent.idle_s, grab=grab), folder_fn
+    tracker = Tracker(tut, app_window, Path(args.folder) if args.folder else None, dump,
+                      ladder=Ladder(glimmer=glimmer, spark=spark), idle_s=watcher.recent.idle_s, grab=grab)
+    tracker.gate = lambda: _kept_on_pc(app_window)
+    return tracker, folder_fn
 
 
 def _describe(msg) -> str:
@@ -319,7 +379,11 @@ def _importer(msg, progress):
 def cmd_play(args) -> int:
     if not args.tutorial:
         return _serve(None, args)
-    player = _load_play(args)
+    try:
+        player = _load_play(args)
+    except ValueError as e:
+        print(e, file=sys.stderr)
+        return 2
     if args.walk:
         return _walk(player, Path(args.walk), args.every, args.displays)
     if args.console:
@@ -510,6 +574,14 @@ def main(argv=None) -> int:
 
     s = sub.add_parser("spend", help="show logged model spend against the budget cap")
     s.set_defaults(func=cmd_spend)
+
+    ac = sub.add_parser("activity", help="what left this PC and what Do it for me did (never the contents)")
+    ac.add_argument("--last", type=int, default=30, help="how many lines to show")
+    ac.set_defaults(func=cmd_activity)
+
+    fg = sub.add_parser("forget", help="what this PC holds for GhostGuide; --yes removes it")
+    fg.add_argument("--yes", action="store_true")
+    fg.set_defaults(func=cmd_forget)
 
     pl = sub.add_parser("play", help="play a tutorial on screen: engine side (start the overlay too)")
     pl.add_argument("tutorial", nargs="?", help="leave out to start empty and import one from the overlay")

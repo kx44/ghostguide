@@ -134,6 +134,8 @@ class State(_Msg):
     titles: list[str]
     statuses: list[StepStatus]
     scheme: Scheme
+    local_only: bool = False           # the switch: nothing from the screen leaves this PC
+    privacy: Optional[str] = None      # the tray's statement of what's happening right now
 
 
 class Toast(_Msg):
@@ -315,13 +317,18 @@ class ToggleScheme(_Simple):
     type: Literal["toggle_scheme"] = "toggle_scheme"
 
 
+class ToggleLocal(_Simple):
+    """Keep every picture of the screen on this PC, or let models look again."""
+    type: Literal["toggle_local"] = "toggle_local"
+
+
 FromOverlay = Union[Hello, ShowMeReq, DoIt, Next, Back, Skip, Hide, Resume, Jump, PinReq, Unpin, Import, OpenTutorial, StartOk,
-                    SourceReq, SourceFile, ToggleScheme]
+                    SourceReq, SourceFile, ToggleScheme, ToggleLocal]
 
 TO_OVERLAY_TYPES = ("guide", "clear", "state", "toast", "show_me", "mark", "start_check", "compile_progress", "compile_done",
                     "source_view")
 FROM_OVERLAY_TYPES = ("hello", "show_me", "do_it", "next", "back", "skip", "hide", "resume", "jump", "pin", "unpin", "import",
-                      "open_tutorial", "start_ok", "source", "source_file", "toggle_scheme")
+                      "open_tutorial", "start_ok", "source", "source_file", "toggle_scheme", "toggle_local")
 
 
 def parse_from_overlay(raw: Union[str, bytes, dict]) -> FromOverlay:

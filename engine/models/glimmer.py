@@ -2,7 +2,8 @@
 true now; done, not yet, or wrong?"
 
   9c Muse Glimmer on Modal    GLIMMER_BACKEND=modal, GLIMMER_MODAL_URL = the deployed endpoint
-  9d Spark Contributor        through models/client.py (record/replay, cost log, the $4 cap)
+  9d Spark                    through models/client.py (record/replay, cost log, the budget cap); standard Spark, unless
+                              SCREENS_MAY_TRAIN=on allows the cheaper Contributor rate
 
 Both are **off** unless CHECK_MODELS=on: they only run after the free checks (rule, pixel diff) couldn't tell,
 and they cost money (Spark) or need a Modal deployment (Glimmer). With CHECK_MODELS=on and no META_API_KEY,
@@ -19,7 +20,7 @@ import json
 import re
 from typing import Callable, Optional
 
-from engine import config
+from engine import activity, config
 from engine.schema.tutorial import Step
 
 # Spark's reasoning counts toward max_tokens, so leave room beyond the short JSON answer.
@@ -62,13 +63,19 @@ def parse_answer(text: str):
     return Verdict(result, why=str(data.get("why", ""))[:160])
 
 
-def spark_contributor(client=None) -> Callable[[Step, bytes], object]:
+def screens_may_train() -> bool:
+    """Contributor's low price comes with Meta being allowed to train on what's sent. A picture of someone's screen only
+    goes there if they've said yes."""
+    return config.env("SCREENS_MAY_TRAIN", "off").lower() in ("on", "1", "true", "yes")
+
+
+def spark_contributor(client=None, model: str = config.SPARK_CONTRIBUTOR) -> Callable[[Step, bytes], object]:
     from engine.models.client import ModelClient, image_part, text_part
 
     c = client or ModelClient()
 
     def check(step: Step, png: bytes):
-        reply = c.chat(model=config.SPARK_CONTRIBUTOR, max_tokens=MAX_TOKENS, reasoning_effort=EFFORT,
+        reply = c.chat(model=model, max_tokens=MAX_TOKENS, reasoning_effort=EFFORT,
                        tag=f"check-step-{step.n}",
                        messages=[{"role": "user", "content": [text_part(question(step)), image_part(png)]}])
         v = parse_answer(reply.text)
@@ -89,8 +96,14 @@ def as_jpeg(png: bytes, quality: int = 85) -> bytes:
 
 def glimmer_modal(url: str, post=None) -> Callable[[Step, bytes], object]:
     def check(step: Step, png: bytes):
-        body = {"image_b64": base64.b64encode(as_jpeg(png)).decode(), "image_mime": "image/jpeg",
+        if activity.local_only():
+            raise activity.LocalOnly("your screen is set to stay on this PC")
+        if post is None and not config.is_secure(url):
+            raise ValueError("refused to send a picture of your screen without https")
+        picture = as_jpeg(png)
+        body = {"image_b64": base64.b64encode(picture).decode(), "image_mime": "image/jpeg",
                 "question": question(step), "check": step.check}
+        activity.sent(activity.host_of(url), "muse-glimmer", f"check-step-{step.n}", 1, len(picture))
         if post is None:
             import httpx
             headers = {"Authorization": f"Bearer {config.env('GLIMMER_MODAL_TOKEN')}"}
@@ -113,4 +126,4 @@ def check_stages() -> tuple[Optional[Callable], Optional[Callable]]:
     url = config.env("GLIMMER_MODAL_URL")
     if config.env("GLIMMER_BACKEND", "modal") == "modal" and url:
         glimmer = glimmer_modal(url)
-    return glimmer, spark_contributor()
+    return glimmer, spark_contributor(model=config.SPARK_CONTRIBUTOR if screens_may_train() else config.SPARK)

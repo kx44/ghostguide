@@ -5,7 +5,7 @@ only when there's something sure to act on. A box from accessibility data is exa
 found by sight first asks you to look (`needs_confirm`): the first press says so, the second one runs it.
 
 Input only ever goes to the app: it refuses unless the app is the front window and the spot it would click is the
-app's own. The pure part (what to do) is tested off Windows; everything that sends input is under `# ---- Windows`.
+app's own. A tutorial file is someone else's text, so what it may ask for is limited too (`unsafe`). The pure part (what to do) is tested off Windows; everything that sends input is under `# ---- Windows`.
 """
 from __future__ import annotations
 
@@ -23,6 +23,10 @@ SURE_STAGES = {"uia"}
 SETTLE_S = 0.15
 RENAME_SETTLE_S = 0.5
 HIT_SETTLE_S = 0.1       # the overlay checks the cursor every 30 ms and lets go of the mouse once it's off a card
+MAX_TYPED = 200          # a value longer than this stays on the card, to copy
+THEN_KEYS = {"enter", "return", "tab"}       # the only keys a tutorial may press after typing
+KEY_NAMES = {"control": "ctrl", "escape": "esc", "delete": "del", "return": "enter"}
+NEVER_KEYS = [{"alt", "tab"}, {"alt", "esc"}, {"ctrl", "esc"}, {"ctrl", "shift", "esc"}, {"alt", "space"}, {"ctrl", "alt", "del"}]
 
 
 @dataclass
@@ -44,9 +48,39 @@ def _value(step: Step) -> Optional[str]:
     return None if v is None else str(v)
 
 
+def _key_set(keys) -> set[str]:
+    return {KEY_NAMES.get(str(k).strip().casefold(), str(k).strip().casefold()) for k in keys}
+
+
+def _step_keys(step: Step) -> Optional[list]:
+    """The keys this step would press, when it presses a combination."""
+    if step.action == "shortcut":
+        return step.params.get("keys")
+    if step.action == "menu_path" or step.action == "click":
+        return step.target.shortcut.split("+") if step.target.shortcut else None
+    return None
+
+
+def unsafe(step: Step) -> Optional[str]:
+    """Why a tutorial file's instruction won't be carried out for you, or None. The file is someone else's text."""
+    keys = _step_keys(step)
+    if keys and _key_set(keys) in NEVER_KEYS:
+        return "it would switch away from the app"
+    if step.action == "type":
+        v = _value(step)
+        if v is not None and len(v) > MAX_TYPED:
+            return "it's too long to type for you"
+        if v is not None and any(ord(c) < 32 or ord(c) == 127 for c in v):
+            return "it holds control characters"
+        then = step.params.get("then_key")
+        if then is not None and str(then).strip().casefold() not in THEN_KEYS:
+            return f"it presses {then} afterwards"
+    return None
+
+
 def can_do(step: Step, box: Optional[Box]) -> bool:
     """Is there something sure to act on, right now?"""
-    if step.action not in DOABLE or step.target.kind in NOT_DOABLE_KINDS:
+    if step.action not in DOABLE or step.target.kind in NOT_DOABLE_KINDS or unsafe(step):
         return False
     if step.action == "shortcut":
         return bool(step.params.get("keys"))
@@ -58,7 +92,11 @@ def can_do(step: Step, box: Optional[Box]) -> bool:
 
 
 def needs_confirm(step: Step, stage: str, box: Optional[Box] = None) -> bool:
-    """A shortcut needs no box; UIA's box is exact; anything found by sight or memory waits for a second press."""
+    """A shortcut needs no box; UIA's box is exact; anything found by sight or memory waits for a second press. So does
+    a key that deletes, wherever it came from."""
+    keys = _step_keys(step)
+    if keys and _key_set(keys) & {"del"}:
+        return True
     return (box is not None and step.action not in ("shortcut", "menu_path") and stage not in SURE_STAGES)
 
 
@@ -115,6 +153,11 @@ class Executor:
         w = windows.find(self.app_window)
         return _pid(w.hwnd) if w else None
 
+    def _still_in_front(self) -> bool:
+        from engine.live import windows
+        pid, fg = self._app_pid(), windows.foreground()
+        return pid is not None and fg is not None and _pid(fg.hwnd) == pid
+
     def refuse(self, ops: list[Op]) -> Optional[str]:
         """Why not to send this input, or None. Checked right before sending, never from memory."""
         from engine.live import windows
@@ -155,7 +198,8 @@ class Executor:
                     if op.keys == ("F2",):
                         time.sleep(RENAME_SETTLE_S)       # the rename box takes a moment; typed sooner, it's lost
                 elif op.kind == "text":
-                    _text(op.text)
+                    if not _text(op.text, self._still_in_front):
+                        return f"{self.app_window} stopped being the front window, so typing stopped."
                 time.sleep(SETTLE_S)
         finally:
             u32.SetCursorPos(*back)
@@ -197,16 +241,19 @@ def _click(op: Op) -> None:
     import ctypes
     u32 = ctypes.windll.user32
     down, up = (8, 16) if op.button == "right" else (2, 4)      # MOUSEEVENTF_{RIGHT,LEFT}{DOWN,UP}
+    mods = [_vk(m) for m in op.modifiers]                       # before anything is pressed: a bad name can't leave one held
     u32.SetCursorPos(*op.at)
     time.sleep(0.12)                                            # let the app's hover catch up, or it ignores the click
-    for m in op.modifiers:
-        u32.keybd_event(_vk(m), 0, 0, 0)
-    for _ in range(op.count):
-        u32.mouse_event(down, 0, 0, 0, 0)
-        u32.mouse_event(up, 0, 0, 0, 0)
-        time.sleep(0.05)
-    for m in reversed(op.modifiers):
-        u32.keybd_event(_vk(m), 0, 2, 0)
+    try:
+        for v in mods:
+            u32.keybd_event(v, 0, 0, 0)
+        for _ in range(op.count):
+            u32.mouse_event(down, 0, 0, 0, 0)
+            u32.mouse_event(up, 0, 0, 0, 0)
+            time.sleep(0.05)
+    finally:
+        for v in reversed(mods):
+            u32.keybd_event(v, 0, 2, 0)
 
 
 def _keys(keys: tuple[str, ...]) -> None:
@@ -219,8 +266,19 @@ def _keys(keys: tuple[str, ...]) -> None:
         u32.keybd_event(v, 0, 2, 0)
 
 
-def _text(text: str) -> None:
-    """Characters as typed text (KEYEVENTF_UNICODE), so the keyboard layout doesn't matter."""
+def _text(text: str, still_ok=lambda: True, send=None) -> bool:
+    """Characters as typed text (KEYEVENTF_UNICODE), so the keyboard layout doesn't matter. Looks before every character:
+    a long value takes seconds, and if you change window meanwhile the rest mustn't follow you. → False if it stopped."""
+    send = send or _send_char
+    for ch in text:
+        if not still_ok():
+            return False
+        send(ch)
+        time.sleep(0.01)
+    return True
+
+
+def _send_char(ch: str) -> None:
     import ctypes
     import ctypes.wintypes as wt
 
@@ -234,9 +292,7 @@ def _text(text: str) -> None:
     class INPUT(ctypes.Structure):
         _fields_ = [("type", wt.DWORD), ("u", _U)]
 
-    for ch in text:
-        for flags in (4, 4 | 2):                 # KEYEVENTF_UNICODE, + KEYUP
-            i = INPUT(type=1)
-            i.u.ki = KEYBDINPUT(0, ord(ch), flags, 0, 0)
-            ctypes.windll.user32.SendInput(1, ctypes.byref(i), ctypes.sizeof(INPUT))
-        time.sleep(0.01)
+    for flags in (4, 4 | 2):                 # KEYEVENTF_UNICODE, + KEYUP
+        i = INPUT(type=1)
+        i.u.ki = KEYBDINPUT(0, ord(ch), flags, 0, 0)
+        ctypes.windll.user32.SendInput(1, ctypes.byref(i), ctypes.sizeof(INPUT))

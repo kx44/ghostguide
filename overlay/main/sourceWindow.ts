@@ -42,7 +42,7 @@ export class SourceWindow {
       this.ready = true;
       if (this.last) e.sender.send("source:msg", this.last);
     });
-    ipcMain.on("source:link", (_e, url) => { if (isWebLink(url)) void shell.openExternal(url); });
+    ipcMain.on("source:link", (e, url) => { if (e.sender === this.win?.webContents && isWebLink(url)) void shell.openExternal(url); });
     ipcMain.on("source:close", () => this.close());
     ipcMain.on("source:choose", async (_e, kind: "video" | "page") => {
       const extensions = kind === "video" ? ["mp4", "mkv", "webm", "mov", "avi"] : ["html", "htm", "txt", "md"];

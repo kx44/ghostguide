@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Literal, Optional
 
+from engine import activity
 from engine.schema.tutorial import FileCheck, Step, UiaCheck
 
 Result = Literal["done", "not_yet", "wrong", "unknown"]
@@ -87,8 +88,12 @@ class Snapshot:
         if self.folder is None:
             return None
         try:
-            return (self.folder / rel).read_text(encoding="utf-8", errors="replace").replace("\r\n", "\n")
-        except OSError:
+            folder = Path(self.folder).resolve()
+            p = (folder / rel).resolve()
+            if not p.is_relative_to(folder):     # a tutorial file is someone else's text: only the tutorial's own folder
+                return None
+            return p.read_text(encoding="utf-8", errors="replace").replace("\r\n", "\n")
+        except (OSError, ValueError):
             return None
 
 
@@ -311,6 +316,7 @@ class Tracker:
         self.diff_opts: dict = {}                 # capture.changed's width and share, for a picture of the whole app
         self.current_n: Optional[int] = None      # models only ever look at the step showing
         self.hidden = False                       # …and never while hidden (free checks only)
+        self.gate: Optional[Callable[[], Optional[str]]] = None    # why the app's window mustn't go to a model now, or None
         self.ladder.clock = clock
         self.showing_since = clock()              # when the step on screen came up
 
@@ -395,7 +401,19 @@ class Tracker:
             return Verdict("not_yet", "diff", why="nothing changed yet")
         if self.hidden or not (self.ladder.glimmer or self.ladder.spark):
             return Verdict("unknown", "diff", why="changed; no model to ask")
+        kept = self._kept_here(step)
+        if kept:
+            activity.withheld(kept)
+            return Verdict("unknown", "diff", why=f"not sent to a model: {kept}")
         return self._ask_model(step, w, now, img, for_model)
+
+    def _kept_here(self, step: Step) -> Optional[str]:
+        """A step may watch any window it names, but only the tutorial's own app goes to a model."""
+        if activity.local_only():
+            return "set to stay on this PC"
+        if step.target.kind == "window" and step.target.label.casefold() not in self.app_window.casefold():
+            return "it isn't the tutorial's app"
+        return self.gate() if self.gate is not None else None
 
     def _ask_model(self, step: Step, w: _StepWatch, now: float, img, for_model) -> Verdict:
         """The window changed and no rule can tell, so look. Models are slow and cost money, and this runs every

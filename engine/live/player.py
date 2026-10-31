@@ -13,6 +13,7 @@ from typing import Callable, Optional, Protocol
 
 from pydantic import ValidationError
 
+from engine import activity
 from engine.live import source as source_view
 from engine.live.execute import can_do, needs_confirm, plan as plan_ops, say_done
 from engine.live.locate.pinned import Pin, Pins
@@ -209,9 +210,11 @@ class Player:
             self._armed = step.n
             return [m.Toast(text="Found by sight, not by name. Check the outline, then press Do it for me again.", ms=5000)]
         self._armed = None
-        why = self.executor.run(plan_ops(step, box))
+        ops = plan_ops(step, box)
+        why = self.executor.run(ops)
         if why:
             return [m.Toast(text=why, kind="warn", ms=4000)]
+        activity.acted(step.n, step.title, [op.kind for op in ops])
         if self.tracker is not None:     # we just acted on this step's target: a hint already true now counts
             self._acted.add(step.n)
         return [m.Toast(text=say_done(step), ms=2000)]
@@ -331,7 +334,14 @@ class Player:
         s = self.session
         return m.State(tutorial=s.tutorial.meta.title, current=s.current, of=s.of, hidden=s.hidden,
                        finished=s.finished, titles=[st.title for st in s.tutorial.steps],
-                       statuses=list(s.statuses), scheme=self.scheme)
+                       statuses=list(s.statuses), scheme=self.scheme, local_only=activity.local_only(),
+                       privacy=activity.privacy_line(self._models_on()))
+
+    def _models_on(self) -> bool:
+        """Can anything from the screen go to a model on this run?"""
+        ladder = getattr(self.tracker, "ladder", None)
+        return bool(getattr(self.locator, "vision", None) or getattr(self.locator, "wonder", None)
+                    or (ladder and (ladder.glimmer or ladder.spark)))
 
     # ---------- one message in ----------
     def handle(self, raw) -> list[m._Msg]:
@@ -366,6 +376,11 @@ class Player:
             return self._source(msg)
         if t == "toggle_scheme":
             return self._toggle_scheme()
+        if t == "toggle_local":
+            activity.set_local_only(not activity.local_only())
+            text = ("Nothing from your screen leaves this PC now." if activity.local_only()
+                    else "Models may look at this app again when a free check can't tell.")
+            return self.current() + [m.Toast(text=text, ms=3500)]
         if t == "start_ok":
             self.start_open = False
             return self.current()

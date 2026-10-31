@@ -41,9 +41,20 @@ class Recent:
         self.last_key_or_click = 0.0
         self._last_move = 0.0
         self.listeners: list[Callable[[InputEvent], None]] = []
+        self.paused = False       # no overlay connected: nothing is kept
         self._lock = threading.Lock()
 
+    def pause(self, paused: bool) -> None:
+        """While nothing is on screen there's no reason to watch, and what was kept goes."""
+        self.paused = paused
+        if paused:
+            with self._lock:
+                self.events.clear()
+            self.last_key_or_click = 0.0
+
     def add(self, ev: InputEvent) -> None:
+        if self.paused:
+            return
         if ev.kind == "move":
             if ev.t - self._last_move < MOVE_EVERY_S:
                 return

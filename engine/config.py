@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parent.parent
 CACHE = ROOT / "cache"
@@ -31,6 +32,12 @@ _load_dotenv()
 
 def env(key: str, default: str = "") -> str:
     return os.environ.get(key, default)
+
+
+def is_secure(url: str) -> bool:
+    """Keys and pictures only travel over https. Plain http only to this PC itself."""
+    u = urlparse(url)
+    return u.scheme == "https" or (u.scheme == "http" and u.hostname in ("127.0.0.1", "localhost", "::1"))
 
 
 MODEL_MODES = ("live", "record", "replay")

@@ -504,9 +504,23 @@ def main(argv=None) -> int:
             # The menu isn't in the accessibility tree. It opens up and right from the click; Next step sits this far up it.
             scale = ov.js("devicePixelRatio")
             r = icon.BoundingRectangle
-            real_click((r.left + r.right) / 2 + 69 * scale, (r.top + r.bottom) / 2 - 231 * scale)
+            def menu_down(n: int) -> None:      # the menu isn't in the accessibility tree, and its width and side depend on its words
+                for _ in range(n):
+                    u32.keybd_event(0x28, 0, 0, 0)
+                    u32.keybd_event(0x28, 0, 2, 0)
+                    time.sleep(0.12)
+                u32.keybd_event(0x0D, 0, 0, 0)
+                u32.keybd_event(0x0D, 0, 2, 0)
+
+            menu_down(3)                        # the status line, Hide, Next step
             moved = wait(lambda: "Step 2 of" in (ov.js("document.querySelector('.bar-ctl')?.innerText") or ""), 5)
             record("tray: its menu opens and moves the step", bool(moved))
+            time.sleep(0.5)
+            press_el(icon)
+            time.sleep(0.8)
+            menu_down(8)                        # …Back, source, Light / dark, the privacy line, Keep my screen on this PC
+            kept = wait(lambda: "Nothing from your screen" in (ov.js("document.querySelector('.toast')?.innerText") or ""), 5)
+            record("tray: Keep my screen on this PC reaches the engine", bool(kept))
             u32.keybd_event(0x1B, 0, 0, 0)
             u32.keybd_event(0x1B, 0, 2, 0)
             press_el(named(taskbar, "Show Hidden Icons") or icon)    # shut the flyout: left open, it sits over the control bar

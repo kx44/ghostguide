@@ -9,6 +9,7 @@ export interface TrayActions {
   back(): void;
   source(): void;
   scheme(): void;
+  localOnly(): void;
   importTutorial(): void;
   setKeyBar(show: boolean): void;
   quit(): void;
@@ -36,6 +37,9 @@ export function trayMenu(v: TrayView, a: TrayActions): MenuItemConstructorOption
     { label: v.sourceOpen ? "Close the source" : "Open this step's source", accelerator: "Ctrl+Alt+O", enabled: v.engineUp && !!s, registerAccelerator: false, click: a.source },
     { label: "Light / dark", accelerator: "Ctrl+Alt+D", enabled: playing, registerAccelerator: false, click: a.scheme },
     { type: "separator" },
+    ...(s?.privacy ? [{ label: s.privacy, enabled: false } as MenuItemConstructorOptions] : []),
+    { label: "Keep my screen on this PC", type: "checkbox", checked: !!s?.local_only, enabled: v.engineUp && !!s, click: a.localOnly },
+    { type: "separator" },
     { label: "Import a tutorial…", accelerator: "Ctrl+Alt+I", registerAccelerator: false, click: a.importTutorial },
     { label: "Show the shortcuts", type: "checkbox", checked: v.keyBar, accelerator: "Ctrl+Alt+K", registerAccelerator: false, click: item => a.setKeyBar(item.checked) },
     { type: "separator" },
@@ -45,7 +49,7 @@ export function trayMenu(v: TrayView, a: TrayActions): MenuItemConstructorOption
 
 /** Everything the icon and menu show: the same key means nothing to redraw. */
 export const trayKey = (v: TrayView) =>
-  JSON.stringify([v.engineUp, v.keyBar, v.sourceOpen, v.state?.tutorial, v.state?.current, v.state?.of, v.state?.hidden, v.state?.finished]);
+  JSON.stringify([v.engineUp, v.keyBar, v.sourceOpen, v.state?.tutorial, v.state?.current, v.state?.of, v.state?.hidden, v.state?.finished, v.state?.privacy, v.state?.local_only]);
 
 export class GhostTray {
   private shown?: string;

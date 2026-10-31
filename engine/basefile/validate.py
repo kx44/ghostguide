@@ -45,6 +45,9 @@ def validate_tutorial(tut: Tutorial, name: str = "<tutorial>") -> Report:
         r.errors.append("no steps")
     if len(tut.steps) > MAX_STEPS:
         r.errors.append(f"{len(tut.steps)} steps (max {MAX_STEPS})")
+    url = tut.meta.source.url
+    if url and url != "TBD" and not re.match(r"https?://[^\s/]+", url, re.I):
+        r.errors.append(f"source.url {url[:60]!r} must be a web link")
 
     for i, s in enumerate(tut.steps, start=1):
         at = f"step {s.n}"
@@ -98,7 +101,7 @@ def validate_tutorial(tut: Tutorial, name: str = "<tutorial>") -> Report:
 
         if s.verify:
             for f in s.verify.file_checks():
-                if Path(f.path).is_absolute() or ".." in Path(f.path).parts:
+                if Path(f.path).is_absolute() or Path(f.path).drive or f.path.startswith(("/", "\\")) or ".." in re.split(r"[\\/]", f.path):
                     r.errors.append(f"{at}: verify.file path {f.path!r} must be relative to the working folder")
     return r
 

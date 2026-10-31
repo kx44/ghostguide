@@ -5,7 +5,7 @@
 //   npm start -- --replay f.jsonl     a recorded session, no engine: step by step, waits for Next
 //                                     [--timed [--speed 2] [--loop]] plays it on its timestamps instead
 //   npm start -- --import             also open the import window (Ctrl+Alt+I any time)
-import { BrowserWindow, Display, app, clipboard, dialog, ipcMain, screen } from "electron";
+import { BrowserWindow, Display, app, clipboard, dialog, ipcMain, screen, session } from "electron";
 import { join } from "node:path";
 import type { FromOverlay, HitRect, Local, Routed, StateMsg, ToOverlay } from "../shared/messages";
 import { Link, connectEngine, replaySteps, replayTimed } from "./bridge";
@@ -57,6 +57,8 @@ function makeWindow(d: Display): Win {
   win.setVisibleOnAllWorkspaces(true);
   win.setBounds(d.bounds);                        // Windows can shrink a frameless window on a scaled display
   const w: Win = { win, display: d, ready: false, queue: [], hits: [], clickable: false };
+  win.webContents.on("will-navigate", e => e.preventDefault());
+  win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   win.loadFile(join(__dirname, "..", "renderer", "index.html"));
   win.once("ready-to-show", () => win.showInactive());
   win.webContents.on("render-process-gone", (_e, det) => console.error("overlay renderer gone:", det.reason));
@@ -194,6 +196,8 @@ function hello() {
 }
 
 app.whenReady().then(() => {
+  // Nothing here needs the camera, the microphone or a screen grab: the engine does its own looking.
+  session.defaultSession.setPermissionRequestHandler((_wc, _perm, answer) => answer(false));
   buildWindows();
   ipcMain.on("ghost:ready", e => {
     const w = [...wins.values()].find(x => x.win.webContents === e.sender);
@@ -202,7 +206,9 @@ app.whenReady().then(() => {
     sendShell(w);
     for (const r of w.queue.splice(0)) w.win.webContents.send("ghost:msg", r);
   });
-  ipcMain.on("ghost:send", (_e, msg: FromOverlay) => link?.send(msg));
+  ipcMain.on("ghost:send", (e, msg: FromOverlay) => {      // the overlay's own windows and the import window; never the source window
+    if ([...wins.values()].some(x => x.win.webContents === e.sender) || importWin?.webContents === e.sender) link?.send(msg);
+  });
   ipcMain.on("ghost:copy", (_e, text: string) => { if (typeof text === "string") clipboard.writeText(text); });
   ipcMain.on("ghost:source", () => toggleSource());
   ipcMain.on("ghost:keybar", (_e, show: boolean) => setKeyBar(!!show));
@@ -259,6 +265,7 @@ app.whenReady().then(() => {
     back: () => link?.send({ type: "back" }),
     source: toggleSource,
     scheme: () => link?.send({ type: "toggle_scheme" }),
+    localOnly: () => link?.send({ type: "toggle_local" }),
     importTutorial: openImport,
     setKeyBar,
     quit: () => app.quit(),

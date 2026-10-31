@@ -10,13 +10,40 @@ import assert from "node:assert/strict";
 const dir = mkdtempSync(join(tmpdir(), "gg-unit-"));
 const out = join(dir, "logic.mjs");
 await build({
-  stdin: { contents: `export * from "./main/settings"; export * from "./main/hotkeys"; export { trayStatus, trayMenu, trayKey } from "./main/tray"; export { cornerAway, keepOnScreen, isWebLink, SOURCE_TITLE } from "./main/sourceWindow";`,
+  stdin: { contents: `export * from "./main/settings"; export * from "./main/hotkeys"; export { trayStatus, trayMenu, trayKey } from "./main/tray"; export { cornerAway, keepOnScreen, isWebLink, SOURCE_TITLE } from "./main/sourceWindow"; export { esc, kc } from "./renderer/dom"; export { codeBoxHtml } from "./renderer/guidance/codeCard"; export { chipsHtml } from "./renderer/guidance/pathChips"; export { keycapsHtml } from "./renderer/guidance/keycaps"; export { fallbackHtml } from "./renderer/guidance/card";`,
            resolveDir: process.cwd(), loader: "ts" },
   bundle: true, platform: "node", format: "esm", outfile: out, logLevel: "warning",
   alias: { electron: join(process.cwd(), "test", "electronStub.mjs") },
 });
 const L = await import(pathToFileURL(out));
 process.on("exit", () => rmSync(dir, { recursive: true, force: true }));
+
+test("a tutorial's text can't become markup in the overlay", () => {
+  const evil = `<img src=x onerror=alert(1)>"'`;
+  const clean = h => { assert.ok(!/<img/i.test(h), h); assert.ok(h.includes("&lt;img") || h === "", h); };
+  clean(L.esc(evil));
+  clean(L.kc(evil));
+  clean(L.codeBoxHtml(evil, evil, evil, evil));
+  clean(L.chipsHtml([evil, "ok"], 0));
+  clean(L.keycapsHtml([evil]));
+  const f = L.fallbackHtml({ extra: { path: [evil], keys: [evil], value: evil, action: "type" } });
+  clean(f.top);
+  clean(f.body);
+  assert.equal(L.fallbackHtml({ extra: { action: "wait", signals: [evil] } }).body.includes("<img"), false);
+  assert.ok(!/data-copy="[^"]*"[^>]*onerror/.test(L.codeBoxHtml(`" onerror="x`)));
+});
+
+test("tray: says what's happening to your screen, and the switch is there", () => {
+  const a = { hideResume() {}, next() {}, back() {}, source() {}, scheme() {}, localOnly() {}, importTutorial() {}, setKeyBar() {}, quit() {} };
+  const state = { tutorial: "T", current: 1, of: 2, hidden: false, finished: false, titles: [], statuses: [], scheme: "dark", privacy: "Nothing from your screen leaves this PC", local_only: true };
+  const v = { state, engineUp: true, keyBar: false, sourceOpen: false };
+  const menu = L.trayMenu(v, a);
+  assert.ok(menu.some(i => i.label === state.privacy && i.enabled === false));
+  const sw = menu.find(i => i.label === "Keep my screen on this PC");
+  assert.equal(sw.type, "checkbox");
+  assert.equal(sw.checked, true);
+  assert.notEqual(L.trayKey(v), L.trayKey({ ...v, state: { ...state, privacy: "1 picture" } }));
+});
 
 test("settings: the panel starts closed, and a bad file changes nothing", () => {
   assert.deepEqual(L.parseSettings(undefined), { keyBar: false });

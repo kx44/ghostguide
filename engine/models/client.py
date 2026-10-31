@@ -30,7 +30,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from engine import config
+from engine import activity, config
 from engine.models.cassette import Cassettes, request_key
 from engine.models.tools import ToolCall, parse_tool_call
 
@@ -275,9 +275,12 @@ class ModelClient:
         if self.mode == "replay" or (self.mode == "record" and self.cassettes.has(key)):
             return self._reply(self.cassettes.load(key, request), model, key, from_cassette=True)
 
+        if activity.local_only() and activity.is_screen(tag):
+            raise activity.LocalOnly("your screen is set to stay on this PC")
         estimate = estimate_cost(request)
         self._reserve(estimate)
         started = time.monotonic()
+        activity.sent(_base_host(), model, tag, *_pictures_in(request))
         try:
             data = self._send(request, timeout, path)
         finally:
@@ -309,6 +312,7 @@ class ModelClient:
         estimate = seconds / 3600 * config.TRANSCRIBE_USD_PER_HOUR
         self._reserve(estimate)
         started = time.monotonic()
+        activity.sent(_base_host(), config.TRANSCRIBE, tag, 0, len(wav))
         try:
             data = self._transcribe_transport(settings, wav) if self._transcribe_transport else _http_transcribe(settings, wav)
         finally:
@@ -356,10 +360,35 @@ def _meta_key() -> str:
     return key
 
 
+def _base() -> str:
+    return config.env("META_BASE_URL", "https://api.meta.ai/v1").rstrip("/")
+
+
+def _base_host() -> str:
+    return activity.host_of(_base())
+
+
+def _pictures_in(request: dict) -> tuple[int, int]:
+    """How many pictures are in a request, and their size in bytes (from their base64)."""
+    n = size = 0
+    for m in request.get("messages") or []:
+        for part in m.get("content") if isinstance(m.get("content"), list) else []:
+            if isinstance(part, dict) and part.get("type") == "image_url":
+                n += 1
+                size += len(part["image_url"]["url"]) * 3 // 4
+    return n, size
+
+
+def _secure(url: str) -> str:
+    if not config.is_secure(url):
+        raise ModelError(f"refused to send the API key to {activity.host_of(url)} without https")
+    return url
+
+
 def _http_transcribe(settings: dict, wav: bytes, retries: int = 2) -> dict:
     import httpx
 
-    url = config.env("META_BASE_URL", "https://api.meta.ai/v1").rstrip("/") + "/asr/transcribe"
+    url = _secure(_base() + "/asr/transcribe")
     headers = {"Authorization": f"Bearer {_meta_key()}", "Accept": "application/json"}
     files = {"request": (None, json.dumps(settings), "application/json"), "audio": ("audio.wav", wav, "audio/wav")}
     for attempt in range(retries + 1):
@@ -382,7 +411,7 @@ def _http_send(request: dict, retries: int = 2, timeout: float = 120, path: str 
 
     key = _meta_key()
     chat = config.env("META_CHAT_PATH", "/chat/completions") if path == "/chat/completions" else path
-    url = config.env("META_BASE_URL", "https://api.meta.ai/v1").rstrip("/") + chat
+    url = _secure(_base() + chat)
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     for attempt in range(retries + 1):
         try:

@@ -14,7 +14,7 @@ export const TO_OVERLAY = [
 ] as const;
 export const FROM_OVERLAY = [
   "hello", "show_me", "do_it", "next", "back", "skip", "hide", "resume", "jump", "pin", "unpin", "import", "open_tutorial", "start_ok",
-  "source", "source_file", "toggle_scheme",
+  "source", "source_file", "toggle_scheme", "toggle_local",
 ] as const;
 
 export interface Box { x: number; y: number; w: number; h: number }
@@ -84,7 +84,7 @@ export interface ClearMsg { type: "clear"; reason?: string }
 export type StepStatus = "pending" | "done" | "skipped";
 export interface StateMsg {
   type: "state"; tutorial: string; current: number; of: number; hidden: boolean; finished: boolean;
-  titles: string[]; statuses: StepStatus[]; scheme: Scheme;
+  titles: string[]; statuses: StepStatus[]; scheme: Scheme; local_only?: boolean; privacy?: string;
 }
 export interface ToastMsg { type: "toast"; text: string; kind: "ok" | "warn"; ms: number }
 export interface ShowMeMsg { type: "show_me"; to: Pt; path?: Pt[]; click: "left" | "right" | "double" | "none" }
@@ -119,7 +119,7 @@ export type ToOverlay = GuideMsg | ClearMsg | StateMsg | ToastMsg | ShowMeMsg | 
 export interface DisplayInfo { id: number | string; x: number; y: number; w: number; h: number; scale: number; primary: boolean }
 export type FromOverlay =
   | { type: "hello"; displays: DisplayInfo[]; version?: string; replay?: boolean }
-  | { type: "show_me" | "do_it" | "next" | "back" | "skip" | "hide" | "resume" | "unpin" | "start_ok" | "toggle_scheme" }
+  | { type: "show_me" | "do_it" | "next" | "back" | "skip" | "hide" | "resume" | "unpin" | "start_ok" | "toggle_scheme" | "toggle_local" }
   | { type: "pin"; at: Pt }
   | { type: "jump"; n: number }
   | { type: "import"; url?: string; file?: string; text?: string; start?: string; end?: string }

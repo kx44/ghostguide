@@ -1,4 +1,5 @@
 """The compiler without a network: adapters, timeline, passes, enrich, cache and the rules about what shipped code may touch."""
+import contextlib
 import io
 import json
 import re
@@ -100,11 +101,13 @@ def test_a_refusing_site_is_reported_and_not_retried(monkeypatch, status, body):
     import httpx
     calls = []
 
-    def fake_get(url, headers, **kw):
+    @contextlib.contextmanager
+    def fake_stream(method, url, headers, **kw):
         calls.append(headers["User-Agent"])
-        return httpx.Response(status, text=body, request=httpx.Request("GET", url))
+        yield httpx.Response(status, text=body, request=httpx.Request("GET", url))
 
-    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "stream", fake_stream)
+    monkeypatch.setattr(web, "guard_url", lambda url: None)
     with pytest.raises(SourceBlocked, match="save it"):
         web.fetch_page("https://example.com/a")
     assert calls == [web.USER_AGENT]              # one try, as ourselves
@@ -321,12 +324,28 @@ def test_shipped_code_names_no_private_note():
     private = re.compile(r"\b0[0245] (Context|Meta models|Base format|Architecture)\b|[Gg]lossary|\bKai\b|\b[Pp]hases? \d|\bP\d-\w|prototypes/"
                          r"|[Bb]aseten|[Ff]ireworks")
     me = Path(__file__).name
-    for folder in ("engine", "overlay/main", "overlay/renderer", "overlay/shared", "overlay/test", "deploy", "tests", "scripts", "appmaps"):
+    for folder in ("engine", "overlay/main", "overlay/renderer", "overlay/shared", "overlay/test", "deploy", "tests", "scripts", "appmaps", "docs"):
         for p in (ROOT / folder).rglob("*"):
             if p.suffix in (".py", ".ts", ".html", ".mjs", ".css", ".toml", ".yaml", ".bat", ".md", ".jsonl") and p.name != me \
                     and "__pycache__" not in p.parts and "node_modules" not in p.parts and "out" not in p.parts:
                 hits = [m.group(0) for m in private.finditer(p.read_text(encoding="utf-8", errors="replace"))]
                 assert not hits, f"{p}: {sorted(set(hits))}"
+    for p in (ROOT / "README.md", ROOT / ".env.example"):
+        if p.exists():
+            hits = [m.group(0) for m in private.finditer(p.read_text(encoding="utf-8", errors="replace"))]
+            assert not hits, f"{p}: {sorted(set(hits))}"
+
+
+def test_public_docs_name_nothing_personal_and_link_only_to_kept_paths():
+    personal = re.compile(r"user|user|[team id]|ghostguide|\.obsidian|\bvault\b", re.I)
+    for p in [ROOT / "README.md", *(ROOT / "docs").rglob("*.md")]:
+        if not p.exists():
+            continue
+        text = p.read_text(encoding="utf-8")
+        assert not personal.search(text), p.name
+        for link in re.findall(r"\]\((?!https?:|#)([^)#]+)", text):
+            assert (p.parent / link).exists(), f"{p.name} links to {link}"
+            assert not re.match(r"(\.\./)?(tools|prototypes|sources|assets)/", link), f"{p.name} links to a dropped path: {link}"
 
 
 def test_tutorial_sources_stay_out_of_git():

@@ -5,7 +5,7 @@
 
     python -m engine play                                            # nothing loaded yet: import one from the overlay
 
-Only binds 127.0.0.1. Importing a tutorial (compile_* messages) runs in the background, so the current one keeps playing.
+Only binds 127.0.0.1, and refuses browsers. Importing a tutorial (compile_* messages) runs in the background, so the current one keeps playing.
 """
 from __future__ import annotations
 
@@ -106,6 +106,7 @@ async def serve(player: Optional[Player], port: int = DEFAULT_PORT, record: Opti
 
     if inputs is not None:
         inputs.listeners.append(on_input)
+        inputs.pause(True)         # until an overlay connects
 
     compiling = False
 
@@ -148,6 +149,7 @@ async def serve(player: Optional[Player], port: int = DEFAULT_PORT, record: Opti
             if new_inputs is not None and new_inputs is not inputs:
                 inputs = new_inputs
                 inputs.listeners.append(on_input)
+                inputs.pause(not clients)
             out = await asyncio.to_thread(player.handle, json.dumps({"type": "hello", "displays": last_displays}))
         await send_all(out)
         poke.set()
@@ -163,13 +165,15 @@ async def serve(player: Optional[Player], port: int = DEFAULT_PORT, record: Opti
 
     async def handler(ws):
         clients.add(ws)
+        if inputs is not None:
+            inputs.pause(False)
         log(f"overlay connected ({len(clients)} client{'s' if len(clients) > 1 else ''})")
         try:
             async for raw in ws:
                 try:
                     data = json.loads(raw)
                     kind = data.get("type", "?")
-                except ValueError:
+                except (ValueError, AttributeError):     # not JSON, or JSON that isn't an object
                     data, kind = {}, "?"
                 if kind == "hello":
                     last_displays[:] = data.get("displays") or []
@@ -182,7 +186,11 @@ async def serve(player: Optional[Player], port: int = DEFAULT_PORT, record: Opti
                 if player is None:
                     continue
                 async with busy:
-                    out = await asyncio.to_thread(player.handle, raw)
+                    try:
+                        out = await asyncio.to_thread(player.handle, raw)
+                    except Exception as e:     # one bad message mustn't cut the overlay off
+                        log(f"  {kind} failed:\n" + traceback.format_exc())
+                        out = [m.Toast(text=f"That didn't work: {type(e).__name__}", kind="warn", ms=4000)]
                 s = player.session
                 where = "finished" if s.finished else f"step {s.current}/{s.of}" + (" (hidden)" if s.hidden else "")
                 log(f"  ← {kind:8s} → {where}")
@@ -194,6 +202,8 @@ async def serve(player: Optional[Player], port: int = DEFAULT_PORT, record: Opti
                 poke.set()
         finally:
             clients.discard(ws)
+            if inputs is not None and not clients:
+                inputs.pause(True)
             log("overlay disconnected")
 
     async def round_loop(event: asyncio.Event, one_round) -> None:
@@ -259,7 +269,9 @@ async def serve(player: Optional[Player], port: int = DEFAULT_PORT, record: Opti
             log(f"  ✓ auto → {'finished' if s.finished else f'step {s.current}/{s.of}'}")
         await send_all(out)
 
-    async with ws_serve(handler, "127.0.0.1", port, max_size=2 ** 20):
+    # Only the overlay: browsers put an Origin on every WebSocket and don't apply their same-origin rule to them, so
+    # without `origins` any web page open on this PC could connect and press Do it for me or start a paid compile.
+    async with ws_serve(handler, "127.0.0.1", port, max_size=2 ** 20, origins=[None]):
         log(f"engine listening on ws://127.0.0.1:{port} · {player.session.tutorial.meta.title if player else 'no tutorial yet: import one'}")
         # Apart, so a slow model call in one never holds up the other: the check must see a dialog open the moment
         # it opens, even while Spark is still looking for the next step's button.
