@@ -10,7 +10,7 @@ export function mountMask(ctx: Ctx, g: GuideMsg, local: Local): Mounted {
   const mg = bag.add(sv(ctx.svg, "g", { class: "mask" }));
   const fill = sv(mg, "ellipse", { cx, cy, rx, ry, fill: "var(--gfill)" });
   const edge = sv(mg, "ellipse", { cx, cy, rx, ry, fill: "none", stroke: "var(--g)", "stroke-width": 2 });
-  const lab = bag.add(el(ctx.ov, "pill", "", esc(g.extra.label ?? "")));
+  const lab = bag.add(el(ctx.ov, "pill label", "", esc(g.extra.label ?? "")));
   lab.style.left = `${cx - lab.offsetWidth / 2}px`;
   lab.style.top = `${r.y + r.h + 8}px`;
   const lw = lab.offsetWidth, lx = cx - lw / 2;

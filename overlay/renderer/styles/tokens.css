@@ -133,8 +133,10 @@ svg.L { position:absolute; left:0; top:0; width:100%; height:100%; overflow:visi
 .keys .plus { opacity:.7; }
 
 /* pills, edge pill */
-.pill { position:absolute; background:var(--g); color:var(--on-g); font-size:12px; font-weight:500; padding:2px 8px; border-radius:6px;
-        white-space:nowrap; animation:fade .25s; }
+/* a label takes the card's colours: the guide colour stays for what marks the target, and the two read as one family */
+.pill { position:absolute; background:var(--card-bg); color:var(--card-fg); font-size:11.5px; font-weight:500; line-height:1.3; letter-spacing:.01em;
+        padding:3px 8px; border-radius:6px; box-shadow:0 1px 2px rgba(0,0,0,.2), 0 3px 10px rgba(0,0,0,.14); white-space:nowrap; animation:fade .25s; }
+.pill.label { max-width:280px; overflow:hidden; text-overflow:ellipsis; }   /* the card has the full words */
 .edge { position:absolute; display:flex; align-items:center; gap:8px; background:var(--g); color:var(--on-g); font-size:13px; font-weight:500;
         padding:6px 12px; border-radius:18px; white-space:nowrap; animation:fade .3s; }
 .edge .arr { display:inline-block; }
