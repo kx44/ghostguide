@@ -1,4 +1,4 @@
-# Windows build (phase 6 ships it). `npm run dist` → dist/GhostGuide-<version>.exe (portable).
+# Windows build. `npm run dist` → dist/GhostGuide-<version>.exe (portable).
 appId: dev.ghostguide.overlay
 productName: GhostGuide
 directories: {output: dist}
