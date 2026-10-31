@@ -47,7 +47,7 @@ def budget_usd() -> float:
     return float(env("BUDGET_USD", "4.00"))
 
 
-# Model IDs (02 Meta models)
+# Model IDs
 SPARK = "muse-spark-1.3"
 SPARK_CONTRIBUTOR = "muse-spark-1.3-contributor"
 WONDER = "muse-wonder-1.0"
@@ -73,6 +73,6 @@ def compile_model() -> str:
 # Meta allows at most 50 images per request.
 MAX_IMAGES = 50
 
-# Live thresholds (used from phase 2 on)
+# Live thresholds
 SCHEME_LIGHT_ABOVE = 0.45   # brightness in the ring around the target → light scheme
 SCHEME_RING_PX = 48

@@ -1,5 +1,5 @@
 @echo off
-rem Phase 2 dev loop: engine in one window, overlay in another. Run from the repo root.
+rem Dev loop: engine in one window, overlay in another. Run from the repo root.
 rem   scripts\dev.bat                                   YouTube clone with your pins (cache\pins\)
 rem   scripts\dev.bat tutorials\mug-solidworks.md
 rem   scripts\dev.bat replay                            overlay only, plays the recorded fixture (no engine)

@@ -1,6 +1,6 @@
 # Cases for tests/accuracy/glimmer_speed.py. Take each screenshot on Windows (Win+Shift+S → full screen,
 # save as PNG in this folder with the name below). Same screenshot, different check → tests both answers.
-# Screenshots stay local unless they show nothing private; commit them only if the author is happy to.
+# Screenshots stay local unless they show nothing private; commit them only if you are happy to.
 cases:
   # VS Code, youtube-clone folder open, index.html open in the editor (after gold step 2)
   - {id: vs-index-open-done, image: vscode-index-open.png, title: "Name it index.html",

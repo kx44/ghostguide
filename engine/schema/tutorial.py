@@ -1,4 +1,4 @@
-"""Tutorial, Step, Target, Verify: the base-file contract (04 Base format + gold additions + `verify`)."""
+"""Tutorial, Step, Target, Verify: the base-file contract."""
 from __future__ import annotations
 
 from typing import Any, Literal, Optional, Union
@@ -12,7 +12,7 @@ Kind = Literal["button", "tab", "menu_item", "field", "tree_item",
 Confidence = Literal["high", "low", "inferred"]
 SourceType = Literal["video", "web", "pdf", "text"]
 
-# action → glossary style number (04 Base format, Rules table). 9 and 11 are decided at runtime.
+# action → guidance style number. 9 and 11 are decided at runtime.
 ACTION_STYLE = {
     "click": 1, "draw_line": 2, "drag": 2, "type": 5, "shortcut": 6, "pick": 7,
     "menu_path": 8, "switch_app": 10, "wait": 12, "look": None,

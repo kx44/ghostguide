@@ -1,4 +1,4 @@
-"""Phase 4, the pure parts: vision memory and regions, route hops, Wonder, Do it for me, the start check, the model gate."""
+"""The SolidWorks loop, the pure parts: vision memory and regions, route hops, Wonder, Do it for me, the start check, the model gate."""
 from types import SimpleNamespace
 
 from PIL import Image

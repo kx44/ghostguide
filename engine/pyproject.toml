@@ -15,12 +15,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Live loop (phases 2-4). Windows-only packages are marked so `pip install` works on Linux CI.
-live = [
-  "fastapi", "uvicorn", "mss", "pillow", "pyautogui", "keyboard",
-  "uiautomation; sys_platform == 'win32'",
-]
-# Compiling tutorials (phase 5): video download, frames and audio, screenshots from web pages.
+# Live loop. Windows-only packages are marked so `pip install` works on Linux CI.
+live = ["pillow", "uiautomation; sys_platform == 'win32'"]
+# Compiling tutorials: video download, frames and audio, screenshots from web pages.
 compile = ["yt-dlp", "imageio-ffmpeg", "numpy", "pillow"]
 dev = ["pytest>=8"]
 

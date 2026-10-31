@@ -1,4 +1,4 @@
-"""Model rungs of the check ladder (phase 3): do Spark Contributor and Glimmer on Modal answer the step checks right?
+"""Model rungs of the check ladder: do Spark Contributor and Glimmer on Modal answer the step checks right?
 
 Same cases as glimmer_speed.py (tests/fixtures/screens/glimmer_cases.yaml: screenshot + check + expected answer),
 asked through the real ladder code in engine/models/glimmer.py, so the prompt and parser are the live ones.

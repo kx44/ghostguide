@@ -2,7 +2,7 @@
 the same and costs nothing. Input: the step, where its target is (box / line, or none) and the
 displays; output: the `guide` message for the overlay.
 
-Rules (Guidance glossary + 04 Base format):
+Rules:
 - action → style: click 1 (repeat 3) · draw_line/drag 2 (repeat 4) · type 5 (code card) · shortcut 6 · pick 7 ·
   menu_path 8 · switch_app 10 · wait 12 · look = card only.
 - First time vs repeat is decided from tutorial order (`repeat_of`, or the same action on the same

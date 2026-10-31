@@ -1,4 +1,4 @@
-/* GhostGuide overlay: the visual standard from the Guidance glossary (v1), both schemes.
+/* GhostGuide overlay: the visual standard, both schemes.
    One scheme per step, picked by the engine from the app pixels behind the target. */
 #root[data-scheme="light"] { /* app behind is light */
   --g:#7C3AED; --gfill:rgba(124,58,237,.18); --on-g:#FFFFFF;

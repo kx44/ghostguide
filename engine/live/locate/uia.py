@@ -3,7 +3,7 @@
 Finding: an app with its own rule pack (VS Code: locate/vscode.py, where labels alone fail) uses it; any
 other app is searched by the target's label and the app map's aliases, among the control types its kind
 allows, in its own window only. Names are compared whole, with key hints like "(Ctrl+S)" stripped, so
-"Save" doesn't match "Save to playlist" in another window (phase 1's false hits).
+"Save" doesn't match "Save to playlist" in another window (false hits seen early on).
 
 The matching is pure over dumped element dicts, so it's tested off Windows.
 """

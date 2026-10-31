@@ -49,7 +49,7 @@ def test_code_card_and_card():
     assert g.style == "code_card" and g.extra["value"] == "index.html" and g.extra["then_key"] == "Enter"
     assert g.card.detail == "Type “index.html”, then press Enter."
     assert g.card.meta == "Step 2 of 23 · Visual Studio Code" and "show_me" in g.card.actions
-    assert "do_it" not in g.card.actions       # phase 4
+    assert "do_it" not in g.card.actions       # only where it can act
     g4 = plan(VS, 4)
     assert g4.extra["multiline"] and g4.card.detail == "Copy this, or type it, in index.html, inside <body>."
     assert plan(VS, 4, box=None).style == "code_card"     # no target yet: the card still carries the code

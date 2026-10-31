@@ -1,4 +1,4 @@
-"""The mug tutorial, live, end to end (phase 4 "done when"): the real engine and overlay over real SolidWorks, with hands.
+"""The mug tutorial, live, end to end: the real engine and overlay over real SolidWorks, with hands.
 
 Listens on the engine's WebSocket like the overlay does and acts only where the engine points: real clicks on the box
 in each `guide`, so a box in the wrong place shows up as the next step failing. Canvas drawing can't take the engine's

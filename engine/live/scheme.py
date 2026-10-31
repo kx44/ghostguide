@@ -1,8 +1,7 @@
-"""Light / dark scheme from the app pixels behind the target (live step 6, Guidance glossary).
+"""Light / dark scheme from the app pixels behind the target .
 
 Average luminance in a ≈48 px ring around the target: above 0.45 → light scheme, else dark.
-No screenshot → the Windows app theme. Same weighting as the approved prototype
-(Rec. 709 weights on the 0–255 values), so the 0.45 threshold means the same thing.
+No screenshot → the Windows app theme. Rec. 709 weights on the 0–255 values, so the 0.45 threshold means the same thing.
 """
 from __future__ import annotations
 
@@ -71,8 +70,7 @@ def windows_theme() -> str:
 def grab_ring(box: Box, ring: int = config.SCHEME_RING_PX):
     """Screenshot of just the ring's rectangle (physical px). Returns (image, origin) or (None, None).
 
-    Phase 2 only needs this small grab; full-screen capture with the overlay hidden is phase 3
-    (live/capture.py). The caller clears the overlay first so our own outline isn't measured.
+    Only this small grab is needed. The caller clears the overlay first so our own outline isn't measured.
     """
     if sys.platform != "win32":
         return None, None

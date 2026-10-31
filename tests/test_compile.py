@@ -314,6 +314,19 @@ def test_shipped_code_touches_no_dropped_path():
                 assert not hits, f"{p}: {hits}"
 
 
+def test_shipped_code_names_no_private_note():
+    """The planning notes, the people and the build phases stay out of what the public repo keeps."""
+    private = re.compile(r"\b0[0245] (Context|Meta models|Base format|Architecture)\b|[Gg]lossary|\bKai\b|\b[Pp]hases? \d|\bP\d-\w|prototypes/"
+                         r"|[Bb]aseten|[Ff]ireworks")
+    me = Path(__file__).name
+    for folder in ("engine", "overlay/main", "overlay/renderer", "overlay/shared", "overlay/test", "deploy", "tests", "scripts", "appmaps"):
+        for p in (ROOT / folder).rglob("*"):
+            if p.suffix in (".py", ".ts", ".html", ".mjs", ".css", ".toml", ".yaml", ".bat", ".md", ".jsonl") and p.name != me \
+                    and "__pycache__" not in p.parts and "node_modules" not in p.parts and "out" not in p.parts:
+                hits = [m.group(0) for m in private.finditer(p.read_text(encoding="utf-8", errors="replace"))]
+                assert not hits, f"{p}: {sorted(set(hits))}"
+
+
 def test_tutorial_sources_stay_out_of_git():
     ignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
     assert "sources/" in ignore and "cache/" in ignore

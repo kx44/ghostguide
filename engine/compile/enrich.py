@@ -1,4 +1,4 @@
-"""Enrich (compile step 6): the app's official help → the local app map, for controls we know nothing about yet.
+"""Enrich: the app's official help → the local app map, for controls we know nothing about yet.
 
 New entries only: what's already known, in either layer, is never searched for again or overwritten. Entries go to the
 local layer unreviewed; only `engine appmap promote` moves them into the repo. A failed lookup never fails a compile,

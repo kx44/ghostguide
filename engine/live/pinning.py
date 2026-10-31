@@ -1,4 +1,4 @@
-"""`python -m engine pin <tutorial.md>`: make dev pins by hovering each target (Windows, phase 2 only).
+"""`python -m engine pin <tutorial.md>`: make dev pins by hovering each target (Windows).
 
 For each step it names the target; you hover its top-left corner and press Enter, then its
 bottom-right corner and Enter (start and end point for lines). Then you do the step in the app,

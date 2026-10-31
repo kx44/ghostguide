@@ -18,7 +18,7 @@ It takes over the mouse and keyboard for about two minutes; don't touch them whi
     py -m tests.accuracy.landing_walk --tutorial tutorials/compiled/youtube-clone-vscode.compiled.md   # a compiled one
 
 Results: cache/screenshots/landing/stepNN.png and landing.json. The overlay isn't involved: it draws the
-same physical-pixel box (P2-1 checks the overlay window itself).
+same physical-pixel box (overlay_check covers the overlay window itself).
 """
 from __future__ import annotations
 

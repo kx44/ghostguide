@@ -1,4 +1,4 @@
-"""Engine ⇄ overlay messages over the local WebSocket (05 Architecture, Interfaces).
+"""Engine ⇄ overlay messages over the local WebSocket.
 
 Mirrored in TypeScript in `overlay/shared/messages.ts`; `tests/test_messages.py` checks both list the
 same message types and styles. Every coordinate is in physical screen pixels (virtual desktop, the same
@@ -11,7 +11,7 @@ from typing import Any, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
-# The 12 glossary styles, plus `card` for `look` steps (tooltip card alone, with Next).
+# The 12 guidance styles, plus `card` for `look` steps (tooltip card alone, with Next).
 Style = Literal[
     "outline",        # 1  button, first time: outline + tooltip
     "ghost_line",     # 2  cursor action, first time: animated ghost line + tooltip
@@ -93,7 +93,7 @@ class Card(BaseModel):
     suggested: Optional[str] = None   # our value when the author left it open; labelled as ours
     actions: list[str] = Field(default_factory=list)   # show_me | do_it | next | skip_wait
     low_confidence: bool = False
-    dev_hint: Optional[str] = None    # phase 2 only: "not pinned yet, Ctrl+Alt+P…"
+    dev_hint: Optional[str] = None    # dev pins: "not pinned yet, Ctrl+Alt+P…"
     compact: bool = False             # repeat steps: title + Next only, so the instruction never vanishes
     up_next: Optional[str] = None     # the next step's title, shown on compact cards
 
@@ -151,7 +151,7 @@ class ShowMe(_Msg):
 
 
 class Mark(_Msg):
-    """Outline turns ok / warn (step checks from phase 3; Next flashes ok in phase 2)."""
+    """Outline turns ok / warn (from the step checks; Next flashes ok)."""
     type: Literal["mark"] = "mark"
     result: Literal["ok", "bad"]
 
@@ -241,7 +241,7 @@ class Jump(_Msg):
 
 
 class PinReq(_Msg):
-    """Dev (phase 2): the mouse position when Ctrl+Alt+P was pressed, physical px. Two presses = one box."""
+    """Dev: the mouse position when Ctrl+Alt+P was pressed, physical px. Two presses = one box."""
     type: Literal["pin"] = "pin"
     at: tuple[int, int]
 

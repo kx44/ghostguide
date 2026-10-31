@@ -1,4 +1,4 @@
-"""Per-monitor DPI awareness (05 Architecture, Risks). UIA, mss, pyautogui and Electron must all agree
+"""Per-monitor DPI awareness. UIA, mss, pyautogui and Electron must all agree
 on physical pixels, so call this once at process start, before any window, UIA or screenshot call."""
 from __future__ import annotations
 

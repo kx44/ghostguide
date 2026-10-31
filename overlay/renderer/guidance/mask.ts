@@ -1,5 +1,5 @@
 // 7 · Pick in the model: tinted, breathing mask over the face or edge, with a plain-words label.
-// Phase 2 draws an ellipse in the pinned box; SAM 3.1 gives the real outline later (phase 4).
+// An ellipse over the box, not the edge's real shape.
 import type { GuideMsg, Local } from "../../shared/messages";
 import { Bag, Ctx, Mounted, el, esc, sv, toRect } from "../dom";
 

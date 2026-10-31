@@ -1,5 +1,5 @@
 // 8 · Hidden: menu path. The card shows the route as chips; done hops are ticked; the outline sits on the
-// current hop (phase 2: the pinned box; hop-by-hop tracking needs UIA, phase 3/4).
+// current hop.
 import type { GuideMsg, Local } from "../../shared/messages";
 import { Bag, Ctx, Mounted, esc, outline, toRect } from "../dom";
 import { mountClickType } from "./clickType";

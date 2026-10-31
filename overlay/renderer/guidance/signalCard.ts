@@ -1,5 +1,5 @@
-// 12 · Wait: a slim card naming what we wait for, ticking cheap signals as they arrive (ticking needs the
-// phase 3 signals; phase 2 shows them). Auto-advance comes with the checks; Skip waiting always works.
+// 12 · Wait: a slim card naming what we wait for, with its cheap signals listed.
+// Auto-advance comes with the checks; Skip waiting always works.
 import type { GuideMsg, Local } from "../../shared/messages";
 import { Ctx, Mounted, esc, toRect } from "../dom";
 

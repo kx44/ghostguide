@@ -1,4 +1,4 @@
-// Small DOM + SVG helpers shared by the guidance styles (ported from prototypes/action-guidance.html).
+// Small DOM + SVG helpers shared by the guidance styles.
 import type { Box } from "../shared/messages";
 
 export const NS = "http://www.w3.org/2000/svg";

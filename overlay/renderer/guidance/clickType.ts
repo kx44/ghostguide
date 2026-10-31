@@ -5,7 +5,7 @@
 import type { GuideMsg, Local } from "../../shared/messages";
 import { Bag, Ctx, Mounted, el, kc, outline, toRect } from "../dom";
 
-// Slim outline mouse (glossary style 11): a line icon in one solid colour, no body fill, with a scroll wheel and
+// Slim outline mouse (guidance style 11): a line icon in one solid colour, no body fill, with a scroll wheel and
 // the two buttons split by a thin line. 20 x 30 sits with Fluent's 20-24 px icons, and beside a toolbar button rather
 // than over it. Drawn in a 20 x 30 grid, so the stroke widths in tokens.css are real pixels.
 const MOUSE_W = 20, MOUSE_H = 30;

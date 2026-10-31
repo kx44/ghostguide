@@ -1,5 +1,5 @@
 // 5 · Type a value: outline the input and show the expected value as ghost text in it.
-// Per-character matching needs the keyboard watcher (phase 3); phase 2 shows the value and the then-key.
+// Shows the value and the then-key; there is no per-character matching.
 import type { GuideMsg, Local } from "../../shared/messages";
 import { Bag, Ctx, Mounted, el, esc, kc, outline, toRect } from "../dom";
 

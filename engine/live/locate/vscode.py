@@ -1,6 +1,6 @@
-"""Find VS Code targets with Windows UI Automation, no model (phase 2 stand-in for the phase 3 resolver).
+"""Find VS Code targets with Windows UI Automation, no model: the UIA stage of the finder, for VS Code.
 
-Phase 1 found that looking targets up by label alone fails in VS Code (0 of 11): the editor is named after
+Looking targets up by label alone fails in VS Code (0 of 11): the editor is named after
 the file, New File only exists while the folder header is hovered, and so on. So each target kind gets its
 own rule, worked out from what UIA does expose:
 

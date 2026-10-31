@@ -34,7 +34,7 @@ NOT_FOUND = _fn(
     {"reason": {"type": "string"}}, ["reason"])
 
 LOCATE_TOOLS = [POINT_AT, DRAW_LINE, MENU_PATH, NOT_FOUND]
-WEB_SEARCH = {"type": "web_search"}   # Meta built-in tool, used by enrichment (phase 5)
+WEB_SEARCH = {"type": "web_search"}   # Meta built-in tool, used by enrichment
 
 
 @dataclass

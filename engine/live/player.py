@@ -359,8 +359,6 @@ class Player:
         if t == "start_ok":
             self.start_open = False
             return self.current()
-        if t == "import":
-            return [m.Toast(text="Importing tutorials arrives in phase 5.", kind="warn")]
         if self.start_open and t in ("next", "skip", "back", "jump"):      # moving at all means you're past the checklist
             self.start_open = False
             if t == "next":

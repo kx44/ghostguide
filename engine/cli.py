@@ -410,7 +410,7 @@ def cmd_pin(args) -> int:
 
 
 def cmd_appmap(args) -> int:
-    """Review the local app map and promote docs facts into the built-in one (05 Architecture, two layers)."""
+    """Review the local app map and promote docs facts into the built-in one."""
     from engine.appmap.store import AppMapStore
 
     store = AppMapStore(args.app, version=args.version or _app_version(args.app))

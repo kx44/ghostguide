@@ -1,4 +1,4 @@
-"""Overlay check (Windows): the P2-1 and P2-2 checks without hands, on the real overlay, engine and VS Code.
+"""Overlay check (Windows): the overlay window and a whole tutorial without hands, on the real overlay, engine and VS Code.
 
     py -m tests.accuracy.overlay_check
 

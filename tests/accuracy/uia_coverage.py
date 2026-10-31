@@ -1,4 +1,4 @@
-"""UIA coverage test (phase 1, Windows only): how much of each gold tutorial can Windows UI Automation see?
+"""UIA coverage test (Windows only): how much of each gold tutorial can Windows UI Automation see?
 
 Two questions per step:
   1. Target: can UIA find the step's control (label or alias, matching type) with an on-screen box?  → live step 4b
@@ -11,7 +11,7 @@ Modes
               Enter, and it probes the `verify` hint. Enter = done, s = skip step, q = stop and report.
               Use --from N / --to M to walk part of a tutorial.
 
-Run from the repo root on Windows (see 00 Context, "Run locally"):
+Run from the repo root on Windows:
   py -m tests.accuracy.uia_coverage --app vscode --walk
   py -m tests.accuracy.uia_coverage --app solidworks --walk
 
@@ -205,7 +205,7 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
 
     if sys.platform != "win32":
-        print("UIA coverage needs Windows (UI Automation). Listed under 'Run locally' in 00 Context.")
+        print("UIA coverage needs Windows (UI Automation).")
         return 2
     from engine.dpi import make_dpi_aware
     print(f"DPI awareness: {make_dpi_aware()}")

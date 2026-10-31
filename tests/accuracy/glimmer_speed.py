@@ -1,12 +1,12 @@
-"""Glimmer speed test (phase 1, free, runs on the author's GPU): is local Muse Glimmer fast and right enough for step checks?
+"""Glimmer speed test (free, runs on your GPU): is local Muse Glimmer fast and right enough for step checks?
 
 For each case (screenshot + `check` sentence + expected answer) it asks Glimmer "done / not_yet / wrong?"
 and measures cold start, warm latency and accuracy, at full size and downscaled.
 
 Pass: warm median <= --target-s (default 3 s) at 1280 px, and every case answered as expected.
-Slow or wrong → plan B from 02 Meta models: Modal (free tier) → Spark Contributor.
+Slow or wrong → Glimmer on Modal, then Spark Contributor.
 
-Setup on Windows (see 00 Context, "Run locally"):
+Setup on Windows:
   1. Install Ollama, pull Glimmer (4-bit, ~20 GB), and note its name in `ollama list`.
   2. Take the screenshots listed in tests/fixtures/screens/glimmer_cases.yaml (Win+Shift+S, save as PNG there).
   3. py -m tests.accuracy.glimmer_speed --model <name from ollama list>

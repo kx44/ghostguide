@@ -1,4 +1,4 @@
-"""Dev only (phase 2): hand-pinned target boxes, so the overlay can play a tutorial with no finder and no API.
+"""Dev only: hand-pinned target boxes, so the overlay can play a tutorial with no finder and no API.
 
 Pins are physical screen pixels on one machine, so they never go in the base file and normally live in
 `cache/pins/<tutorial>.yaml` (gitignored). Make them with `python -m engine pin <tutorial.md>`.

@@ -1,4 +1,4 @@
-"""Spark ribbon accuracy (phase 1's leftover, tuned in phase 4): does Spark find controls on the SOLIDWORKS ribbon?
+"""Spark ribbon accuracy: does Spark find controls on the SOLIDWORKS ribbon?
 
 Cases: tests/fixtures/screens/spark_ribbon_cases.yaml (screenshot + hand-labelled box per control). A control hits
 when the center of Spark's box is inside the true box; a control that isn't on the tab must not be pointed at.

@@ -60,7 +60,7 @@ export interface Card {
   suggested?: string;
   actions: string[];          // show_me | do_it | next | skip_wait
   low_confidence?: boolean;
-  dev_hint?: string;          // phase 2: how to pin this step's target
+  dev_hint?: string;          // dev pins: how to pin this step's target
   compact?: boolean;          // repeat steps: title + Up next + Next only
   up_next?: string;           // the next step's title (compact cards)
 }

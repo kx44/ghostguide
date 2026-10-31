@@ -1,10 +1,10 @@
-"""App maps, two layers (05 Architecture, "App maps have two layers"):
+"""App maps, two layers:
 
   built-in  appmaps/<app>-<version>.yaml in the repo     docs facts only: aliases, menu paths, shortcuts, sources
   local     %APPDATA%/GhostGuide/appmaps/<same name>      learned positions (`seen`, window-relative) + new apps
 
 Reads local first, then built-in, field by field, so a learned position sits next to the docs facts for the same
-control. Writes only ever go to the local layer; the built-in layer changes only when the author promotes reviewed
+control. Writes only ever go to the local layer; the built-in layer changes only when someone promotes reviewed
 entries (`python -m engine appmap promote`), which copies docs facts and never positions.
 
 Version: `vscode-1.14x.yaml` covers 1.140–1.149. The file for an app is picked by slug and the closest version
@@ -118,7 +118,7 @@ class AppMapStore:
         return True
 
     def add_facts(self, label: str, **facts) -> None:
-        """Docs facts for a control (compile-time enrich, phase 5; or by hand), into the local layer."""
+        """Docs facts for a control (compile-time enrich, or by hand), into the local layer."""
         c = self.local.root.get(label) or Control()
         for k, v in facts.items():
             if k in DOCS_FIELDS and v is not None:

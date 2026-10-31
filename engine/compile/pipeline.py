@@ -1,4 +1,4 @@
-"""Compile a tutorial, once (05 Architecture, flow 2): read the source, build the timeline, pass 1, pass 2, enrich,
+"""Compile a tutorial, once: read the source, build the timeline, pass 1, pass 2, enrich,
 validate, save, score. A source compiled before with the same prompts and model opens from the cache for free.
 
     python -m engine compile "https://www.youtube.com/watch?v=…" --start 01:28 --end 10:25
