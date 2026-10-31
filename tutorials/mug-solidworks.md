@@ -239,10 +239,10 @@ repeat_of: 4
 ## Step 23 — Show hidden edges
 ```yaml
 action: menu_path
-target: {label: Hidden Lines Visible, kind: menu_item, where: "Heads-up View toolbar",
+target: {label: Hidden Lines Visible, kind: menu_item, where: "Heads-up View toolbar across the top of the graphics area. Display Style is an icon with no text: a small shaded box, the third icon from the right end of the toolbar, with a dropdown arrow. The next one along, two half boxes, is Section View: not that. In its dropdown of five icons, Hidden Lines Visible is the fourth",
          menu_path: [Display Style, Hidden Lines Visible]}
 why: "You need to see the inner wall to start the handle on it."
-check: "Both wall edges visible as lines"
+check: "The model shows as lines, with its hidden inner edges dashed"
 source: {anchor: "#step-5"}
 confidence: high
 ```
@@ -297,12 +297,13 @@ confidence: high
 ## Step 29 — Insert a reference plane
 ```yaml
 action: menu_path
-target: {label: Plane, kind: menu_item, where: "menu bar (hover the SOLIDWORKS logo if hidden)",
-         menu_path: [Insert, Reference Geometry, Plane]}
+target: {label: Plane, kind: menu_item, where: "Features tab, CommandManager. Reference Geometry is a big button with text and a dropdown",
+         menu_path: [Features, Reference Geometry ▾, Plane]}
 why: "The handle's cross-section needs a plane at the handle's start point."
 check: "Plane PropertyManager open, Right Plane as first reference"
+verify: {uia: {name: Plane, type: Text}}
 source: {anchor: "#step-6"}
-confidence: high   # menu-bar-behind-logo is 2016 UI; version mapping may pin it
+confidence: high   # the source uses the menu bar, which 2026 folds away behind the logo
 ```
 ## Step 30 — Pick the handle's first point
 ```yaml
@@ -310,6 +311,7 @@ action: pick
 target: {label: Handle start point, kind: canvas, where: "where the handle path meets the inner wall"}
 why: "Puts the new plane exactly where the handle starts."
 check: "Second reference = that point; preview plane through it"
+verify: {uia: {name_contains: "@Sketch2", type: Text}}
 source: {anchor: "#step-6"}
 confidence: high
 ```
@@ -327,7 +329,7 @@ repeat_of: 13
 ```yaml
 action: type
 target: {label: Plane1, kind: tree_item, where: "FeatureManager design tree"}
-params: {value: "MugEdge", then_key: Enter, how: "slow double-click or F2 to rename"}
+params: {value: "MugEdge", then_key: Enter, how: "F2 to rename"}
 why: "A clear name makes the sweep easier to set up."
 check: "Tree shows MugEdge"
 verify: {uia: {name: MugEdge, type: TreeItem, window: SOLIDWORKS}}
@@ -346,10 +348,11 @@ confidence: high
 ## Step 34 — Centerpoint Straight Slot
 ```yaml
 action: menu_path
-target: {label: Centerpoint Straight Slot, kind: menu_item, where: "Sketch tab, CommandManager",
+target: {label: Centerpoint Straight Slot, kind: menu_item, where: "Sketch tab, CommandManager. Straight Slot is a small icon with no text, a rounded slot with two dots, the first in the bottom row of small icons, with its dropdown arrow right beside it",
          menu_path: [Sketch, Straight Slot ▾, Centerpoint Straight Slot]}
 why: "A slot gives the handle a rounded, comfortable cross-section."
 check: "Slot PropertyManager open, sketch on MugEdge"
+verify: {uia: {name_contains: "Sketch3 of", type: Window}}
 source: {anchor: "#step-7"}
 confidence: high
 ```
@@ -390,6 +393,7 @@ action: click
 target: {label: Swept Boss/Base, kind: button, where: "Features tab, CommandManager",
          menu_path: [Insert, Boss/Base, Sweep]}
 check: "Sweep PropertyManager open"
+verify: {uia: {name: Sweep, type: Button}}
 source: {anchor: "#step-8"}
 confidence: high
 ```
@@ -399,6 +403,7 @@ action: pick
 target: {label: Sketch3, kind: tree_item, where: "flyout FeatureManager tree, or the slot in graphics"}
 params: {field: "Profile (blue box)"}
 check: "Profile box shows Sketch3"
+verify: {uia: {name: Sketch3, type: ListItem}}
 source: {anchor: "#step-8"}
 confidence: high
 ```
@@ -408,6 +413,7 @@ action: pick
 target: {label: Sketch2, kind: tree_item, where: "flyout FeatureManager tree, or the handle path in graphics"}
 params: {field: "Path (pink box)"}
 check: "Path box shows Sketch2; yellow handle preview"
+verify: {uia: {name: Sketch2, type: ListItem}}
 source: {anchor: "#step-8"}
 confidence: high
 ```
@@ -434,14 +440,16 @@ confidence: high
 action: click
 target: {label: Fillet, kind: button, where: "Features tab, CommandManager"}
 check: "Fillet PropertyManager open"
+verify: {uia: {name: Fillet, type: Button}}
 source: {anchor: "#step-10"}
 confidence: high
 ```
 ## Step 44 — Pick the sharp edges
 ```yaml
 action: pick
-target: {label: Rim and handle edges, kind: edge, where: "mug rim; handle-to-wall joins"}
+target: {label: Rim edge, kind: edge, where: "the top edge of the mug's rim"}
 check: "Edges listed in Items To Fillet"
+verify: {uia: {name_contains: "Edge<", type: ListItem}}
 source: {anchor: "#step-10"}
 confidence: inferred   # source doesn't name edges
 ```

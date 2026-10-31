@@ -1,8 +1,8 @@
 """The UIA stage for SolidWorks. What UI Automation sees there (checked on 2026 SP4.1):
 
   FeatureManager rows     named TreeItems; a sketch under-defined reads "(-) Sketch1"
-  PropertyManager         the title is a named Button ("Offset Entities"), the green check the first nameless square
-                          button under it, the sections are named Buttons, the number fields Edits with a value
+  PropertyManager         the title is a named Button ("Offset Entities") or a Text ("Plane"), the green check the first
+                          nameless square button under it, the sections are named Buttons, the number fields Edits with a value
   New Document dialog     Part / Assembly / Drawing are three big nameless Buttons, in that order
   the ribbon, flyouts     nothing at all, so those go on to Spark vision
   the canvas              nothing, Spark vision
@@ -67,27 +67,31 @@ def _panel(els: list[dict]) -> list[dict]:
 
 
 def pm_title(els: list[dict]) -> Optional[dict]:
-    """The open PropertyManager's title: the wide named Button right above the row of square buttons."""
+    """The open PropertyManager's title, right above the row of square buttons: a wide named Button, or in the newer
+    panels (Plane) a short Text."""
     squares = pm_squares(els)
     if not squares:
         return None
-    top = squares[0]["rect"][1]
-    above = [e for e in _panel(els) if e.get("type") == "Button" and e.get("name") and e["rect"][2] > 120
-             and 0 <= top - (e["rect"][1] + e["rect"][3]) <= 12]
+    above = [e for e in _panel(els) if _is_title(e, squares[0]["rect"][1])]
     return above[0] if above else None
+
+
+def _is_title(e: dict, y: int) -> bool:
+    wide_button = e.get("type") == "Button" and e["rect"][2] > 120
+    label = e.get("type") == "Text" and e["rect"][1] < y
+    return bool(e.get("name")) and (wide_button or label) and 0 <= y - (e["rect"][1] + e["rect"][3]) <= 12
 
 
 def pm_squares(els: list[dict]) -> list[dict]:
     """The nameless square buttons in a row under the title (OK, Cancel, …), left to right."""
     sq = [e for e in _panel(els) if e.get("type") == "Button" and not e.get("name")
-          and abs(e["rect"][2] - e["rect"][3]) <= 4 and 24 <= e["rect"][2] <= 60]
+          and abs(e["rect"][2] - e["rect"][3]) <= 16 and 24 <= e["rect"][2] <= 60 and 24 <= e["rect"][3] <= 60]
     rows: dict[int, list[dict]] = {}
     for e in sq:
         rows.setdefault(e["rect"][1], []).append(e)
     for y in sorted(rows):
         row = sorted(rows[y], key=lambda e: e["rect"][0])
-        if any(e.get("type") == "Button" and e.get("name") and e["rect"][2] > 120
-               and 0 <= y - (e["rect"][1] + e["rect"][3]) <= 12 for e in _panel(els)):
+        if any(_is_title(e, y) for e in _panel(els)):
             return row
     return []
 

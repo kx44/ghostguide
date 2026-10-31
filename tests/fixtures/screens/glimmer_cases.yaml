@@ -20,3 +20,8 @@ cases:
      check: "Revolve1 in tree; cup-shaped solid", expect: done}
   - {id: sw-cup-handle-notyet, image: sw-revolved-cup.png, title: "Confirm the sweep",
      check: "Sweep1 in tree; mug has a handle", expect: not_yet}
+  # SOLIDWORKS: the finished handle, and the sketch before it's revolved (a thin closed profile)
+  - {id: sw-handle-done, image: sw-mug-handle.png, title: "Confirm the sweep",
+     check: "Sweep1 in tree; mug has a handle", expect: done}
+  - {id: sw-handle-fillet-notyet, image: sw-mug-handle.png, title: "Radius and confirm",
+     check: "Fillet1 in tree; no sharp edges on rim", expect: not_yet}

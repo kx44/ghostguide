@@ -35,8 +35,8 @@ from tests.accuracy import sw_drive as d
 TUTORIAL = "tutorials/mug-solidworks.md"
 LOGS = config.LOGS
 PORT = 8765
-AUTO_WAIT_S = 22.0         # for a step to move on by itself
-BOX_WAIT_S = 40.0          # for a target to be found (a first Spark call, a cold Glimmer)
+AUTO_WAIT_S = 40.0         # for a step to move on by itself
+BOX_WAIT_S = 70.0          # for a target to be found (a first Spark call, a cold Glimmer)
 
 
 class Missing(SystemExit):
@@ -141,7 +141,7 @@ class Walk:
     def __init__(self, eng: Engine):
         self.e = eng
         self.rows: list[dict] = []
-        self.must_work = {2, 5, 8, 11, 13, 16, 18, 20, 27, 31, 37, 41}
+        self.must_work = {2, 5, 8, 11, 13, 16, 18, 20, 27, 29, 30, 31, 34, 37, 38, 39, 40, 41, 43, 44, 45}
         self.view = None
         self.origin = (1413, 833)     # the front view puts it in the middle of the graphics area
         self.px_mm = 5.81             # in a new part's front view (a 400 px line read 68.83 mm)
@@ -192,9 +192,12 @@ class Walk:
             b = self.box(n)
             if b is None or self.e.current != n:
                 break
-            done = self.g(n)["extra"].get("path_done", 0)
+            extra = self.g(n)["extra"]
+            done = extra.get("path_done", 0)
             hops.append(b)
-            d.click(*(self.g(n)["extra"].get("click_at") or box_center(b)), settle=0.8)
+            d.click(*(extra.get("click_at") or box_center(b)), settle=0.8)
+            if done >= len(extra.get("path") or [0]) - 1:     # that was the last chip
+                return {"hops": hops}
             self.wait(lambda: self.e.current != n or (self.g(n) and self.g(n)["extra"].get("path_done", 0) != done), 40)
             if self.e.current != n or self.g(n) is None or self.g(n)["extra"].get("path_done", 0) == done:
                 break
@@ -216,7 +219,9 @@ class Walk:
             said = len(self.e.toasts)
             if self.e.toasts and "Check the outline" not in self.e.toasts[-1]:
                 break
-        return {"do_it": self.e.toasts[-1] if self.e.toasts else None}
+        if self.e.current == n and self.e.toasts and "nothing sure" in self.e.toasts[-1]:
+            return self.click_target(n)
+        return {"do_it": self.e.toasts[-1] if self.e.toasts else None, "presses": presses}
 
     def chain(self, *pts, end: bool = True) -> None:
         for p in pts:
@@ -307,7 +312,7 @@ class Walk:
             5: s5, 6: s6, 7: s7,
             8: lambda: self.do_it(8),
             9: s9, 10: s10,
-            11: lambda: self.click_target(11),
+            11: lambda: self.do_it(11, presses=2),         # found by sight: the first press asks you to check
             12: s12,
             13: lambda: self.click_target(13),
             14: s14, 15: s15,
@@ -323,11 +328,11 @@ class Walk:
         """(px per mm, screen spot of the model's (0, 0)) in a straight-on view, from the mug's outline: it stands
         102 mm tall (-52 to +50), centred on the axis."""
         img, origin = d.shot("measure")
-        grey = img.convert("L").crop((290, 215, 2480, 1480))
+        grey = img.convert("L").crop((520, 215, 2470, 1480))    # past the corner triad, short of the task pane tabs
         box = grey.point(lambda v: 255 if v < 70 else 0).getbbox()
         if box is None:
             raise Missing("can't see the mug's outline")
-        l, top, r, bottom = box[0] + 290, box[1] + 215, box[2] + 290, box[3] + 215
+        l, top, r, bottom = box[0] + 520, box[1] + 215, box[2] + 520, box[3] + 215
         k = (bottom - top) / 102.08
         return k, (round((l + r) / 2) + origin[0], round(bottom - 52 * k) + origin[1])
 
@@ -336,8 +341,8 @@ class Walk:
         return round(o[0] + x * k), round(o[1] - y * k)
 
     def plan_handle(self) -> dict[int, Callable[[], Optional[dict]]]:
-        def wall_x(y: float) -> float:          # the inner wall: 38 mm at the base, 42 at the rim
-            return 38 + 0.04 * (y + 49.92)
+        def wall_x(y: float) -> float:          # the middle of the wall (39 mm at the base, 43 at the rim), so the
+            return 39 + 0.04 * (y + 49.92)      # handle runs into the mug and the sweep merges with it
         start = (wall_x(30), 30)
 
         def s25():
@@ -346,19 +351,29 @@ class Walk:
             self.chain(self.at(m, *start), self.at(m, 75, 30), self.at(m, 75, -20), self.at(m, wall_x(-20), -20))
             return {"px_mm": round(m[0], 2)}
         def s30():
-            p = self.at(self.view, *start)
-            d.hover(*p, settle=0.5)
-            d.click(*p, settle=1.5)
+            self.view = self.view or self.measure()
+            x, y = self.at(self.view, 60, start[1])    # on the path's top segment, then left along it to where it starts:
+            img, origin = d.shot("path")               # it snapped to the nearest wall edge, wherever that was
+            grey = img.convert("L")
+            ys = max((abs(yy - y), yy) for yy in [y])[1]
+            row = next((yy for yy in range(y - 12, y + 13) if grey.getpixel((x - origin[0], yy - origin[1])) < 190), ys)
+            while grey.getpixel((x - 1 - origin[0], row - origin[1])) < 190 and x > 600:
+                x -= 1
+            d.hover(x, row, settle=0.6)
+            d.click(x, row, settle=1.5)
+            return {"start_at": [x, row]}
         def row(label: str) -> Optional[tuple[int, int]]:
             for e in d.dump():
                 if e["type"] == "TreeItem" and sw.row_name(e.get("name")) == sw.row_name(label) and e["rect"][2] > 0:
                     return e["rect"][0] + e["rect"][2] // 2, e["rect"][1] + e["rect"][3] // 2
             return None
         def s33():
-            p = row("MugEdge")
-            if p:
-                d.click(*p, settle=0.6)
-            d.keys("Ctrl", "8", settle=1.5)
+            d.keys("Esc", settle=0.3)
+            part = next((e for e in d.dump() if e["type"] == "TreeItem" and re.fullmatch(r"Part\d+", e.get("name") or "")), None)
+            if part:                            # away and back: a click on the selected row would start a rename
+                d.click(part["rect"][0] + 10, part["rect"][1] + 12, settle=0.6)
+            d.click(*row("MugEdge"), settle=0.8)
+            d.keys("Ctrl", "8", settle=2.0)
         def s35():
             m = self.measure()
             self.view = m
@@ -371,16 +386,18 @@ class Walk:
         def flyout(n: int, label: str) -> dict:
             if row(label) is None:              # the flyout tree over the canvas starts folded
                 for e in d.dump():
-                    if e["type"] == "TreeItem" and e["rect"][0] > 300 and e["rect"][1] < 300:
+                    if e["type"] == "TreeItem" and 300 < e["rect"][0] < 800 and e["rect"][1] < 300:
                         d.click(e["rect"][0] - 56, e["rect"][1] + e["rect"][3] // 2, settle=0.8)
                         break
             return self.click_target(n)
         def s44():
-            m = self.measure()
-            self.view = m
-            p = self.at(m, 0, 50)
-            d.hover(p[0], p[1], settle=0.5)
-            d.click(p[0], p[1], settle=1.0)
+            img, origin = d.shot("rim")         # the first dark pixel down a column: the outline's left end is the mug's
+            grey = img.convert("L")
+            box = grey.crop((520, 215, 2470, 1480)).point(lambda v: 255 if v < 70 else 0).getbbox()
+            x = box[0] + 520 + 350
+            y = next(y for y in range(235, 1480) if grey.getpixel((x, y)) < 70)
+            d.hover(x + origin[0], y + origin[1], settle=0.6)
+            d.click(x + origin[0], y + origin[1], settle=1.5)
         def s45():
             out = self.do_it(45, presses=2)
             ok = sw.pm_ok(d.dump())
@@ -410,7 +427,7 @@ class Walk:
             39: lambda: flyout(39, "Sketch3"),
             40: lambda: flyout(40, "Sketch2"),
             41: lambda: self.click_target(41),
-            42: lambda: {"note": "you say when"},
+            42: lambda: {"next": self.e.send("next")},     # a look step: you say when
             43: lambda: self.click_target(43),
             44: s44, 45: s45,
         }
@@ -420,7 +437,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--from", dest="start", type=int, default=1)
     ap.add_argument("--to", type=int, default=45)
-    ap.add_argument("--keep-doc", action="store_true", help="fresh start, but don't close the open part first (shows the start check)")
+    ap.add_argument("--as-is", action="store_true", help="--from: carry on with SolidWorks exactly as it is (a panel left open)")
     args = ap.parse_args(argv)
     print("DPI:", make_dpi_aware())
     fresh = args.start == 1
@@ -439,6 +456,17 @@ def main(argv=None) -> int:
                 ok = w.wait(lambda: eng.guide is not None, 15)
                 print("start check cleared by itself:", ok, flush=True)
                 w.rows.append({"n": 0, "title": "start check", "items": eng.start_check and eng.start_check["items"], "auto": ok})
+        if args.start > 1:
+            w.wait(lambda: eng.guide is not None, 15)
+            d.front()
+            if not args.as_is:
+                d.keys("Esc", settle=0.4)
+                d.keys("Esc", settle=0.4)
+            if not args.as_is and re.search(r"\[Sketch\d+ of", d.win().title):      # an empty sketch from where the last run stopped
+                d.click(2439, 215, settle=1.5)
+            if eng.current != args.start:
+                eng.ws.send(json.dumps({"type": "jump", "n": args.start}))
+                w.wait(lambda: eng.current == args.start, 8)
         steps = w.plan()
         for n in range(args.start, args.to + 1):
             if n not in steps:

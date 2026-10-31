@@ -36,6 +36,7 @@ TYPE_SETTLE_S = 1.2      # no keys or clicks for this long before a typing step 
 WAIT_SETTLE_S = 1.5      # a wait step's window must stay still this long
 WAIT_MIN_S = 1.0         # …and the wait card must have been up at least this long
 LOOK_AHEAD = 3           # steps after the current one that each tick also looks at (keeps `seen_false` fresh)
+BASELINE_FRESH_S = 4.0   # a picture this recent still shows the app as a new step found it
 MODEL_IDLE_S = 1.0       # no keys or clicks for this long before a model looks
 MODEL_GAP_S = 4.0        # at least this long between two looks at one step
 MODEL_MAX_ASKS = 6       # …and this many in all; after that Next is the way on
@@ -295,6 +296,8 @@ class Tracker:
         self._watch: dict[int, _StepWatch] = {}
         self.primed = False
         self.last_snapshot: Optional[Snapshot] = None
+        self.last_img = None                      # the latest picture of the whole app
+        self.last_img_t = -1e9
         self.close_up = None                      # (step, since, picture) → the part to show the models, or None
         self.model_w = 1280                       # the picture's width for the models
         self.diff_opts: dict = {}                 # capture.changed's width and share, for a picture of the whole app
@@ -367,10 +370,15 @@ class Tracker:
         img = self.grab(step)
         if img is None:
             return Verdict("unknown", "diff", why="can't see the window")
-        if w.baseline is None:
-            w.baseline = img
-            return Verdict("not_yet", "diff", why="baseline taken")
         from engine.live.capture import changed, for_model
+        previous, self.last_img = self.last_img, img
+        if w.baseline is None:
+            # Quick hands act before the first look at a step: the picture from just before it showed is the fairer start.
+            w.baseline = previous if previous is not None and now - self.last_img_t < BASELINE_FRESH_S else img
+            self.last_img_t = now
+            if w.baseline is img:
+                return Verdict("not_yet", "diff", why="baseline taken")
+        self.last_img_t = now
         if not changed(w.baseline, img, **self.diff_opts):
             return Verdict("not_yet", "diff", why="nothing changed yet")
         if self.hidden or not (self.ladder.glimmer or self.ladder.spark):

@@ -21,6 +21,7 @@ DOABLE = {"click", "type", "shortcut", "menu_path"}
 NOT_DOABLE_KINDS = {"canvas", "edge", "face"}
 SURE_STAGES = {"uia"}
 SETTLE_S = 0.15
+RENAME_SETTLE_S = 0.5
 HIT_SETTLE_S = 0.1       # the overlay checks the cursor every 30 ms and lets go of the mouse once it's off a card
 
 
@@ -148,6 +149,8 @@ class Executor:
                     _click(op)
                 elif op.kind == "keys":
                     _keys(op.keys)
+                    if op.keys == ("F2",):
+                        time.sleep(RENAME_SETTLE_S)       # the rename box takes a moment; typed sooner, it's lost
                 elif op.kind == "text":
                     _text(op.text)
                 time.sleep(SETTLE_S)

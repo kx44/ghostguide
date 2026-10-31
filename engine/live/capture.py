@@ -40,6 +40,10 @@ def changed(a, b, share: float = CHANGED_SHARE, width: int = DIFF_W) -> bool:
     return changed_share(a, b, width=width) > share
 
 
+ARROW_LEFT, ARROW_RIGHT, ARROW_UP, ARROW_DOWN = 10, 26, 24, 8   # where to search, px around the button's box
+ARROW_DARK = 90
+BIG_BUTTON_H = 60
+ARROW_MIN_W, ARROW_MAX_W = 6, 14
 LOOK_SIDE = 16          # a control's remembered look: this many grey cells a side
 LOOK_DELTA = 14         # mean grey levels two looks may differ by and still be the same control (a hover shade,
                         # not its neighbour on another ribbon tab: buttons there look alike at a glance)
@@ -47,6 +51,46 @@ LOOK_DELTA = 14         # mean grey levels two looks may differ by and still be 
 
 def look_of(img) -> list[int]:
     return list(img.convert("L").resize((LOOK_SIDE, LOOK_SIDE)).tobytes())
+
+
+def dropdown_arrow(img, box: tuple[int, int, int, int], origin: tuple[int, int] = (0, 0)) -> Optional[tuple[int, int]]:
+    """The small black triangle of a dropdown just right of a ribbon button, to the pixel (screen coordinates), or None.
+    A row of dark pixels, each row below it narrower. Model boxes are too loose for a target this small, and it's free."""
+    x, y, w, h = box[0] - origin[0], box[1] - origin[1], box[2], box[3]
+    x0, x1 = max(0, x + w - ARROW_LEFT), min(img.width, x + w + ARROW_RIGHT)
+    y0, y1 = max(0, y - ARROW_UP), min(img.height, y + h + ARROW_DOWN)
+    if h >= BIG_BUTTON_H:                 # a big ribbon button: its arrow is under its own label, not beside it
+        x0, x1 = max(0, x), min(img.width, x + w)
+        y0, y1 = max(0, y + h // 2), min(img.height, y + h + ARROW_DOWN)
+    if x1 <= x0 or y1 <= y0:
+        return None
+    grey = img.convert("L").crop((x0, y0, x1, y1))
+    px, W, H = grey.load(), grey.width, grey.height
+
+    def runs(r: int) -> list[tuple[int, int]]:
+        out, s = [], None
+        for c in range(W + 1):
+            dark = c < W and px[c, r] < ARROW_DARK
+            if dark and s is None:
+                s = c
+            elif not dark and s is not None:
+                out.append((s, c - s))
+                s = None
+        return out
+
+    best = None
+    for r in range(H - 3):
+        for s, n in runs(r):
+            if not ARROW_MIN_W <= n <= ARROW_MAX_W:
+                continue
+            mid = s + n / 2
+            below = [m for m in runs(r + 2) if abs(m[0] + m[1] / 2 - mid) <= 1.5]
+            if below and below[0][1] < n and not [a for a in runs(max(0, r - 1)) if abs(a[0] + a[1] / 2 - mid) <= 3 and r > 0]:
+                sy = y0 + r + 2
+                d = abs(sy - (y + h / 2))
+                if best is None or d < best[0]:
+                    best = (d, x0 + round(mid), sy)
+    return (best[1] + origin[0], best[2] + origin[1]) if best else None
 
 
 def near_clicks(img, clicks: list[tuple[int, int]], origin: tuple[int, int], pad: int = 320):

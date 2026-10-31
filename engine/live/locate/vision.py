@@ -65,6 +65,7 @@ RIBBON_H = 125
 PANEL_TOP, PANEL_W = 85, 300
 CORNER_W, CORNER_H = 0.45, 240
 HEADSUP_H = 70
+NEAR_LEFT, NEAR_UP, NEAR_W, NEAR_H = 240, 40, 1100, 680     # around the control whose menu opened, window px
 TAB_TOP, TAB_H = 115, 19     # the row of ribbon tab names: thin, and Spark's y is off by more than its height
 
 
@@ -176,8 +177,9 @@ class SparkVision:
         return memo is not None and memo.calls >= self.max_calls
 
     def find(self, step: Step, label: Optional[str] = None, route: Optional[list[str]] = None,
-             hop: int = 0) -> Optional[Box]:
-        """`route` + `hop`: looking for that hop of a route, rather than for the step's own control."""
+             hop: int = 0, near: Optional[Box] = None) -> Optional[Box]:
+        """`route` + `hop`: looking for that hop of a route, rather than for the step's own control. `near`: the box
+        of the hop before it, whose menu this is: a menu opens right there, so that part of the window is enough."""
         self.last_line, self.last_route, self.last_conf = None, None, ""
         if self.grab is None:
             self.last_how = "vision: no screenshot"
@@ -191,7 +193,7 @@ class SparkVision:
         memo = self._memo.setdefault(key, _Memo())
         if self._still_good(memo, img, origin) or memo.calls >= self.max_calls or self.clock() - memo.t < MIN_GAP_S:
             return self._answer(memo)
-        self._ask(step, label or step.target.label, img, origin, s, memo, route, hop)
+        self._ask(step, label or step.target.label, img, origin, s, memo, route, hop, near)
         return self._answer(memo)
 
     def _answer(self, memo: _Memo) -> Optional[Box]:
@@ -209,17 +211,23 @@ class SparkVision:
         now = crop(img, memo.patch_at, origin, PAD_PX)
         return now.size == memo.patch.size and changed_share(memo.patch, now) <= SAME_SHARE
 
-    def _ask(self, step: Step, label: str, img, origin, s: float, memo: _Memo, route=None, hop: int = 0) -> None:
-        from engine.live.capture import crop
+    def _ask(self, step: Step, label: str, img, origin, s: float, memo: _Memo, route=None, hop: int = 0, near=None) -> None:
+        from engine.live.capture import crop, for_model
         from engine.models.client import ModelClient, image_part, text_part
 
         t = step.target
         # A route's last hop is an item in a menu, which can open anywhere; the ones before it are still in the ribbon.
         last_hop = bool(route) and hop == len(route) - 1
         region = region_for(step) if self.regions and not last_hop else "window"
-        png, scale, (rx, ry), (w, h) = picture(img, region, s)
+        if near is not None:
+            x0, y0 = max(0, near.x - origin[0] - NEAR_LEFT), max(0, near.y - origin[1] - NEAR_UP)
+            part = img.crop((x0, y0, min(img.width, x0 + NEAR_W), min(img.height, y0 + NEAR_H)))
+            png, scale = for_model(part, NEAR_W)
+            rx, ry, w, h = x0, y0, part.width, part.height
+        else:
+            png, scale, (rx, ry), (w, h) = picture(img, region, s)
         at = (origin[0] + rx, origin[1] + ry)
-        fields = dict(app=self.app, what=REGION_WORDS[region], w=w, h=h, title=step.title, label=label, kind=t.kind,
+        fields = dict(app=self.app, what="part of its window" if near is not None else REGION_WORDS[region], w=w, h=h, title=step.title, label=label, kind=t.kind,
                       where=t.where or "-")
         line_step = step.action in ("draw_line", "drag") and t.kind in ("canvas", "edge", "face")
         is_tab = False
@@ -255,7 +263,7 @@ class SparkVision:
                     continue
                 memo.box = to_screen(call, scale, at)
                 memo.conf, memo.how = call.confidence, f"vision: Spark pointed ({call.confidence})"
-                if not line_step and t.kind not in ("canvas", "edge", "face"):
+                if near is None and not line_step and t.kind not in ("canvas", "edge", "face"):
                     self._refine(step, fields["label"], img, origin, memo, c)
                     if memo.box is not None and is_tab and self.regions:
                         memo.box = Box(x=memo.box.x, y=origin[1] + round(TAB_TOP * s), w=memo.box.w, h=round(TAB_H * s))

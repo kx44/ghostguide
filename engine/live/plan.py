@@ -190,6 +190,7 @@ class Planner:
 
 
 MENU_W_PX, MENU_H_PX = 520, 640     # room a context menu takes, right of and below where you right-click
+DROP_MARGIN_PX, DROP_W_PX, DROP_H_PX = 40, 460, 340    # …and a dropdown, under the control that opens it
 
 
 def avoid_areas(step: Step, box: Optional[Box], extra: dict) -> list[dict]:
@@ -212,6 +213,8 @@ def avoid_areas(step: Step, box: Optional[Box], extra: dict) -> list[dict]:
             out.append({"x": box.x, "y": box.y, "w": box.w, "h": int(max(box.h, bottom - box.y))})
     if step.action == "menu_path" and (click_type(step.params) or {}).get("button") == "right":
         out.append({"x": box.x + box.w // 2, "y": box.y + box.h // 2, "w": MENU_W_PX, "h": MENU_H_PX})
+    elif step.action == "menu_path" and extra.get("path"):      # the dropdown that opens under the chip's control
+        out.append({"x": box.x - DROP_MARGIN_PX, "y": box.y + box.h, "w": box.w + DROP_W_PX, "h": DROP_H_PX})
     return out
 
 

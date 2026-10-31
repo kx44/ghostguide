@@ -141,6 +141,10 @@ def _resolver(tut, args):
         now = box_pixels(box)
         return capture.look_of(now) if now is not None else None
 
+    def arrow(box):
+        got = grab()
+        return capture.dropdown_arrow(got[0], (box.x, box.y, box.w, box.h), got[1]) if got else None
+
     vision = wonder = None
     if enabled():
         vision = SparkVision(tut.meta.app, grab=grab, regions=solidworks)
@@ -153,7 +157,7 @@ def _resolver(tut, args):
                                           for e in recent.clicks(within_s=60))
 
     return Resolver(stage, store, find_window, vision, wonder, Hops(clicked),
-                    looks=looks if solidworks else None, look_of=look_of if solidworks else None)
+                    looks=looks if solidworks else None, look_of=look_of if solidworks else None, arrow=arrow if solidworks else None)
 
 
 def _for_hard_apps(player, tut, locator, args) -> None:

@@ -117,7 +117,7 @@ class Player:
             if guide.style in ("code_card", "ghost_text"):
                 guide.extra.update(located)
             from engine.live.plan import avoid_areas
-            avoid = avoid_areas(step, box, guide.extra if guide.style == "code_card" else located)
+            avoid = avoid_areas(step, box, guide.extra if guide.style in ("code_card", "path_chips") else located)
             if avoid:
                 guide.extra["avoid"] = avoid
             if located.get("route") and guide.card is not None:

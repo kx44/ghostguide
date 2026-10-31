@@ -75,31 +75,41 @@ class Hops:
         self.clock = clock or time.monotonic
         self._at: dict[int, int] = {}
         self._box: dict[int, Optional[Box]] = {}
+        self._shown: dict[int, list[Box]] = {}
         self._t: dict[int, float] = {}
 
     def current(self, n: int, path: list[str]) -> int:
         i = self._at.get(n, 0)
-        box = self._box.get(n)
-        if box is not None and i < len(path) - 1 and self.clicked is not None and self.clicked(box, self._t.get(n, 0.0)):
+        boxes = self._shown.get(n, [])
+        if i < len(path) - 1 and self.clicked is not None and any(self.clicked(b, self._t.get(n, 0.0)) for b in boxes):
             i += 1
             self._at[n] = i
             self._box[n] = None
+            self._shown[n] = []
+            self._t[n] = self.clock()
         return i
 
     def found(self, n: int, box: Optional[Box]) -> None:
-        if self._box.get(n) is None and box is not None:
-            self._t[n] = self.clock()
+        """A miss keeps the last box: a click on it may only now be coming in (the look that missed took seconds,
+        and the click itself is often why the control stopped looking the same)."""
+        if box is None:
+            return
+        self._t.setdefault(n, self.clock())
         self._box[n] = box
+        if box not in self._shown.setdefault(n, []):      # each look lands a little differently: any of them was drawn
+            self._shown[n].append(box)
 
     def back_to_start(self, n: int) -> None:
         """The next chip's control isn't there: the menu closed again."""
         self._at[n] = 0
         self._box[n] = None
+        self._shown[n] = []
 
     def forget(self, n: int) -> None:
         self._at.pop(n, None)
         self._box.pop(n, None)
-        self._t.pop(n, None)
+        self._shown.pop(n, None)
+        self._t[n] = self.clock()     # clicks count from when the step showed: a box from before can be on screen already
 
 
 class Wonder:
