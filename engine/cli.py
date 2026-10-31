@@ -159,8 +159,10 @@ def _resolver(tut, args):
         return recent is not None and any(e.t >= since and box.x <= e.x <= box.x + box.w and box.y <= e.y <= box.y + box.h
                                           for e in recent.clicks(within_s=60))
 
+    from engine.live.locate import tooltip
     return Resolver(stage, store, find_window, vision, wonder, Hops(clicked),
-                    looks=looks if solidworks else None, look_of=look_of if solidworks else None, arrow=arrow if solidworks else None)
+                    looks=looks if solidworks else None, look_of=look_of if solidworks else None, arrow=arrow if solidworks else None,
+                    tip=None if vscode else (lambda: tooltip.read(window)))
 
 
 def _for_hard_apps(player, tut, locator, args) -> None:

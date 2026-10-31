@@ -37,6 +37,9 @@ LOGS = config.LOGS
 PORT = 8765
 AUTO_WAIT_S = 40.0         # for a step to move on by itself
 BOX_WAIT_S = 70.0          # for a target to be found (a first Spark call, a cold Glimmer)
+TIP_READ_S = 5.0           # the tooltip shows after about a second, and the finder looks about every 3
+TIP_TRIES = 4
+RIBBON_BOTTOM = 230        # physical px: only the ribbon and its toolbars have tooltips worth waiting for
 
 
 class Missing(SystemExit):
@@ -165,10 +168,23 @@ class Walk:
         return g.get("box") if g else None
 
     # ---------- doing ----------
+    def rest_on(self, n: int, b: Optional[dict]) -> Optional[dict]:
+        """Rest the mouse on a ribbon box before clicking, as a person does, so the engine can read its tooltip. A box the
+        tooltip disproves goes away, and a better one comes."""
+        for _ in range(TIP_TRIES):
+            if b is None or b["y"] > RIBBON_BOTTOM or self.e.current != n:
+                return b
+            d.hover(*box_center(b), settle=TIP_READ_S)
+            now = self.box(n)
+            if now == b:
+                return b
+            b = now
+        return b
+
     def click_target(self, n: int, count: int = 1, button: str = "left") -> dict:
         """Click where the engine points, following its route if the control is behind one: a ribbon tab to open."""
         for _ in range(4):
-            b = self.box(n)
+            b = self.rest_on(n, self.box(n))
             if b is None or self.e.current != n:
                 break
             g = self.g(n)
@@ -191,8 +207,8 @@ class Walk:
         """A menu_path step: click each chip's control as the engine moves along the route."""
         hops = []
         for _ in range(5):
-            b = self.box(n)
-            if b is None or self.e.current != n:
+            b = self.rest_on(n, self.box(n))
+            if b is None or self.e.current != n or self.g(n) is None:
                 break
             extra = self.g(n)["extra"]
             done = extra.get("path_done", 0)

@@ -317,6 +317,69 @@ def test_the_built_in_map_describes_a_textless_icon_when_a_tutorial_doesnt():
     assert step.target.where == "Sketch toolbar"            # the step itself is never changed
 
 
+@pytest.mark.parametrize("want,shown,same", [
+    ("Line", "Line   (L)", True), ("Straight Slot", "Centerpoint Straight Slot", True), ("Sketch", "Exit Sketch", True),
+    ("Circle", "Circle", True), ("Revolved Boss/Base", "Revolved Boss/Base", True), ("Straight Slot", "Circle", False),
+    ("Sketch", "Sketch Fillet", False), ("Sketch", "Smart Dimension", False), ("Line", "Centerline", False), ("", "Line", False),
+])
+def test_a_tooltip_names_a_control(want, shown, same):
+    from engine.live.locate.tooltip import same_control
+    assert same_control(want, shown) is same
+
+
+def _tip_resolver(said, at=(15, 15), store=None):
+    from engine.schema.messages import Box
+
+    class Sees(VisionStub):
+        rejected = []
+
+        def find(self, step, label=None, route=None, hop=0, near=None):
+            return Box(x=10, y=10, w=10, h=10)
+
+        def reject(self, n, label, shown):
+            self.rejected.append((n, label, shown))
+
+    v = Sees()
+    v.rejected = []
+    return Resolver(Stage(), store, vision=v, tip=lambda: (said, at) if said else None), v
+
+
+def test_a_tooltip_that_says_something_else_takes_the_box_away_and_tells_sight():
+    r, v = _tip_resolver("Circle")
+    box, _ = r.locate(_exit_sketch())
+    assert box is None and v.rejected == [(16, "Exit Sketch", "Circle")] and "Circle" in r.last_how
+
+
+def test_a_tooltip_that_agrees_keeps_the_box_and_remembers_it_at_once():
+    learned = []
+
+    class Store(RouteStore):
+        def learn(self, label, window, box, rect, look): learned.append((label, box, look))
+
+    r, v = _tip_resolver("Exit Sketch", store=Store(None))
+    r.find_window, r.look_of = (lambda w: (0, 0, 100, 100)), (lambda b: [1, 2, 3])
+    for _ in range(3):
+        assert r.locate(_exit_sketch())[0] is not None
+    assert learned == [("Exit Sketch", (10, 10, 10, 10), [1, 2, 3])] and not v.rejected
+
+
+def test_a_tooltip_elsewhere_or_none_says_nothing_about_the_box():
+    r, v = _tip_resolver("Circle", at=(900, 900))
+    assert r.locate(_exit_sketch())[0] is not None and not v.rejected
+    r, v = _tip_resolver(None)
+    assert r.locate(_exit_sketch())[0] is not None
+
+
+def test_sight_gets_another_try_and_is_told_what_isnt_it():
+    v = SparkVision("SOLIDWORKS", client=FakeClient(NotFound(reason="no")), grab=lambda: (blank(), (0, 0), 1.0))
+    step = _exit_sketch()
+    v.find(step)
+    calls = v._memo[(16, "Exit Sketch")].calls
+    v.reject(16, "Exit Sketch", "Circle")
+    memo = v._memo[(16, "Exit Sketch")]
+    assert memo.calls == calls - 1 and memo.not_it == ["Circle"]
+
+
 def test_a_route_offers_the_app_maps_shortcut():
     import copy
     from types import SimpleNamespace

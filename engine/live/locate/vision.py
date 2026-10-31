@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable, Optional
 
 from engine import config
@@ -148,6 +148,7 @@ class _Memo:
     route: Optional[dict] = None
     how: str = ""
     conf: str = ""
+    not_it: list = field(default_factory=list)      # what tooltips said about the boxes this target has been given
     patch: object = None         # the pixels around the answer, or the whole window for a miss
     patch_at: tuple = (0, 0, 0, 0)
 
@@ -171,6 +172,15 @@ class SparkVision:
         """The step is showing again: a fresh allowance of calls."""
         for k in [k for k in self._memo if k[0] == n]:
             del self._memo[k]
+
+    def reject(self, n: int, label: str, shown: str) -> None:
+        """A tooltip says that box is something else: look again, and that look is on us, not on the allowance."""
+        memo = self._memo.setdefault((n, label), _Memo())
+        memo.box, memo.line, memo.patch = None, None, None
+        memo.calls = max(0, memo.calls - 1)
+        memo.t = 0.0
+        if shown not in memo.not_it:
+            memo.not_it.append(shown)
 
     def spent(self, n: int, label: str) -> bool:
         """Has this target had all its calls?"""
@@ -244,6 +254,8 @@ class SparkVision:
             text = PROMPT_PICK.format(**fields)
         else:
             text = PROMPT.format(**fields)
+        if memo.not_it:
+            text += "\nNot these, checked by their tooltips: " + ", ".join(memo.not_it) + "."
         memo.calls += 1
         memo.t = self.clock()
         memo.box, memo.line, memo.route, memo.conf = None, None, None, ""

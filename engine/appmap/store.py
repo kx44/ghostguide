@@ -127,6 +127,13 @@ class AppMapStore:
         self.save_local()
         return True
 
+    def forget_seen(self, label: str) -> None:
+        """Where it was remembered to be has been shown wrong."""
+        c = self.local.root.get(label)
+        if c is not None and c.seen is not None:
+            c.seen = None
+            self.save_local()
+
     def add_facts(self, label: str, **facts) -> None:
         """Docs facts for a control (compile-time enrich, or by hand), into the local layer."""
         c = self.local.root.get(label) or Control()

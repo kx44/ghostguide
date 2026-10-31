@@ -21,13 +21,14 @@ from __future__ import annotations
 import time
 from typing import Callable, Optional
 
-from engine.live.locate import appmap_hit, menu, uia
+from engine.live.locate import appmap_hit, menu, tooltip, uia
 from engine.schema.messages import Box, Line
 from engine.schema.tutorial import Step
 
 
 NOTHING_TO_CLICK = ("shortcut", "wait", "look")
 DROP_ARROW_PX = 9     # the small dropdown arrow, this far past a ribbon button's icon
+TIP_MARGIN_PX = 24    # the mouse this close to a box counts as on it: model boxes can be loose
 
 
 class GenericUIA:
@@ -64,7 +65,8 @@ class GenericUIA:
 
 class Resolver:
     def __init__(self, uia_stage, store=None, find_window: Optional[Callable[[str], Optional[tuple]]] = None,
-                 vision=None, wonder=None, hops: Optional[menu.Hops] = None, looks=None, look_of=None, arrow=None):
+                 vision=None, wonder=None, hops: Optional[menu.Hops] = None, looks=None, look_of=None, arrow=None,
+                 tip=None):
         self.uia = uia_stage                 # VSCodeLocator, SolidWorksUIA or GenericUIA
         self.store = store                   # appmap.store.AppMapStore
         self.find_window = find_window       # title part → window rect, for remembered boxes
@@ -74,6 +76,9 @@ class Resolver:
         self.looks = looks                   # (box, remembered look) → same pixels? None = don't compare
         self.look_of = look_of               # box → its look, saved when learning
         self.arrow = arrow                   # box → the dropdown arrow beside it, to the pixel
+        self.tip = tip                       # () → (what the tooltip showing says, where the mouse is), or None
+        self._tip_ok: set[tuple] = set()     # boxes a tooltip has already vouched for
+        self._tip_note = ""
         self.window = getattr(uia_stage, "window", "")
         self._hops_clicked: dict[int, list[tuple]] = {}  # kept until the step checks done: a click can be on the wrong icon
         self._prev_box: dict[int, Optional[Box]] = {}  # the hop before the current one: its menu is what's open
@@ -124,6 +129,8 @@ class Resolver:
                 return self._locate_hops(step)
             return self._locate(step)
         finally:
+            self.last_how += self._tip_note
+            self._tip_note = ""
             self.last_seconds = time.perf_counter() - t0
 
     def _described(self, step: Step) -> Step:
@@ -141,13 +148,13 @@ class Resolver:
         if step.action in NOTHING_TO_CLICK:     # the card alone is the guidance: never pay to look for a control
             self.last_how, self.last_stage = why, "none"
             return None, None
-        hit = self.quick(step)
+        hit = self._tip_check(step, step.target.label, self.quick(step))
         if hit is not None:
             self.last_how, self.last_stage = f"remembered from a checked run ({why})", "appmap"
             return hit, None
         seen_route = None
         if self.vision is not None:
-            b = self.vision.find(step)
+            b = self._tip_check(step, step.target.label, self.vision.find(step))
             ln = getattr(self.vision, "last_line", None)
             if b is not None or ln is not None:
                 self.last_how, self.last_stage = self.vision.last_how, "vision"
@@ -231,6 +238,7 @@ class Resolver:
             box = self.vision.find(step, label, route=path, hop=i, near=self._prev_box.get(step.n) if last else None)
             why, stage = self.vision.last_how, "vision"
             self.last_conf = getattr(self.vision, "last_conf", "")
+        box = self._tip_check(step, label, box) if stage != "uia" else box
         self._hop_box[step.n] = box
         if box is not None and stage == "vision" and self.look_of is not None and label not in self._pending_look:
             look = self.look_of(box)
@@ -262,6 +270,36 @@ class Resolver:
         self.hops.found(step.n, box)
         self.last_how, self.last_stage = f"hop {i + 1} of {len(path)}, {label}: {why}", stage if box is not None or stage == "wonder" else "none"
         return box, None
+
+    def _tip_check(self, step: Step, label: str, box: Optional[Box]) -> Optional[Box]:
+        """The mouse is on a box found by sight or memory and the app's tooltip is up: it says what's really there. Right,
+        and the box is remembered at once, because a name is better proof than the step later checking done. Wrong, and
+        the box goes, and sight looks again knowing that spot isn't it."""
+        if box is None or self.tip is None:
+            return box
+        try:
+            seen = self.tip()
+        except Exception:
+            return box
+        if not seen:
+            return box
+        name, (mx, my) = seen
+        if not (box.x - TIP_MARGIN_PX <= mx <= box.x + box.w + TIP_MARGIN_PX and box.y - TIP_MARGIN_PX <= my <= box.y + box.h + TIP_MARGIN_PX):
+            return box
+        if tooltip.same_control(label, name) or tooltip.same_control(step.target.label, name):
+            key = (label, box.x, box.y, box.w, box.h)
+            if key not in self._tip_ok:
+                self._tip_ok.add(key)
+                self._pending_look.setdefault(label, self.look_of(box) if self.look_of else None)
+                self._learn_hop(label, box)
+            return box
+        if self.store is not None and hasattr(self.store, "forget_seen"):
+            self.store.forget_seen(label)
+        reject = getattr(self.vision, "reject", None)
+        if reject is not None:
+            reject(step.n, label, name)
+        self._tip_note = f"; the tooltip there says {name}, not {label}"
+        return None
 
     def _remembered(self, label: str) -> Optional[Box]:
         """A route's hop where it was last time, if it still looks the same. Nothing remembered without a look."""
