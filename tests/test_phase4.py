@@ -522,3 +522,15 @@ def test_a_shortcut_step_never_pays_to_find_a_control():
             return None
     r = Resolver(Stage(), None, vision=V(), wonder=Wonder("SOLIDWORKS", client=FakeClient(NotFound(reason="x")), grab=lambda: None))
     assert r.locate(MUG.step(22)) == (None, None) and calls == [] and r.wonder.asked == {}
+
+
+def test_a_walk_just_finished_answers_for_the_other_thread(monkeypatch):
+    from engine.live.locate import uia
+    uia._last.clear()
+    walks = []
+    monkeypatch.setattr(uia, "_dump", lambda *a: walks.append(a) or [{"name": "x"}])
+    assert uia.dump("W") == uia.dump("W") == [{"name": "x"}]
+    assert len(walks) == 1
+    uia.dump("W", every=True)                              # a different question is a different walk
+    assert len(walks) == 2
+    uia._last.clear()

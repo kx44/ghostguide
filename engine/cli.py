@@ -74,6 +74,8 @@ def _load_play(args):
     override = None if args.scheme == "auto" else args.scheme
     locator = None
     if getattr(args, "locate", "pins") == "auto" and not getattr(args, "walk", None) and sys.platform == "win32":
+        import uiautomation
+        uiautomation.GetRootControl()      # started here: two worker threads racing to start it can fail
         locator = _resolver(tut, args)
     tracker = folder_fn = None
     if locator is not None and getattr(args, "check", "auto") == "auto":
@@ -90,7 +92,8 @@ def _load_play(args):
     if locator is not None:
         print(f"  finding targets live in the '{locator.window}' window (app map → UIA → vision {'on' if getattr(locator, 'vision', None) else 'off'} → route); a pin overrides a step")
     if tracker is not None:
-        print("  checking each step (rules, then pixel diff; model checks off): it moves on by itself, Next always works")
+        models = "on" if tracker.ladder.glimmer or tracker.ladder.spark else "off"
+        print(f"  checking each step (rules, then pixel diff; model checks {models}): it moves on by itself, Next always works")
     elif not pinned:
         print("  no pins yet: each card says how to pin its target as you go (hover, Ctrl+Alt+P twice)")
     return player

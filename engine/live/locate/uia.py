@@ -10,10 +10,15 @@ The matching is pure over dumped element dicts, so it's tested off Windows.
 from __future__ import annotations
 
 import re
+import threading
 import time
 from typing import Iterable, Optional
 
 from engine.schema.messages import Box
+
+_walking = threading.Lock()
+_last: dict[tuple, tuple[float, list[dict]]] = {}
+SHARE_S = 0.4            # a walk this recent still answers for the other thread
 
 _HINTS = re.compile(r"\s*(\[alt\].*|\((ctrl|alt|shift|win|f\d+)[^)]*\))\s*$", re.I)
 
@@ -68,14 +73,24 @@ def box_of(el: dict) -> Box:
 def dump(window: str, max_depth: int = 60, max_elements: int = 6000, tries: int = 3, every: bool = False) -> list[dict]:
     """UIA elements of the top-level window whose title contains `window` (all such windows with
     `every`, e.g. each Chrome window). Each element carries its window's title. The walk can throw when
-    the UI changes under it (a menu closing, the app starting), so it retries."""
-    for i in range(tries):
-        try:
-            return _dump(window, max_depth, max_elements, every)
-        except Exception:
-            if i == tries - 1:
-                raise
-            time.sleep(0.2)
+    the UI changes under it (a menu closing, the app starting), so it retries.
+
+    The finder and the step check run side by side and both want this, and two walks at once take three times as
+    long. So one walks at a time, and whoever was waiting takes the walk that just finished."""
+    key = (window, every, max_depth, max_elements)
+    with _walking:
+        got = _last.get(key)
+        if got is not None and time.monotonic() - got[0] <= SHARE_S:
+            return got[1]
+        for i in range(tries):
+            try:
+                els = _dump(window, max_depth, max_elements, every)
+                _last[key] = (time.monotonic(), els)
+                return els
+            except Exception:
+                if i == tries - 1:
+                    raise
+                time.sleep(0.2)
     return []
 
 

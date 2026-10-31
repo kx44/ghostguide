@@ -36,6 +36,7 @@ from datetime import datetime
 from pathlib import Path
 
 from engine import config
+from engine.live.locate import uia
 from engine.basefile.parse import parse_file
 from engine.live.locate.vscode import VSCodeLocator, dump
 from engine.live.plan import line_start
@@ -57,7 +58,7 @@ u32 = ctypes.windll.user32 if sys.platform == "win32" else None
 FOCUS_PROBE = r'''
 import sys, tkinter as tk
 out = sys.argv[1]
-r = tk.Tk(); r.title("GG focus probe"); r.geometry("700x300+200+700")
+r = tk.Tk(); r.title("GG focus probe"); r.geometry("700x300+900+300")
 t = tk.Text(r, font=("Consolas", 20)); t.pack(fill="both", expand=True); t.focus_set()
 def save(_=None):
     open(out, "w", encoding="utf-8").write(t.get("1.0", "end-1c"))
@@ -127,6 +128,9 @@ def kill(p) -> None:
 
 
 # ---------- reading and driving the overlay -----------------------------------------------------
+uia.SHARE_S = 0        # here each look must be fresh: the check compares what's on screen right after an action
+
+
 def ov_elements() -> list[dict]:
     return [e for e in dump(OVERLAY) if e.get("type") in ("Text", "Button") and e.get("rect") and e["rect"][2] > 0]
 
@@ -595,7 +599,7 @@ def main(argv=None) -> int:
         tut = parse_file(TUTORIAL)
         loc = VSCodeLocator(title)
         kill(eng)                                         # restart from step 1 (also: overlay waits, reconnects)
-        time.sleep(2.5)
+        time.sleep(1.2)                                   # its toast lasts 4 s, and a walk takes up to 2
         waiting = find("Waiting for the engine")
         eng, rec = start_engine(restart=True, tag="b")
         up = wait_step(rec, 1, 0, 20)
@@ -657,6 +661,11 @@ def main(argv=None) -> int:
                 record("engine restarted mid-way resumes on the same step", bool(wait_step(rec, 17, 0, 20)))
             prepare(step, win, title)
             time.sleep(1.4)                               # the engine re-locates every second
+            for _ in range(12):                           # …and a walk of VS Code can take 2 s more
+                g = rec.last("guide")
+                if step.action in ("shortcut", "wait", "look") or (g and g.get("box") and g["step"]["n"] == n):
+                    break
+                time.sleep(0.5)
             g = rec.last("guide")
             for _ in range(2):
                 if not (step.target.label == "Editor" and (g is None or g.get("box") is None)):
@@ -702,7 +711,7 @@ def main(argv=None) -> int:
                 time.sleep(0.4)
                 want = str(step.params.get("value", "")).rstrip("\n")
                 got = (auto.GetClipboardText() or "").replace("\r\n", "\n")      # Windows clipboard uses CRLF
-                row["copy_ok"] = pressed and got == want and bool(find("Copied ✓"))
+                row["copy_ok"] = pressed and got == want     # (the button's "Copied ✓" lasts 1.6 s, less than a walk here)
                 if not row["copy_ok"]:
                     row["copy_detail"] = {"pressed": pressed, "got": got[:60], "want": want[:60]}
             k = rec.mark()

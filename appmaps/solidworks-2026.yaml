@@ -1,0 +1,76 @@
+New:
+  aliases: []
+  shortcut: Ctrl+N
+  source: Checked on screen, SOLIDWORKS 2026 SP4.1 (mug run, 31 Oct 2026)
+Front:
+  aliases: []
+  menu_path:
+  - View Orientation
+  - Front
+  shortcut: Ctrl+1
+  source: Checked on screen, SOLIDWORKS 2026 SP4.1 (mug run, 31 Oct 2026)
+Normal To:
+  aliases: []
+  menu_path:
+  - View Orientation
+  - Normal To
+  shortcut: Ctrl+8
+  source: Checked on screen, SOLIDWORKS 2026 SP4.1 (mug run, 31 Oct 2026)
+Centerline:
+  aliases: []
+  menu_path:
+  - Sketch
+  - Line ▾
+  - Centerline
+  source: Checked on screen, SOLIDWORKS 2026 SP4.1 (mug run, 31 Oct 2026)
+Line:
+  aliases: []
+  menu_path:
+  - Sketch
+  - Line
+  shortcut: L
+  source: Checked on screen, SOLIDWORKS 2026 SP4.1 (mug run, 31 Oct 2026)
+Offset Entities:
+  aliases: []
+  menu_path:
+  - Sketch
+  - Offset Entities
+  source: Checked on screen, SOLIDWORKS 2026 SP4.1 (mug run, 31 Oct 2026)
+Centerpoint Straight Slot:
+  aliases: []
+  menu_path:
+  - Sketch
+  - Straight Slot ▾
+  - Centerpoint Straight Slot
+  source: Checked on screen, SOLIDWORKS 2026 SP4.1 (mug run, 31 Oct 2026)
+Revolved Boss/Base:
+  aliases: []
+  menu_path:
+  - Features
+  - Revolved Boss/Base
+  source: Checked on screen, SOLIDWORKS 2026 SP4.1 (mug run, 31 Oct 2026)
+Swept Boss/Base:
+  aliases: []
+  menu_path:
+  - Features
+  - Swept Boss/Base
+  source: Checked on screen, SOLIDWORKS 2026 SP4.1 (mug run, 31 Oct 2026)
+Fillet:
+  aliases: []
+  menu_path:
+  - Features
+  - Fillet
+  source: Checked on screen, SOLIDWORKS 2026 SP4.1 (mug run, 31 Oct 2026)
+Plane:
+  aliases: []
+  menu_path:
+  - Features
+  - Reference Geometry ▾
+  - Plane
+  source: Checked on screen, SOLIDWORKS 2026 SP4.1 (mug run, 31 Oct 2026)
+Hidden Lines Visible:
+  aliases: []
+  menu_path:
+  - Display Style
+  - Hidden Lines Visible
+  source: Checked on screen, SOLIDWORKS 2026 SP4.1 (mug run, 31 Oct 2026)
