@@ -135,6 +135,8 @@ class Player:
                     guide.card.detail = "Route: " + " › ".join(located["path"])
             if located.get("click_at"):
                 guide.extra["click_at"] = list(located["click_at"])
+            if located.get("shortcut"):
+                guide.extra["shortcut"] = located["shortcut"]
             if guide.card is not None and self.executor is not None and can_do(step, self._act_box(step.n, box)):
                 at = 1 if "show_me" in guide.card.actions else 0
                 guide.card.actions.insert(at, "do_it")

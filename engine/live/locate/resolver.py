@@ -153,7 +153,7 @@ class Resolver:
         r = menu.route(step, self.store)
         tab = menu.tab_route(step) if getattr(self.uia, "follows_hops", False) else None
         if tab:                     # it's on a closed ribbon tab: closer than any menu, which may be hidden anyway
-            r = {**(r or {}), "path": tab}
+            r = {**(r or {}), "path": tab, "by": "tab"}
         if r is not None and not r.get("path") and seen_route:   # a shortcut alone: the route is still worth showing
             r = {**seen_route, **r}
         elif r is None and self.wonder is None:
@@ -180,10 +180,27 @@ class Resolver:
         path = r.get("path") or []
         if len(path) < 2 or self.vision is None:
             return None
-        return self.vision.find(step, menu.hop_label(path[0]), route=path)
+        hop = menu.hop_label(path[0])
+        box = self.vision.find(step, hop, route=path)
+        spent = getattr(self.vision, "spent", None)
+        if (box is not None or r.get("by") or r.get("shortcut") or self.wonder is None or not self.wonder.wanted(step)
+                or not (spent is None or spent(step.n, hop))):
+            return box
+        # The stored route's first hop had its tries and isn't on this screen: Wonder may know where it went.
+        box, better = self.wonder.ask(step)
+        if box is None and better and better.get("path"):
+            self.last_extra["route"] = better
+            self.last_how = f"{self.wonder.last_how}; {menu.describe(better)}"
+        elif box is not None:
+            self.last_extra.pop("route", None)
+            self.last_how = self.wonder.last_how
+        if box is not None or better:
+            self.last_stage = "wonder"
+        return box
 
     def _locate_hops(self, step: Step) -> tuple[Optional[Box], Optional[Line]]:
-        path = self._new_route.get(step.n) or step.target.menu_path
+        reviewed = getattr(self.store, "reviewed_route", lambda label: None)(step.target.label)
+        path = self._new_route.get(step.n) or reviewed or step.target.menu_path
         before = self.hops._at.get(step.n, 0)
         i = self.hops.current(step.n, path)
         if i > before:                   # that chip was clicked and the route moved on: its box was right
@@ -192,7 +209,10 @@ class Resolver:
         label = menu.hop_label(path[i])
         box = self.uia.locate(step, label)[0]
         self.last_extra = {"path_done": i}
-        if step.n in self._new_route:
+        known = self.store.get(step.target.label) if self.store is not None else None
+        if known is not None and known.shortcut and not step.target.shortcut:
+            self.last_extra["shortcut"] = known.shortcut       # the card offers it: small icons are where a box can miss
+        if path != step.target.menu_path:
             self.last_extra["path"] = path
         why = self.uia.last_how
         stage = "uia"

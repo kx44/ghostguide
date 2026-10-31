@@ -14,6 +14,8 @@ says nothing.
 Two guards keep auto-advance honest:
 - trust: a rule that was already true the first time it was looked at (a Live Server tab left open from
   yesterday) proves nothing, so it counts only once it has been seen false in this run (`Ladder.seen_false`).
+  The same goes for one that came true before the step on screen showed: "a tree row with Plane in it" came true
+  with the document's Front Plane, long before anyone made a plane, so it can't vouch for that step (`Tracker.check`).
 - settle: a typing step counts as done only once you've stopped typing for a moment, so the card doesn't
   change under you mid-line (`Tracker`, from the input watcher).
 Never blocks anything: a wrong or early action just means the check doesn't say done yet; Next always works.
@@ -229,6 +231,8 @@ class Ladder:
         self.seen: set[int] = set()              # steps looked at at least once
         self.true_at_start: set[int] = set()     # …whose hint already held that first time
         self.seen_false: set[int] = set()        # …and have been seen false since
+        self.true_since: dict[int, float] = {}   # when each hint last came true
+        self.clock: Callable[[], float] = time.monotonic
 
     def rule(self, step: Step, snap: Snapshot) -> Verdict:
         """The rule check with the trust guard: a hint that held the first time it was looked at (the
@@ -241,6 +245,10 @@ class Ladder:
                 self.true_at_start.add(step.n)
         if v.result == "not_yet":
             self.seen_false.add(step.n)
+            if not v.lasting:                    # a tree row hidden by a tool's panel is still there: it keeps its date
+                self.true_since.pop(step.n, None)
+        elif v.done:
+            self.true_since.setdefault(step.n, self.clock())
         if v.done and step.n in self.true_at_start and step.n not in self.seen_false:
             return Verdict("unknown", "rule", lasting=v.lasting, untrusted=True,
                            why="can't tell: it was already true when the tutorial started")
@@ -303,6 +311,8 @@ class Tracker:
         self.diff_opts: dict = {}                 # capture.changed's width and share, for a picture of the whole app
         self.current_n: Optional[int] = None      # models only ever look at the step showing
         self.hidden = False                       # …and never while hidden (free checks only)
+        self.ladder.clock = clock
+        self.showing_since = clock()              # when the step on screen came up
 
     def snapshot(self, seed: Optional[list[dict]] = None) -> Snapshot:
         snap = Snapshot(self.app_window, self.dump, self.folder, t=self.clock())
@@ -328,6 +338,8 @@ class Tracker:
             v = self._wait(step, snap, w, now)
         else:
             v = self.ladder.rule(step, snap)
+            if v.done and self.ladder.true_since.get(step.n, now) < self.showing_since:
+                v = Verdict("unknown", "rule", untrusted=True, why="can't tell: it was already true before this step came up")
             if v.untrusted and self.acted is not None and self.acted(step.n, w.shown_at):
                 v = Verdict("done", "rule", lasting=v.lasting, why="holds, and you clicked the target during this step")
             if v.result == "unknown" and step.verify is None:
@@ -407,7 +419,12 @@ class Tracker:
         """Verdicts for the current step and the next LOOK_AHEAD (keeps the trust guard fresh)."""
         if not self.primed:
             self.prime(snap)
+        if session.current != self.current_n:
+            self.showing_since = self.clock()
         self.current_n, self.hidden = session.current, session.hidden
+        for step in self.tutorial.steps:          # every hint, every round: when each came true is what the guard needs
+            if step.verify is not None:
+                self.ladder.rule(step, snap)
         out = {}
         for n in range(session.current, min(session.of, session.current + LOOK_AHEAD) + 1):
             out[n] = self.check(session.tutorial.step(n), snap)

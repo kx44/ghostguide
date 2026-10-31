@@ -45,8 +45,9 @@ ARROW_DARK = 90
 BIG_BUTTON_H = 60
 ARROW_MIN_W, ARROW_MAX_W = 6, 14
 LOOK_SIDE = 16          # a control's remembered look: this many grey cells a side
-LOOK_DELTA = 14         # mean grey levels two looks may differ by and still be the same control (a hover shade,
-                        # not its neighbour on another ribbon tab: buttons there look alike at a glance)
+LOOK_DELTA = 6          # mean grey levels two looks may differ by, once an even shift is taken out, and still be the same
+                        # control. A hover shade shifts every cell alike. A neighbour on another ribbon tab doesn't: measured
+                        # on real pairs, the same control differs by 0 and a different one by 10 or more
 
 
 def look_of(img) -> list[int]:
@@ -102,7 +103,10 @@ def near_clicks(img, clicks: list[tuple[int, int]], origin: tuple[int, int], pad
 
 
 def same_look(a: list[int], b: list[int], delta: int = LOOK_DELTA) -> bool:
-    return len(a) == len(b) and sum(abs(x - y) for x, y in zip(a, b)) / max(1, len(a)) <= delta
+    if len(a) != len(b) or not a:
+        return False
+    shift = sum(x - y for x, y in zip(a, b)) / len(a)
+    return sum(abs(x - y - shift) for x, y in zip(a, b)) / len(a) <= delta
 
 
 def for_model(img, width: int = MODEL_W):

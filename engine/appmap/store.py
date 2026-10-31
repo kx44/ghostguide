@@ -96,6 +96,11 @@ class AppMapStore:
                 merged[k] = v
         return Control.model_validate(merged)
 
+    def reviewed_route(self, label: str) -> Optional[list[str]]:
+        """The built-in layer's route: someone clicked it on this version, so it beats what an old tutorial says."""
+        c = self.builtin.get(label)
+        return list(c.menu_path) if c is not None and c.menu_path else None
+
     def names(self, label: str) -> list[str]:
         """The label and its aliases, for the UIA stage."""
         c = self.get(label)

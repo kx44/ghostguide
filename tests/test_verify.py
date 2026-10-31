@@ -9,7 +9,7 @@ from engine.live.player import Player
 from engine.live.session import Session
 from engine.live.verify import (Ladder, Snapshot, Tracker, Verdict, lasting, rule_check, typed_lines_present)
 from engine.models.glimmer import parse_answer
-from engine.schema.tutorial import UiaCheck
+from engine.schema.tutorial import Step, UiaCheck
 
 ROOT = Path(__file__).resolve().parent.parent
 VS = parse_file(ROOT / "tutorials/youtube-clone-vscode.md")
@@ -336,3 +336,75 @@ def test_player_knows_when_you_clicked_a_drawn_target():
     assert p.acted_on(7, since=98.0) and not p.acted_on(7, since=99.5) and not p.acted_on(8, since=0)
     rec.add(InputEvent("down", 500, 500, 99.6, "left"))
     assert not p.acted_on(7, since=99.5)
+
+
+def _weak_hint_tutorial():
+    def s(n, title, check=None):
+        return Step(n=n, title=title, action="click", target={"label": title, "kind": "button"}, check="done", source={"t": "00:01"},
+                    verify={"uia": check} if check else None)
+    from engine.schema.tutorial import Tutorial, TutorialMeta
+    return Tutorial(meta=TutorialMeta(title="T", app="A", source={"type": "text"}), steps=[
+        s(1, "Open document", {"name": "Part1", "type": "TreeItem"}),
+        s(2, "Make the body", {"name": "Body", "type": "TreeItem"}),
+        s(3, "Something unreadable"),
+        s(4, "Make a plane", {"name_contains": "Plane", "type": "TreeItem"}),
+    ])
+
+
+def test_a_hint_true_before_the_step_came_up_cant_skip_work_or_vouch_for_it():
+    from engine.live.session import Session
+    tut = _weak_hint_tutorial()
+    now = [0.0]
+    els: list[dict] = []
+    tr = Tracker(tut, APP, None, lambda w: els, clock=lambda: now[0])
+    s = Session(tut)
+
+    def round_():
+        now[0] += 1
+        sn = Snapshot(APP, lambda w: els, None, t=now[0])
+        tr.verdicts(s, sn)
+        s.apply_done(s.scan(tr.checker(sn)))
+
+    els.append({"type": "Pane", "name": "app", "rect": [0, 0, 9, 9]})
+    round_()                                   # no document: every hint is false
+    assert s.current == 1
+    els += [{"type": "TreeItem", "name": "Part1", "rect": [0, 0, 9, 9]},
+            {"type": "TreeItem", "name": "Front Plane", "rect": [0, 0, 9, 9]}]     # the document brings its own Front Plane
+    round_()
+    assert s.current == 2
+    round_()
+    els.append({"type": "TreeItem", "name": "Body", "rect": [0, 0, 9, 9]})
+    hidden = [e for e in els if e["type"] == "TreeItem"]
+    for e in hidden:
+        els.remove(e)
+    round_()                                   # a tool's panel hides the tree, and its OK brings it back
+    els += hidden
+    round_()
+    assert s.current == 3                      # the Plane hint came true long ago: no jump to the end
+    assert tr.check(tut.step(4), Snapshot(APP, lambda w: els, None, t=now[0])).result == "unknown"
+    s.current = 4
+    round_()
+    assert s.current == 4                      # and it can't vouch for its own step either
+    els.append({"type": "TreeItem", "name": "Plane1", "rect": [0, 0, 9, 9]})
+    round_()
+    assert s.current == 4                      # still "Plane" all along: Next is the way on
+
+
+def test_a_step_done_early_during_the_step_before_it_still_counts():
+    from engine.live.session import Session
+    tut = _weak_hint_tutorial()
+    now = [0.0]
+    els = [{"type": "Pane", "name": "app", "rect": [0, 0, 9, 9]}]
+    tr = Tracker(tut, APP, None, lambda w: els, clock=lambda: now[0])
+    s = Session(tut)
+
+    def round_():
+        now[0] += 1
+        sn = Snapshot(APP, lambda w: els, None, t=now[0])
+        tr.verdicts(s, sn)
+        s.apply_done(s.scan(tr.checker(sn)))
+
+    round_()
+    els += [{"type": "TreeItem", "name": "Part1", "rect": [0, 0, 9, 9]}, {"type": "TreeItem", "name": "Body", "rect": [0, 0, 9, 9]}]
+    round_()
+    assert s.current == 3                      # both came true while step 1 was showing

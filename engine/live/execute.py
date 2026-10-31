@@ -63,6 +63,7 @@ def needs_confirm(step: Step, stage: str, box: Optional[Box] = None) -> bool:
 
 
 def plan(step: Step, box: Optional[Box]) -> list[Op]:
+    from engine.live.locate.uia import in_tree
     from engine.live.plan import click_type, line_start
 
     p = step.params
@@ -71,10 +72,12 @@ def plan(step: Step, box: Optional[Box]) -> list[Op]:
     if step.action == "menu_path":
         return [Op("keys", keys=tuple(k.strip() for k in step.target.shortcut.split("+")))]
     if step.action == "type":
+        rename = step.target.kind == "tree_item" or in_tree(step.target.where)
         ops = [Op("click", at=box.center)]
-        ops.append(Op("keys", keys=("F2",)) if step.target.kind == "tree_item" else Op("keys", keys=("Ctrl", "A")))
+        ops.append(Op("keys", keys=("F2",)) if rename else Op("keys", keys=("Ctrl", "A")))
         ops.append(Op("text", text=_value(step)))
-        then = p.get("then_key") or ("Tab" if step.target.kind == "field" else None)    # Tab commits a number without pressing OK
+        # Enter ends a rename; Tab commits a number without pressing OK
+        then = p.get("then_key") or ("Enter" if rename else "Tab" if step.target.kind == "field" else None)
         if then:
             ops.append(Op("keys", keys=(str(then),)))
         return ops

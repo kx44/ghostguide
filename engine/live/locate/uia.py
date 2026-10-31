@@ -33,6 +33,11 @@ KIND_TYPES = {
 NOT_UIA = {"canvas", "face", "edge"}       # drawn, not controls: vision's job
 
 
+def in_tree(where: Optional[str]) -> bool:
+    """A name typed "in the Feature Tree" is a rename of a row, however the tutorial calls it."""
+    return "tree" in (where or "").casefold()
+
+
 def norm(s: Optional[str]) -> str:
     s = " ".join((s or "").replace("…", "...").split()).casefold()
     prev = None

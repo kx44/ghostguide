@@ -119,6 +119,12 @@ def pm_field(els: list[dict], where: Optional[str]) -> Optional[dict]:
     return edits[0] if edits else None
 
 
+def newest_row(els: list[dict]) -> Optional[dict]:
+    """The lowest row of the FeatureManager: what was made last, which is what a tutorial renames."""
+    rows = [e for e in _panel(els) if e.get("type") == "TreeItem" and e.get("name")]
+    return max(rows, key=lambda e: e["rect"][1], default=None)
+
+
 def in_new_dialog(where: Optional[str]) -> bool:
     """"New SOLIDWORKS Document dialog", or as a tutorial says it, "the New document dialog"."""
     return bool(re.search(r"\bnew\b.*\b(document|dialog)\b", where or "", re.I))
@@ -137,6 +143,8 @@ class SolidWorksUIA(GenericUIA):
             el, how = None, ""
             if t.kind == "tree_item":
                 el, how = tree_item(els, t.label), "tree row"
+            elif t.kind == "field" and uia.in_tree(t.where):
+                el, how = newest_row(els), "the newest row in the tree"
             elif t.kind == "field":
                 el, how = pm_field(els, t.where), "PropertyManager field"
             elif OK_LABEL.match(t.label):

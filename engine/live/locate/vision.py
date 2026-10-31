@@ -26,7 +26,7 @@ from engine.schema.messages import Box, Line
 from engine.schema.tutorial import Step
 
 # Spark's reasoning counts toward max_tokens, so leave room beyond the tool call.
-MAX_TOKENS = 1024
+MAX_TOKENS = 2048
 EFFORT = config.env("FINDER_EFFORT", "low")
 MAX_CALLS = 3            # per target, per run of a step
 MIN_GAP_S = 3.0          # between calls for one target
@@ -94,12 +94,12 @@ def region_for(step: Step) -> str:
         return "window"
     if "propertymanager" in w:
         return "panel"
-    if "confirmation corner" in w:
-        return "corner"
-    if "heads-up" in w:
-        return "headsup"
-    if "commandmanager" in w or "top toolbar" in w:
-        return "ribbon"
+    if "confirmation corner" in w or ("corner" in w and re.search(r"\b(upper|top)[ -](right|hand)", w)) or "upper right" in w:
+        return "corner"                     # also how a tutorial says it: "upper right-hand corner of workspace"
+    if "heads-up" in w or re.search(r"\b(above the (working|graphics) area|top of (the )?(workspace|graphics))", w):
+        return "headsup"                    # "icons above the working area", "icon at top of workspace"
+    if "commandmanager" in w or "toolbar" in w:
+        return "ribbon"                     # "top toolbar", and as tutorials often say it, "Sketch toolbar"
     return "window"
 
 

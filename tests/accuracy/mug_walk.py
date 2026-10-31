@@ -176,8 +176,10 @@ class Walk:
             d.click(*box_center(b), count=1 if routed else count, button=button, settle=0.8)
             if not routed:
                 return {"clicked": b}
-            self.wait(lambda: self.g(n) is None or not self.g(n)["extra"].get("route"), 14)
+            self.wait(lambda: self.g(n) is None or not self.g(n)["extra"].get("route"), 45)
             time.sleep(1.5)
+        if self.e.current != n:                # it moved on by itself while waiting: nothing to do
+            return {"clicked": None, "note": "already done"}
         g = self.g(n)
         short = g and ((g["extra"].get("route") or {}).get("shortcut") or g["extra"].get("shortcut"))
         if short and self.e.current == n:      # the card offers it too: what a person would do

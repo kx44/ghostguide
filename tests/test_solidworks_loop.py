@@ -1,6 +1,7 @@
 """The SolidWorks loop, the pure parts: vision memory and regions, route hops, Wonder, Do it for me, the start check, the model gate."""
 from types import SimpleNamespace
 
+import pytest
 from PIL import Image
 
 from engine.basefile.parse import parse_file
@@ -190,6 +191,144 @@ def test_a_route_the_screen_doesnt_have_goes_to_wonder_and_its_route_replaces_it
     assert r.last_stage == "wonder" and r.last_extra["path"][0] == "Features" and c.n == 1
     r.locate(step)
     assert c.n == 1 and r.last_extra["path"][0] == "Features"   # now following Wonder's route
+
+
+class RouteStore:
+    """An app map holding one stored route, as enrich leaves it."""
+
+    def __init__(self, path, shortcut=None):
+        from types import SimpleNamespace
+        self.c = SimpleNamespace(menu_path=path, shortcut=shortcut, seen=None)
+
+    def get(self, label): return self.c
+    def names(self, label): return [label]
+
+
+def _exit_sketch(where="somewhere"):
+    import copy
+    step = copy.deepcopy(MUG.step(16))
+    step.target.where = where
+    return step
+
+
+def test_a_stored_route_whose_first_hop_is_gone_goes_to_wonder_once():
+    c = FakeClient(MenuPath(path=["Sketch", "Exit Sketch"], confidence="high"))
+    w = Wonder("SOLIDWORKS", client=c, grab=lambda: (blank(), (0, 0), 1.0))
+    r = Resolver(Stage(), RouteStore(["Insert", "Exit Sketch"]), vision=VisionStub(), wonder=w)
+    r.locate(_exit_sketch())
+    assert c.n == 1 and r.last_stage == "wonder" and r.last_extra["route"]["path"] == ["Sketch", "Exit Sketch"]
+    r.locate(_exit_sketch())
+    assert c.n == 1
+
+
+def test_wonder_can_point_at_what_a_dead_route_hid():
+    from engine.models.tools import PointAt
+    c = FakeClient(PointAt(x=100, y=50, w=20, h=20, confidence="high"))
+    w = Wonder("SOLIDWORKS", client=c, grab=lambda: (blank(), (0, 0), 1.0))
+    r = Resolver(Stage(), RouteStore(["Insert", "Exit Sketch"]), vision=VisionStub(), wonder=w)
+    box, _ = r.locate(_exit_sketch())
+    assert box is not None and r.last_stage == "wonder" and "route" not in r.last_extra
+
+
+def test_a_stored_route_stays_when_its_first_hop_shows_or_it_has_a_shortcut():
+    from engine.schema.messages import Box
+    c = FakeClient(MenuPath(path=["Nope", "Nope"], confidence="high"))
+    w = Wonder("SOLIDWORKS", client=c, grab=lambda: (blank(), (0, 0), 1.0))
+
+    class SeesHop(VisionStub):
+        def find(self, step, label=None, route=None, hop=0, near=None):
+            return Box(x=1, y=1, w=9, h=9) if label == "Insert" else None
+
+    r = Resolver(Stage(), RouteStore(["Insert", "Exit Sketch"]), vision=SeesHop(), wonder=w)
+    assert r.locate(_exit_sketch())[0] is not None and r.last_stage == "route"
+    r = Resolver(Stage(), RouteStore(["Insert", "Exit Sketch"], shortcut="Ctrl+E"), vision=VisionStub(), wonder=w)
+    r.locate(_exit_sketch())
+    assert r.last_stage == "route" and c.n == 0
+
+
+def test_a_tries_left_first_hop_doesnt_call_wonder_yet():
+    c = FakeClient(MenuPath(path=["Nope", "Nope"], confidence="high"))
+    w = Wonder("SOLIDWORKS", client=c, grab=lambda: (blank(), (0, 0), 1.0))
+
+    class Trying(VisionStub):
+        def spent(self, n, label): return False
+
+    r = Resolver(Stage(), RouteStore(["Insert", "Exit Sketch"]), vision=Trying(), wonder=w)
+    r.locate(_exit_sketch())
+    assert c.n == 0 and r.last_stage == "route"
+
+
+@pytest.mark.parametrize("where,region", [
+    ("upper right-hand corner of workspace", "corner"), ("upper right-hand area of workspace", "corner"),
+    ("top-right corner", "corner"), ("Sketch toolbar", "ribbon"), ("Features toolbar", "ribbon"),
+    ("Standard toolbar at top of window", "ribbon"), ("icons above the working area", "headsup"),
+    ("View Orientation icon at top of workspace", "headsup"), ("Heads-up View toolbar", "headsup"), ("somewhere", "window"),
+])
+def test_regions_follow_a_tutorials_own_words(where, region):
+    assert region_for(_exit_sketch(where)) == region
+
+
+def test_a_reviewed_route_beats_the_one_a_tutorial_gives():
+    import copy
+
+    class Store(RouteStore):
+        def reviewed_route(self, label): return ["Sketch", "Line ▾", "Centerline"]
+
+    step = copy.deepcopy(MUG.step(29))
+    step.target.label, step.target.menu_path = "Centerline", ["Line", "Centerline"]
+    seen = []
+
+    class Sees(VisionStub):
+        def find(self, step, label=None, route=None, hop=0, near=None):
+            seen.append(label)
+
+    r = Resolver(Stage(), Store(None), vision=Sees())
+    r.locate(step)
+    assert seen == ["Sketch"] and r.last_extra["path"] == ["Sketch", "Line ▾", "Centerline"]
+
+
+def test_a_look_tells_neighbours_apart_but_forgives_a_hover_shade():
+    from engine.live.capture import same_look
+    icon = [247] * 200 + [120] * 56
+    assert same_look(icon, icon)
+    assert same_look(icon, [v - 18 for v in icon])                  # a hover shades everything alike
+    other = [247] * 150 + [120] * 56 + [247] * 50                   # a different icon in the same spot
+    assert not same_look(icon, other)
+    assert not same_look(icon, icon[:-1])
+
+
+def test_a_route_offers_the_app_maps_shortcut():
+    import copy
+    from types import SimpleNamespace
+
+    class Store(RouteStore):
+        def reviewed_route(self, label): return ["View Orientation", "Normal To"]
+
+    store = Store(["View Orientation", "Normal To"], shortcut="Ctrl+8")
+    step = copy.deepcopy(MUG.step(29))
+    step.target.label, step.target.menu_path = "Normal To", ["View Orientation", "Normal To"]
+    r = Resolver(Stage(), store, vision=VisionStub())
+    r.locate(step)
+    assert r.last_extra["shortcut"] == "Ctrl+8"
+
+
+def test_a_name_typed_in_the_tree_is_a_rename_of_the_newest_row():
+    import copy
+    from engine.live.locate.solidworks import SolidWorksUIA
+    from engine.schema.messages import Box
+    from engine.schema.tutorial import Step
+    step = Step(n=33, title="Rename plane", action="type", target={"label": "plane name", "kind": "field", "where": "Feature Tree"},
+                params={"value": "MugEdge"}, check="named", source={"t": "00:01"})
+    els = [{"type": "TreeItem", "name": "Front Plane", "rect": [5, 100, 90, 30]},
+           {"type": "TreeItem", "name": "Plane1", "rect": [5, 300, 90, 30]},
+           {"type": "TreeItem", "name": "Way over there", "rect": [900, 500, 90, 30]}]
+    box, _ = SolidWorksUIA("SOLIDWORKS", dump=lambda w: els).locate(step)
+    assert (box.x, box.y) == (5, 300)
+    ops = execute.plan(step, Box(x=5, y=300, w=90, h=30))
+    assert [o.keys if o.kind == "keys" else o.text if o.kind == "text" else o.kind for o in ops] == ["click", ("F2",), "MugEdge", ("Enter",)]
+    number = copy.deepcopy(step)
+    number.target.where = "Fillet PropertyManager"
+    assert [o.keys for o in execute.plan(number, Box(x=5, y=300, w=90, h=30)) if o.kind == "keys"] == [("Ctrl", "A"), ("Tab",)]
 
 
 # ---------- SolidWorks UIA ----------
