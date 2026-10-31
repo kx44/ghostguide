@@ -258,7 +258,9 @@ async def serve(player: Optional[Player], port: int = DEFAULT_PORT, record: Opti
         if p is not player:
             return
         async with busy:
-            out = p.apply_checked(checked)
+            # In a thread, like every other player call: drawing a step can measure its colours, which clears the overlay
+            # through this very loop, so on the loop itself that waits two seconds for nothing and then fails.
+            out = await asyncio.to_thread(p.apply_checked, checked)
         v = p.tracker.cache.get(checked[0]) if checked else None
         said = (checked[0], v.result, v.why) if v else None
         if said != last_check:

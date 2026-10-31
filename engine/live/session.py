@@ -209,8 +209,12 @@ class Session:
         statuses = data.get("statuses", [])
         if len(statuses) != self.of or any(s not in ("pending", "done", "skipped") for s in statuses):
             return False
+        try:
+            current = int(data.get("current", 1))
+        except (TypeError, ValueError):
+            return False
         self.statuses = list(statuses)
-        self.current = max(1, min(int(data.get("current", 1)), self.of + 1))
+        self.current = max(1, min(current, self.of + 1))
         return True
 
 

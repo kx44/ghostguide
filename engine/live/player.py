@@ -72,6 +72,7 @@ class Player:
         self.before_capture = before_capture     # the server clears the overlay before a ring grab
         self.scheme = scheme_override or "dark"
         self._scheme_cache: dict[tuple, str] = {}
+        self._scheme_measured = False            # a box has been measured this run, so the colours match the app
         self.last_guide: Optional[m.Guide] = None
 
     # ---------- what's on screen now ----------
@@ -91,10 +92,15 @@ class Player:
         key = ("step", n) if self.locator is not None and n is not None else (box.x, box.y, box.w, box.h) if box else None
         if key in self._scheme_cache:
             return self._scheme_cache[key]
+        if box is None and self.locator is not None:
+            # Nothing to measure yet. Remembering this answer would keep the step in the Windows theme's colours after its
+            # target turned up, so the card keeps the colours it has, and the box, once found, decides.
+            return self.scheme if self._scheme_measured else self._scheme_fn(None)[0]
         if box is not None and self.before_capture:
             self.before_capture()
         scheme, _ = self._scheme_fn(box)
         self._scheme_cache[key] = scheme
+        self._scheme_measured = True
         return scheme
 
     def current(self) -> list[m._Msg]:

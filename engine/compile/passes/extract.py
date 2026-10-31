@@ -76,6 +76,8 @@ def extract_segment(client, model: str, ev: Evidence, seg: Segment) -> dict:
             got = read_json(reply.text)
         except ValueError:
             got = {}
+        if not isinstance(got, dict):     # a bare list, or nothing like the schema: the same as unreadable
+            got = {}
         real = [a for a in got.get("actions") or [] if a.get("action") != "type" or a.get("value") or "suggested" in a.get("note", "")]
         if len(real) > THIN_ACTIONS or seg.images < THIN_IMAGES:
             break

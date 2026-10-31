@@ -190,6 +190,7 @@ Transport = Callable[[dict], dict]   # request body → response JSON (raises Mo
 
 class ModelClient:
     _lock = threading.Lock()   # guards the spend total + reservations across threads (parallel compile)
+    _in_flight: dict[str, float] = {}   # by cost log: vision makes a client per call, and each must see the others' reservations
 
     def __init__(self, mode: Optional[str] = None, budget_usd: Optional[float] = None,
                  cassette_dir: Optional[Path] = None, cost_log: Optional[Path] = None,
@@ -202,7 +203,6 @@ class ModelClient:
         self.cost_log = Path(cost_log or config.COST_LOG)
         self._transport = transport
         self._transcribe_transport = transcribe_transport
-        self._reserved = 0.0
 
     # ---- spend -------------------------------------------------------------------------------
     def spent_usd(self) -> float:
@@ -222,17 +222,19 @@ class ModelClient:
     def _reserve(self, estimate: float) -> None:
         with self._lock:
             spent = self.spent_usd()
-            if spent + self._reserved + estimate > self.budget_usd:
+            reserved = self._in_flight.get(str(self.cost_log), 0.0)
+            if spent + reserved + estimate > self.budget_usd:
                 raise BudgetExceeded(
                     f"call refused: worst case ${estimate:.4f} + spent ${spent:.4f}"
-                    f"{f' + in flight ${self._reserved:.4f}' if self._reserved else ''}"
+                    f"{f' + in flight ${reserved:.4f}' if reserved else ''}"
                     f" would pass the ${self.budget_usd:.2f} budget (BUDGET_USD). "
                     "Use MODEL_MODE=replay, lower max_tokens, or raise the cap on purpose.")
-            self._reserved += estimate
+            self._in_flight[str(self.cost_log)] = reserved + estimate
 
     def _release(self, estimate: float) -> None:
         with self._lock:
-            self._reserved = max(0.0, self._reserved - estimate)
+            key = str(self.cost_log)
+            self._in_flight[key] = max(0.0, self._in_flight.get(key, 0.0) - estimate)
 
     # ---- calls -------------------------------------------------------------------------------
     def chat(self, model: str, messages: list[dict], *, max_tokens: int, tools: Optional[list[dict]] = None,

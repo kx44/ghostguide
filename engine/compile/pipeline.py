@@ -122,7 +122,7 @@ def read_source(src: str, opts: Options, client: ModelClient, note: Callable[[st
         if suffix not in VIDEO_FILES:
             raise SourceError(f"Can't read {suffix or 'that kind of'} files yet: use a link, a video, a saved web page or text.")
 
-    who = src if is_url else path.name
+    who = src if is_url else f"{path.name}|{path.stat().st_size}"
     key = hashlib.sha256(f"{who}|{opts.start}|{opts.end}|{opts.max_frames}|{opts.narration}".encode()).hexdigest()[:16]
     folder = CACHE / "evidence" / key
     ev = None if opts.fresh else _load_evidence(folder)

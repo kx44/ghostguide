@@ -40,8 +40,11 @@ def seconds(t: Optional[str]) -> Optional[float]:
     if t in (None, ""):
         return None
     out = 0.0
-    for p in str(t).split(":"):
-        out = out * 60 + float(p)
+    try:
+        for p in str(t).split(":"):
+            out = out * 60 + float(p)
+    except ValueError:      # typed by hand in the import window
+        raise SourceError(f"{t!r} isn't a time. Use mm:ss, like 01:28.") from None
     return out
 
 
@@ -246,7 +249,8 @@ def from_video(video: Path, *, client, url: Optional[str] = None, offset: float 
     pub = d.get("upload_date")
     first = offset
     last = end if end is not None else offset + (d.get("duration") or (times[-1] if times else 0))
-    key = hashlib.sha256(f"{url or video.name}|{offset}|{end}".encode()).hexdigest()[:16]
+    # A file is known by its name and size too: two videos both called lesson.mp4 aren't the same tutorial.
+    key = hashlib.sha256(f"{url or f'{video.name}|{video.stat().st_size}'}|{offset}|{end}".encode()).hexdigest()[:16]
     notes = [] if turns else ["no narration found: frames only"]
     return Evidence(type="video", hash=key, items=items, url=url, title=d.get("title"), author=d.get("uploader"),
                     published=f"{pub[:4]}-{pub[4:6]}-{pub[6:]}" if pub else None,

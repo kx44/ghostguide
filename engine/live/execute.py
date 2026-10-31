@@ -64,6 +64,8 @@ def _step_keys(step: Step) -> Optional[list]:
 def unsafe(step: Step) -> Optional[str]:
     """Why a tutorial file's instruction won't be carried out for you, or None. The file is someone else's text."""
     keys = _step_keys(step)
+    if keys is not None and not isinstance(keys, list):
+        return "its keys aren't a list"       # `keys: Esc` read letter by letter would be a chord of E, S and C
     if keys and _key_set(keys) in NEVER_KEYS:
         return "it would switch away from the app"
     if step.action == "type":
@@ -180,13 +182,13 @@ class Executor:
         """Sends the input. → why it refused, or None once it's done."""
         if sys.platform != "win32":
             return "Do it for me needs Windows."
-        why = self.refuse(ops)
-        if why:
-            return why
         import ctypes
         u32 = ctypes.windll.user32
-        back = _cursor()
+        back = _cursor()         # before `refuse`, which moves it to test the spot: it must come back where you left it
         try:
+            why = self.refuse(ops)
+            if why:
+                return why
             for op in ops:
                 why = self.refuse([op])          # the app can open a dialog or lose focus between two inputs
                 if why:
