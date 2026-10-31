@@ -190,4 +190,14 @@ svg.L { position:absolute; left:0; top:0; width:100%; height:100%; overflow:visi
 .rail .row.done .st { color:var(--card-ok); }
 .rail .row.skipped .st { color:var(--warn); }
 .rail .row.skipped .t { text-decoration:line-through; text-decoration-color:var(--card-mute); }
+/* the shortcut bar: sits over the app, so it's quiet and only its × takes a click */
+.keybar { position:absolute; left:16px; bottom:60px; display:flex; gap:9px; align-items:center; padding:4px 6px 4px 10px; border-radius:10px;
+          background:var(--card-bg); color:var(--card-fg); opacity:.88; font-size:11.5px; white-space:nowrap; z-index:6; animation:fin .25s; }
+.keybar .mods { color:var(--card-mute); }
+.keybar .k { display:inline-flex; gap:4px; align-items:center; }
+.keybar .k.taken { color:var(--card-mute); text-decoration:line-through; }
+.keybar .x { font:inherit; font-size:14px; line-height:1; width:22px; height:22px; padding:0; border:0; border-radius:6px; background:transparent; color:var(--card-mute); cursor:pointer; }
+.keybar .x:hover { color:var(--card-fg); background:rgba(127,127,127,.25); }
+.card .meta .src { font:inherit; margin-left:auto; padding:0 4px; border:0; border-radius:4px; background:transparent; color:var(--card-acc); cursor:pointer; white-space:nowrap; }
+.card .meta .src:hover { text-decoration:underline; }
 .offline { position:absolute; right:16px; bottom:60px; padding:6px 10px; border-radius:10px; background:var(--card-bg); color:var(--card-mute); font-size:12px; z-index:7; }

@@ -477,6 +477,11 @@ def main(argv=None) -> int:
                 time.sleep(0.6)
 
         # ---- buttons ----
+        for _ in range(6):                                # closing that tab moves the tree, so the card moves too: let it settle
+            k = rec.mark()
+            time.sleep(5.0)
+            if not any(m["type"] == "guide" for m in rec.since(k)):
+                break
         k = rec.mark()
         press(lambda: card_next(ov_elements()))
         ok_next = wait_step(rec, 2, k)
@@ -637,7 +642,7 @@ def main(argv=None) -> int:
                     act_live(sj, bj, win, title, loc, rj)
                     time.sleep(0.8)
                     rows.append(rj)
-                time.sleep(3.0)                           # the engine keeps checking while hidden (1 s ticks)
+                time.sleep(6.0)                           # the engine keeps checking while hidden, and one check can take 3 s
                 k = rec.mark()
                 hotkey("h")
                 landed = rec.wait(lambda m: m["type"] == "state" and not m["hidden"], 5, k)

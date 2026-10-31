@@ -10,6 +10,7 @@
     "start": "node build.mjs && electron .",
     "replay": "node build.mjs && electron . --replay test/fixtures/youtube-clone-vscode.jsonl",
     "smoke": "node build.mjs && node test/smoke.mjs",
+    "unit": "node test/unit.mjs",
     "dist": "node build.mjs && electron-builder --win portable"
   },
   "devDependencies": {

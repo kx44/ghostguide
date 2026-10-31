@@ -472,6 +472,7 @@ def _pipeline(tmp_path, monkeypatch, fake, mode="record"):
     from engine.compile import pipeline as pl
     monkeypatch.setattr(pl, "CACHE", tmp_path / "compiled")
     monkeypatch.setattr(pl, "SCORES", tmp_path / "scores.jsonl")
+    monkeypatch.setattr(pl.source_view, "STORE", tmp_path / "sources")
     monkeypatch.setenv("GG_LOCAL_APPMAPS", str(tmp_path / "maps"))
     source = tmp_path / "t.txt"
     source.write_text("# Start\nOpen the app and click New.\n", encoding="utf-8")

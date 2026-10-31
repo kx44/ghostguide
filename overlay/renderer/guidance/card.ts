@@ -31,7 +31,8 @@ export function mountCard(ctx: Ctx, g: GuideMsg, c: Card, m: Mounted, onAction: 
     return `<button data-a="${esc(a)}" class="${a === "next" && c.actions.length > 1 ? "link" : a === "next" ? "pri" : ""}">${esc(label)}</button>`;
   }).join("");
   const meta = `<div class="meta" title="Drag to move · double-click to put it back"><span>${esc(c.meta)}</span>` +
-    `${c.low_confidence ? `<span class="unsure" title="This step was inferred or unclear in the source">unsure</span>` : ""}</div>`;
+    `${c.low_confidence ? `<span class="unsure" title="This step was inferred or unclear in the source">unsure</span>` : ""}` +
+    `${c.source ? `<button class="src" data-a="source" title="This step in the original tutorial (Ctrl+Alt+O)">${esc(c.source)}</button>` : ""}</div>`;
   const html = c.compact
     // Repeat step: the light guide stays light, but the instruction never disappears.
     ? meta + `<b>${esc(c.title)}</b>` + (c.up_next ? `<div class="upnext">Up next: ${esc(c.up_next)}</div>` : "") +

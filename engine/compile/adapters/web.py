@@ -166,12 +166,12 @@ def looks_blocked(status: int, html: str) -> bool:
     return any(c in head for c in CHALLENGE)
 
 
-def fetch_page(url: str) -> str:
+def fetch_page(url: str, timeout: float = 30) -> str:
     import httpx
 
     host = urlparse(url).netloc
     try:
-        r = httpx.get(url, headers={"User-Agent": USER_AGENT}, follow_redirects=True, timeout=30)
+        r = httpx.get(url, headers={"User-Agent": USER_AGENT}, follow_redirects=True, timeout=timeout)
     except httpx.HTTPError as e:
         raise SourceError(f"Couldn't reach {host} ({e.__class__.__name__}). Check the link, or save the page "
                           "from your browser and drop the file here.") from e

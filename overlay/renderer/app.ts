@@ -18,6 +18,7 @@ import { mountSignalCard } from "./guidance/signalCard";
 import { mountTaskbar } from "./guidance/taskbar";
 import { toast } from "./guidance/toast";
 import { ControlBar } from "./shell/controlBar";
+import { HotkeyBar } from "./shell/hotkeyBar";
 import { StartCheck } from "./shell/startCheck";
 import { StepRail } from "./shell/stepRail";
 
@@ -57,7 +58,9 @@ const cursor = ghostCursor(fx);
 const bar = new ControlBar(shell, send);
 const rail = new StepRail(shell, send);
 const startCheck = new StartCheck(shell, send);
+const keyBar = new HotkeyBar(shell, show => bridge.setKeyBar(show));
 bar.onToggleRail = () => { rail.open = !rail.open; if (lastState) { bar.render(lastState, rail.open); rail.render(lastState); } };
+bar.onSource = () => bridge.toggleSource();
 
 function ctx(): Ctx { return { ov, svg: geo, W: window.innerWidth, H: window.innerHeight }; }
 const bottomReserve = () => (isPrimary ? 110 : 60);
@@ -85,6 +88,7 @@ function drawGuide(g: GuideMsg, local: Local) {
 
 function onCardAction(a: string, btn: HTMLElement) {
   if (a === "skip_wait") return send({ type: "next" });
+  if (a === "source") return bridge.toggleSource();
   if (a === "show_me") { btn.classList.add("pri"); setTimeout(() => btn.classList.remove("pri"), 1600); }
   send({ type: a } as FromOverlay);
 }
@@ -123,7 +127,7 @@ function onMessage(r: Routed) {
     case "state":
       lastState = m;
       if (!lastGuide) root.dataset.scheme = m.scheme;
-      if (r.primary) { bar.render(m, rail.open); rail.render(m); }
+      if (r.primary) { bar.render(m, rail.open); rail.render(m); keyBar.setState(m); }
       break;
     default:
       break;     // compile_progress, compile_done: main sends those to the import window
@@ -147,4 +151,5 @@ window.addEventListener("ghost:hits", reportHits);   // right away, e.g. when a 
 
 window.addEventListener("resize", () => { if (lastGuide && !pending) drawGuide(lastGuide.g, lastGuide.local); });
 
+bridge.onShell(s => keyBar.setInfo(s));
 bridge.on(onMessage);

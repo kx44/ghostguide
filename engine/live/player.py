@@ -13,6 +13,7 @@ from typing import Callable, Optional, Protocol
 
 from pydantic import ValidationError
 
+from engine.live import source as source_view
 from engine.live.execute import can_do, needs_confirm, plan as plan_ops, say_done
 from engine.live.locate.pinned import Pin, Pins
 from engine.live.plan import Planner
@@ -62,6 +63,7 @@ class Player:
         self.pins_path = pins_path               # where Ctrl+Alt+P pins are saved; None = keep in memory
         self._corner: Optional[tuple[int, int]] = None   # first Ctrl+Alt+P of a pair
         self.planner = Planner(session.tutorial)
+        self.sources = source_view.Sources(session.tutorial)
         self.pins = pins or Pins()
         self.displays: list[m.Display] = []
         self.scheme_override = scheme_override
@@ -140,6 +142,8 @@ class Player:
             if guide.card is not None and self.executor is not None and can_do(step, self._act_box(step.n, box)):
                 at = 1 if "show_me" in guide.card.actions else 0
                 guide.card.actions.insert(at, "do_it")
+            if guide.card is not None:
+                guide.card.source = source_view.label(s.tutorial, step)
             if guide.card is not None and box is None and step.action not in NO_PIN_NEEDED and not located.get("route"):
                 first = "start point" if step.action in LINE_ACTIONS else "top-left corner"
                 second = "end point" if step.action in LINE_ACTIONS else "bottom-right corner"
@@ -358,6 +362,8 @@ class Player:
             return self.current() + [m.Toast(text=f"Pin removed from step {s.step.n}.", kind="warn")]
         if t == "do_it":
             return self._do_it()
+        if t in ("source", "source_file"):
+            return self._source(msg)
         if t == "start_ok":
             self.start_open = False
             return self.current()
@@ -389,6 +395,19 @@ class Player:
             s.checker = None
             return self._after(ev)
         return []
+
+    def _source(self, msg) -> list[m._Msg]:
+        """The current step's source; the last step's once the tutorial has finished."""
+        s = self.session
+        step = s.step or s.tutorial.steps[-1]
+        if msg.type == "source_file":
+            return [self.sources.choose(msg.path, step, s.of)]
+        return [self.sources.view(step, s.of, msg.follow)]
+
+    def source_fetched(self) -> list[m._Msg]:
+        """After the server's try at the page: the words, or why not. A step moved on meanwhile opens its own section."""
+        s = self.session
+        return [self.sources.view(s.step or s.tutorial.steps[-1], s.of, follow=True)]
 
     def _pin(self, at: tuple[int, int]) -> list[m._Msg]:
         s = self.session

@@ -96,6 +96,7 @@ class Card(BaseModel):
     dev_hint: Optional[str] = None    # dev pins: "not pinned yet, Ctrl+Alt+P…"
     compact: bool = False             # repeat steps: title + Next only, so the instruction never vanishes
     up_next: Optional[str] = None     # the next step's title, shown on compact cards
+    source: Optional[str] = None      # the source button's words: "▶ 01:40" for a clip, "Source" for text
 
 
 # ---------------- engine → overlay ----------------
@@ -188,7 +189,38 @@ class CompileDone(_Msg):         # shell/importScreen.ts
     blocked: bool = False               # the site refuses automatic reading: offer a saved file
 
 
-ToOverlay = Union[Guide, Clear, State, Toast, ShowMe, Mark, StartCheck, CompileProgress, CompileDone]
+class SourceBlock(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["heading", "text", "image"]
+    text: str = ""
+    anchor: Optional[str] = None
+    image: Optional[str] = None         # file:// address of a picture kept on this PC
+
+
+class SourceView(_Msg):          # shell/sourceView.ts
+    """Where this step came from: a clip to play, text to read, or why neither is here."""
+    type: Literal["source_view"] = "source_view"
+    kind: Literal["video", "text", "none", "loading"]
+    n: int
+    of: int
+    title: str
+    tutorial: str
+    follow: bool = False                # the step moved on while the window is open: no window of its own, no autoplay
+    where: Optional[str] = None         # "01:39–01:44", or the section's heading
+    video: Optional[str] = None         # file:// address
+    start: Optional[float] = None       # seconds in that file
+    end: Optional[float] = None
+    doc: Optional[str] = None           # which text this is, so the window keeps it when only the section changes
+    blocks: Optional[list[SourceBlock]] = None
+    anchor: Optional[str] = None        # the section, among the blocks' anchors
+    note: Optional[str] = None
+    message: Optional[str] = None       # why the source isn't here
+    link: Optional[str] = None          # http(s) only
+    link_label: Optional[str] = None
+    choose: Optional[Literal["video", "page"]] = None    # offer to pick a copy on this PC
+
+
+ToOverlay = Union[Guide, Clear, State, Toast, ShowMe, Mark, StartCheck, CompileProgress, CompileDone, SourceView]
 
 # ---------------- overlay → engine ----------------
 
@@ -266,11 +298,25 @@ class OpenTutorial(_Msg):
     path: str
 
 
-FromOverlay = Union[Hello, ShowMeReq, DoIt, Next, Back, Skip, Hide, Resume, Jump, PinReq, Unpin, Import, OpenTutorial, StartOk]
+class SourceReq(_Msg):
+    """Open the current step's source. `follow`: the window is open and the step moved on."""
+    type: Literal["source"] = "source"
+    follow: bool = False
 
-TO_OVERLAY_TYPES = ("guide", "clear", "state", "toast", "show_me", "mark", "start_check", "compile_progress", "compile_done")
+
+class SourceFile(_Msg):
+    """A copy of the source the person picked on this PC."""
+    type: Literal["source_file"] = "source_file"
+    path: str
+
+
+FromOverlay = Union[Hello, ShowMeReq, DoIt, Next, Back, Skip, Hide, Resume, Jump, PinReq, Unpin, Import, OpenTutorial, StartOk,
+                    SourceReq, SourceFile]
+
+TO_OVERLAY_TYPES = ("guide", "clear", "state", "toast", "show_me", "mark", "start_check", "compile_progress", "compile_done",
+                    "source_view")
 FROM_OVERLAY_TYPES = ("hello", "show_me", "do_it", "next", "back", "skip", "hide", "resume", "jump", "pin", "unpin", "import",
-                      "open_tutorial", "start_ok")
+                      "open_tutorial", "start_ok", "source", "source_file")
 
 
 def parse_from_overlay(raw: Union[str, bytes, dict]) -> FromOverlay:

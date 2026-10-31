@@ -102,12 +102,12 @@ def dump(window: str, max_depth: int = 60, max_elements: int = 6000, tries: int 
 def _dump(window: str, max_depth: int, max_elements: int, every: bool) -> list[dict]:
     import uiautomation as auto
 
-    from engine.live.windows import foreign_browser
+    from engine.live.windows import foreign_browser, ours
 
     out: list[dict] = []
     for top in auto.GetRootControl().GetChildren():
         title = top.Name or ""
-        if window.casefold() not in title.casefold() or foreign_browser(title, window):
+        if window.casefold() not in title.casefold() or foreign_browser(title, window) or ours(title, window):
             continue
         for ctrl, _ in auto.WalkControl(top, includeTop=True, maxDepth=max_depth):
             if len(out) >= max_elements:

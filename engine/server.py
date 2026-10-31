@@ -154,6 +154,13 @@ async def serve(player: Optional[Player], port: int = DEFAULT_PORT, record: Opti
 
     last_displays: list = []
 
+    async def fetch_source(p: Player) -> None:
+        """A page the source view doesn't hold: slow, so the buttons keep working meanwhile."""
+        url, p.sources.to_fetch = p.sources.to_fetch, None
+        await asyncio.to_thread(p.sources.fetch, url)
+        if p is player:
+            await send_all(p.source_fetched())
+
     async def handler(ws):
         clients.add(ws)
         log(f"overlay connected ({len(clients)} client{'s' if len(clients) > 1 else ''})")
@@ -180,6 +187,10 @@ async def serve(player: Optional[Player], port: int = DEFAULT_PORT, record: Opti
                 where = "finished" if s.finished else f"step {s.current}/{s.of}" + (" (hidden)" if s.hidden else "")
                 log(f"  ← {kind:8s} → {where}")
                 await send_all(out)
+                if kind in ("source", "source_file"):
+                    if player.sources.to_fetch:
+                        asyncio.create_task(fetch_source(player))
+                    continue         # nothing about the step changed
                 poke.set()
         finally:
             clients.discard(ws)

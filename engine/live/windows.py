@@ -22,6 +22,7 @@ APP_KINDS = {
     "file explorer": ("File Explorer",),
 }
 OVERLAY_TITLE = "GhostGuide overlay"
+OWN_TITLE = "GhostGuide"
 
 
 @dataclass
@@ -45,13 +46,19 @@ def foreign_browser(title: str, wanted: str) -> bool:
     return any(title.casefold().endswith(n.casefold()) for n in names)
 
 
+def ours(title: str, wanted: str) -> bool:
+    """One of GhostGuide's own windows, unless it's what's being asked for. The source window shows a tutorial's words,
+    which must never pass for the app's own text."""
+    return title.startswith(OWN_TITLE) and OWN_TITLE.casefold() not in wanted.casefold()
+
+
 def pick(wins: list[Win], label: str) -> Optional[Win]:
     """The window a step's label means: an app kind ("Browser") → its front window, else the front window whose
     title contains the label. `wins` is in z-order (front first); our overlay and minimised windows never count,
     and neither does a browser tab that happens to mention the app."""
     names = APP_KINDS.get(label.strip().casefold(), (label,))
     for w in wins:
-        if w.minimized or w.title == OVERLAY_TITLE or w.area <= 0 or foreign_browser(w.title, label):
+        if w.minimized or w.title == OVERLAY_TITLE or w.area <= 0 or foreign_browser(w.title, label) or ours(w.title, label):
             continue
         if any(n.casefold() in w.title.casefold() for n in names):
             return w

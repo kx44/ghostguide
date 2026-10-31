@@ -79,13 +79,18 @@ def _ydl():
     return yt_dlp, download_range_func
 
 
+def clip_path(url: str, start: Optional[float], end: Optional[float], out_root: Path = SOURCES) -> Path:
+    """Where that clip of that video is kept on this PC."""
+    return out_root / hashlib.sha256(f"{url}|{start}|{end}".encode()).hexdigest()[:12] / "video.mp4"
+
+
 def download(url: str, start: Optional[float], end: Optional[float], out_root: Path = SOURCES) -> tuple[Path, dict]:
     """The clip and its details. A clip already downloaded is reused."""
     yt_dlp, ranges = _ydl()
     location = _ffmpeg_folder()
-    name = hashlib.sha256(f"{url}|{start}|{end}".encode()).hexdigest()[:12]
-    folder = out_root / name
-    video, details = folder / "video.mp4", folder / "details.json"
+    video = clip_path(url, start, end, out_root)
+    folder = video.parent
+    details = folder / "details.json"
     if video.exists() and details.exists():
         return video, json.loads(details.read_text(encoding="utf-8"))
     opts = {"format": "bv*[height<=1080][vcodec^=avc1]+ba[acodec^=mp4a]/b[height<=1080][ext=mp4]/b",

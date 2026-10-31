@@ -27,6 +27,7 @@ from engine.compile.passes.explain import explain
 from engine.compile.passes.extract import extract
 from engine.compile.passes.merge import merge
 from engine.compile.timeline import Evidence, Item, segments
+from engine.live import source as source_view
 from engine.models.client import ModelClient
 
 CACHE = config.CACHE / "compiled"
@@ -138,6 +139,19 @@ def read_source(src: str, opts: Options, client: ModelClient, note: Callable[[st
     return ev
 
 
+def _keep_for_source_view(src: str, opts: Options, ev: Evidence) -> None:
+    """What this PC holds of the source, so a step can open it later. A failure here never stops a compile."""
+    try:
+        if ev.type == "video":
+            lo, hi = video.seconds(opts.start), video.seconds(opts.end)
+            is_url = src.startswith(("http://", "https://"))
+            source_view.remember_video(video.clip_path(src, lo, hi) if is_url else Path(src).resolve(), lo or 0.0, ev.hash, ev.url)
+        else:
+            source_view.remember_reading(ev)
+    except OSError:
+        pass
+
+
 def _slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.casefold()).strip("-")[:60] or "tutorial"
 
@@ -152,6 +166,7 @@ def compile_tutorial(src: str, opts: Optional[Options] = None, *, client: Option
     progress("Reading the tutorial", 0.02)
     ev = read_source(src, opts, client, note=lambda s: progress(s, 0.1))
     log(f"  source: {ev.type}, {len(ev.items)} items, {ev.images} images, hash {ev.hash}" + (f"; {ev.notes}" if ev.notes else ""))
+    _keep_for_source_view(src, opts, ev)
 
     gold = opts.gold or evaluate.find_gold(ev.url)
     key = hashlib.sha256(f"{ev.hash}|{prompts_version()}|{model}|{opts.enrich}".encode()).hexdigest()[:16]
