@@ -84,9 +84,13 @@ function resizable(card: HTMLDivElement, ctx: Ctx, place: () => void) {
     e.preventDefault();
     e.stopPropagation();
     const sx = e.clientX, w0 = card.offsetWidth;
-    const shield = el(ctx.ov, "dragshield hit", "cursor:ew-resize");
-    window.dispatchEvent(new Event("ghost:hits"));
+    let shield: HTMLElement | undefined;       // only once it's really a drag: a double-click must still reach the corner
     const move = (ev: PointerEvent) => {
+      if (!shield) {
+        if (Math.abs(ev.clientX - sx) < 4) return;
+        shield = el(ctx.ov, "dragshield hit", "cursor:ew-resize");
+        window.dispatchEvent(new Event("ghost:hits"));
+      }
       sized = Math.round(Math.min(Math.max(MIN_W, w0 + ev.clientX - sx), Math.min(MAX_W, ctx.W - 8)));
       card.style.width = `${sized}px`;
       card.style.maxWidth = "none";
@@ -94,6 +98,7 @@ function resizable(card: HTMLDivElement, ctx: Ctx, place: () => void) {
     const up = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
+      if (!shield) return;
       shield.remove();
       place();                // the arrow and the room around the target follow the new size
       window.dispatchEvent(new Event("ghost:hits"));

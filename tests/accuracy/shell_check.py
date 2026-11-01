@@ -331,6 +331,38 @@ def main(argv=None) -> int:
         time.sleep(0.3)
         record("click-through flag intact over the rest of the overlay", bool(u32.GetWindowLongW(overlay_win().hwnd, -20) & 0x20))
 
+        # ---------- the card's size ----------
+        bring_probe()
+        wait(lambda: ov.js("!!document.querySelector('.card .grip')"), 15)
+        w0 = rect_of(ov, ".card")["w"]
+        g = rect_of(ov, ".card .grip")
+        gx, gy = int(g["x"] + g["w"] / 2), int(g["y"] + g["h"] / 2)
+        clicks = probe()["clicks"]
+        auto.MoveTo(gx, gy, moveSpeed=4)
+        time.sleep(0.5)
+        auto.DragDrop(gx, gy, gx + 200, gy, moveSpeed=2)
+        time.sleep(0.5)
+        w1 = rect_of(ov, ".card")["w"]
+        record("card: dragging the corner widens it", w1 > w0 + 150, was=w0, now=w1)
+        record("card: the drag doesn't reach the app, and focus stays", probe()["clicks"] == clicks and front_is_probe() and types_into_probe())
+        shot("1c-card-wide")
+        park()
+        hotkey("right")
+        wait(lambda: "Step 2 of" in (ov.js("document.querySelector('.bar-ctl')?.innerText") or ""), 5)
+        time.sleep(0.6)
+        record("card: the next card keeps the size", abs(rect_of(ov, ".card")["w"] - w1) < 4, now=rect_of(ov, ".card")["w"])
+        g = rect_of(ov, ".card .grip")
+        auto.MoveTo(int(g["x"] + g["w"] / 2), int(g["y"] + g["h"] / 2), moveSpeed=4)
+        time.sleep(0.5)
+        for _ in range(2):
+            auto.Click(int(g["x"] + g["w"] / 2), int(g["y"] + g["h"] / 2), waitTime=0.05)
+        time.sleep(0.5)
+        record("card: double-click puts it back", abs(rect_of(ov, ".card")["w"] - w0) < 60, was=w0, now=rect_of(ov, ".card")["w"])
+        park()
+        hotkey("left")
+        wait(lambda: "Step 1 of" in (ov.js("document.querySelector('.bar-ctl')?.innerText") or ""), 5)
+        time.sleep(0.5)
+
         # ---------- the clip ----------
         step1 = wait(lambda: ov.js("document.querySelector('.card .meta .src')?.innerText"), 15)
         record("card: shows the clip's time", step1 == "▶ 01:39", label=step1)
@@ -455,6 +487,9 @@ def main(argv=None) -> int:
         scripts = src.js("document.querySelectorAll('#text script,#text iframe,#text a').length")
         record("text: the saved page opens at the step's section", bool(here) and "create" in here.lower() and top is not None and top < 200, section=here, top=top)
         record("text: words only, nothing from the page runs", scripts == 0)
+        pics = "(()=>{const t=document.getElementById('text');return {shown:[...t.querySelectorAll('img')].filter(i=>i.complete&&i.naturalWidth>0).length,waiting:[...t.querySelectorAll('img')].filter(i=>!i.complete).length,said:[...t.querySelectorAll('p')].filter(p=>p.textContent.startsWith('A picture goes here')).length}})()"
+        p = wait(lambda: (lambda v: v if v and not v["waiting"] else None)(src.js(pics)), 20) or src.js(pics)
+        record("text: each picture shows, or says the site didn't send it", p["shown"] + p["said"] >= 10 and not p["waiting"], **p)
         shot("5-text")
         bring_probe()
         hotkey("right")     # past the start check
@@ -535,6 +570,16 @@ def main(argv=None) -> int:
         time.sleep(2)
         record("Ctrl+Alt+Q quits the overlay", overlay_win() is None)
         record("the app under it is left alone", bool(windows.find(PROBE)))
+        record("Ctrl+Alt+Q stops the engine too", bool(wait(lambda: rig.engine.poll() is not None, 5)))
+        rig.start_engine(VIDEO, "end")
+        rig.start_overlay()
+        ov = overlay_page()
+        bring_probe()
+        wait(lambda: ov.js("!!document.querySelector('.bar-ctl button[data-a=end]')"), 15)
+        shot("7-end")
+        ok = click_el(ov, ".bar-ctl button[data-a=end]")
+        record("End: the bar's button quits the overlay", ok and bool(wait(lambda: overlay_win() is None, 6)))
+        record("End: and stops the engine", bool(wait(lambda: rig.engine.poll() is not None, 5)))
     finally:
         rig.stop()
         probe_proc.terminate()
