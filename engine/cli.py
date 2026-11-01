@@ -246,13 +246,22 @@ def _for_hard_apps(player, tut, locator, args) -> None:
     window = locator.window
 
     def start_items():
+        found = windows.find(window)
         titles = [w.title for w in windows.top_windows()     # the app's main window, not its dialogs
                   if w.title.startswith(window) and not windows.foreign_browser(w.title, window)]
-        return evaluate(tut.meta.start_state, tut.meta.app, titles, windows.document_open)
+        if found is not None and not titles:
+            titles = [found.title]
+        items = evaluate(tut.meta.start_state, tut.meta.app, titles, windows.document_open)
+        if found is None:                                    # nothing goes on without knowing which window it is
+            items.insert(0, {"text": f"Can't find {window}. Open it and click on it. If it's already in front, press Use this window.",
+                             "ok": False, "use_window": True})
+        return items
 
     player.executor = Executor(window)
     player.start_items = start_items
-    player.start_open = player.session.current == 1 and player.session.statuses[0] == "pending"
+    player.use_window = lambda: windows.use_front(window)
+    player.window_name = window
+    player.start_open = (player.session.current == 1 and player.session.statuses[0] == "pending") or windows.find(window) is None
     if player.tracker is not None:
         def grab(step):
             w = windows.find(window)

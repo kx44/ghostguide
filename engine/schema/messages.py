@@ -163,6 +163,7 @@ class StartItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
     text: str
     ok: Optional[bool] = None          # None = yours to look at; the engine can't read it
+    use_window: bool = False           # it can't tell which window is the app: offers Use this window
 
 
 class StartCheck(_Msg):     # shell/startCheck.ts
@@ -262,6 +263,11 @@ class StartOk(_Simple):
     type: Literal["start_ok"] = "start_ok"
 
 
+class UseWindow(_Simple):
+    """The window in front is the tutorial's app."""
+    type: Literal["use_window"] = "use_window"
+
+
 class Hide(_Simple):
     type: Literal["hide"] = "hide"
 
@@ -322,13 +328,13 @@ class ToggleLocal(_Simple):
     type: Literal["toggle_local"] = "toggle_local"
 
 
-FromOverlay = Union[Hello, ShowMeReq, DoIt, Next, Back, Skip, Hide, Resume, Jump, PinReq, Unpin, Import, OpenTutorial, StartOk,
+FromOverlay = Union[Hello, ShowMeReq, DoIt, Next, Back, Skip, Hide, Resume, Jump, PinReq, Unpin, Import, OpenTutorial, StartOk, UseWindow,
                     SourceReq, SourceFile, ToggleScheme, ToggleLocal]
 
 TO_OVERLAY_TYPES = ("guide", "clear", "state", "toast", "show_me", "mark", "start_check", "compile_progress", "compile_done",
                     "source_view")
 FROM_OVERLAY_TYPES = ("hello", "show_me", "do_it", "next", "back", "skip", "hide", "resume", "jump", "pin", "unpin", "import",
-                      "open_tutorial", "start_ok", "source", "source_file", "toggle_scheme", "toggle_local")
+                      "open_tutorial", "start_ok", "use_window", "source", "source_file", "toggle_scheme", "toggle_local")
 
 
 def parse_from_overlay(raw: Union[str, bytes, dict]) -> FromOverlay:

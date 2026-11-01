@@ -48,6 +48,8 @@ class Player:
         # The start check: only for a tutorial that hasn't begun. start_items() reads the real screen.
         self.start_items = start_items
         self.start_open = start_items is not None and session.current == 1 and session.statuses[0] == "pending"
+        self.use_window: Optional[Callable[[], Optional[str]]] = None    # the window in front is the app → what it's called
+        self.window_name = ""
         self._start_said: Optional[list[dict]] = None
         self.inputs = inputs                     # live/inputs.Recent: recent clicks (acted_on, card placement)
         self._drawn: dict[int, list[m.Box]] = {} # every box a step's guide was drawn at
@@ -390,6 +392,11 @@ class Player:
         if t == "start_ok":
             self.start_open = False
             return self.current()
+        if t == "use_window":
+            name = self.use_window() if self.use_window else None
+            if name is None:
+                return [m.Toast(text=f"Click on {self.window_name}'s window first, then press this.", kind="warn", ms=3500)]
+            return self.current() + [m.Toast(text=f"Using {name} as {self.window_name}.", ms=3500)]
         if self.start_open and t in ("next", "skip", "back", "jump"):      # moving at all means you're past the checklist
             self.start_open = False
             if t == "next":

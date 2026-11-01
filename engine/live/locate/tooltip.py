@@ -103,8 +103,8 @@ def watch(window: str) -> Watch:
         return at.x, at.y
 
     def in_front():
-        w = windows.foreground()
-        return bool(w and window.casefold() in w.title.casefold())
+        w, app = windows.foreground(), windows.find(window)
+        return bool(w and app and windows.program(w.hwnd) == windows.program(app.hwnd))
 
     return Watch(lambda: read(window), cursor, in_front).start()
 

@@ -102,12 +102,24 @@ def dump(window: str, max_depth: int = 60, max_elements: int = 6000, tries: int 
 def _dump(window: str, max_depth: int, max_elements: int, every: bool) -> list[dict]:
     import uiautomation as auto
 
-    from engine.live.windows import foreign_browser, ours
+    from engine.live.windows import bound_to, find, foreign_browser, ours, program
 
     out: list[dict] = []
-    for top in auto.GetRootControl().GetChildren():
+    tops = auto.GetRootControl().GetChildren()
+    # The name may not be in the title ("Microsoft Word" is "Document1 - Word"): then the window found is by its program.
+    picked = find(window)
+    by_program = picked is not None and (bound_to(window) is not None or window.casefold() not in picked.title.casefold())
+    exe = program(picked.hwnd).exe if by_program else ""
+    if by_program:
+        tops.sort(key=lambda t: t.NativeWindowHandle != picked.hwnd)      # the main window first, then its dialogs
+    for top in tops:
         title = top.Name or ""
-        if window.casefold() not in title.casefold() or foreign_browser(title, window) or ours(title, window):
+        if ours(title, window):
+            continue
+        if by_program:
+            if program(top.NativeWindowHandle).exe != exe:
+                continue
+        elif window.casefold() not in title.casefold() or foreign_browser(title, window):
             continue
         for ctrl, _ in auto.WalkControl(top, includeTop=True, maxDepth=max_depth):
             if len(out) >= max_elements:

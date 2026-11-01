@@ -13,7 +13,7 @@ export const TO_OVERLAY = [
   "source_view",
 ] as const;
 export const FROM_OVERLAY = [
-  "hello", "show_me", "do_it", "next", "back", "skip", "hide", "resume", "jump", "pin", "unpin", "import", "open_tutorial", "start_ok",
+  "hello", "show_me", "do_it", "next", "back", "skip", "hide", "resume", "jump", "pin", "unpin", "import", "open_tutorial", "start_ok", "use_window",
   "source", "source_file", "toggle_scheme", "toggle_local",
 ] as const;
 
@@ -89,7 +89,7 @@ export interface StateMsg {
 export interface ToastMsg { type: "toast"; text: string; kind: "ok" | "warn"; ms: number }
 export interface ShowMeMsg { type: "show_me"; to: Pt; path?: Pt[]; click: "left" | "right" | "double" | "none" }
 export interface MarkMsg { type: "mark"; result: "ok" | "bad" }
-export interface StartCheckMsg { type: "start_check"; tutorial: string; items: { text: string; ok?: boolean }[] }
+export interface StartCheckMsg { type: "start_check"; tutorial: string; items: { text: string; ok?: boolean; use_window?: boolean }[] }
 export interface CompileProgressMsg { type: "compile_progress"; stage: string; pct: number }
 export interface CompileDoneMsg {
   type: "compile_done"; ok: boolean; path?: string; title?: string; steps?: number; cached?: boolean; cost_usd?: number;
@@ -119,7 +119,7 @@ export type ToOverlay = GuideMsg | ClearMsg | StateMsg | ToastMsg | ShowMeMsg | 
 export interface DisplayInfo { id: number | string; x: number; y: number; w: number; h: number; scale: number; primary: boolean }
 export type FromOverlay =
   | { type: "hello"; displays: DisplayInfo[]; version?: string; replay?: boolean }
-  | { type: "show_me" | "do_it" | "next" | "back" | "skip" | "hide" | "resume" | "unpin" | "start_ok" | "toggle_scheme" | "toggle_local" }
+  | { type: "show_me" | "do_it" | "next" | "back" | "skip" | "hide" | "resume" | "unpin" | "start_ok" | "use_window" | "toggle_scheme" | "toggle_local" }
   | { type: "pin"; at: Pt }
   | { type: "jump"; n: number }
   | { type: "import"; url?: string; file?: string; text?: string; start?: string; end?: string }

@@ -18,8 +18,9 @@ export class StartCheck {
     }).join("");
     this.card = el(this.layer, "card startcheck hit", "",
       `<div class="meta"><span>${esc(m.tutorial)}</span></div><b>Before you start</b><div class="detail">This tutorial starts from here. It moves on by itself once everything is ticked.</div>` +
-      rows + `<div class="acts"><button data-a="start_ok">Start anyway</button></div>`);
-    this.card.querySelector("button")!.addEventListener("click", () => this.send({ type: "start_ok" }));
+      rows + `<div class="acts">${m.items.some(i => i.use_window) ? `<button data-a="use_window">Use this window</button>` : ""}<button data-a="start_ok">Start anyway</button></div>`);
+    this.card.querySelectorAll("button").forEach(b => b.addEventListener("click", () =>
+      this.send({ type: b.dataset.a as "use_window" | "start_ok" })));
   }
 
   clear() { this.card?.remove(); this.card = undefined; }

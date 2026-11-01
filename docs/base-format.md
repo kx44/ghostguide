@@ -33,7 +33,7 @@ confidence: high
 
 | Field | Meaning |
 |---|---|
-| `title`, `app` | Required. `app` picks the window and the app map |
+| `title`, `app` | Required. `app` picks the app map and helps find the window: it needn't be in the title, and when nothing goes by that name you choose the window once |
 | `author_version` | The version the source used |
 | `source` | `type` (video, web, pdf, text), `url` (a web link), `hash`, and for a video `segment: "01:28-10:25"` |
 | `start_state` | What must be true before step 1. Short, comma-separated items become a checklist |
