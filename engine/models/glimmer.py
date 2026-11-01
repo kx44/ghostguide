@@ -74,10 +74,10 @@ def spark_contributor(client=None, model: str = config.SPARK_CONTRIBUTOR) -> Cal
 
     c = client or ModelClient()
 
-    def check(step: Step, png: bytes):
+    def check(step: Step, png: bytes, text: Optional[str] = None, tag: Optional[str] = None):
         reply = c.chat(model=model, max_tokens=MAX_TOKENS, reasoning_effort=EFFORT,
-                       tag=f"check-step-{step.n}",
-                       messages=[{"role": "user", "content": [text_part(question(step)), image_part(png)]}])
+                       tag=tag or f"check-step-{step.n}",
+                       messages=[{"role": "user", "content": [text_part(text or question(step)), image_part(png)]}])
         v = parse_answer(reply.text)
         v.stage = "spark"
         return v
@@ -95,15 +95,15 @@ def as_jpeg(png: bytes, quality: int = 85) -> bytes:
 
 
 def glimmer_modal(url: str, post=None) -> Callable[[Step, bytes], object]:
-    def check(step: Step, png: bytes):
+    def check(step: Step, png: bytes, text: Optional[str] = None, tag: Optional[str] = None):
         if activity.local_only():
             raise activity.LocalOnly("your screen is set to stay on this PC")
         if post is None and not config.is_secure(url):
             raise ValueError("refused to send a picture of your screen without https")
         picture = as_jpeg(png)
         body = {"image_b64": base64.b64encode(picture).decode(), "image_mime": "image/jpeg",
-                "question": question(step), "check": step.check}
-        activity.sent(activity.host_of(url), "muse-glimmer", f"check-step-{step.n}", 1, len(picture))
+                "question": text or question(step), "check": step.check}
+        activity.sent(activity.host_of(url), "muse-glimmer", tag or f"check-step-{step.n}", 1, len(picture))
         if post is None:
             import httpx
             headers = {"Authorization": f"Bearer {config.env('GLIMMER_MODAL_TOKEN')}"}

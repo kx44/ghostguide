@@ -23,7 +23,7 @@ from engine.live.startcheck import holds_back
 from engine.schema import messages as m
 
 # Steps that need no on-screen target (their card alone is the guidance), so no "not pinned" hint.
-NO_PIN_NEEDED = {"shortcut", "wait", "look"}
+NO_PIN_NEEDED = {"shortcut", "wait", "look", "switch_app"}
 LINE_ACTIONS = {"draw_line", "drag"}
 
 SchemeFn = Callable[[Optional[m.Box]], tuple[str, Optional[float]]]
@@ -48,7 +48,8 @@ class Player:
         # The start check: only for a tutorial that hasn't begun. start_items() reads the real screen.
         self.start_items = start_items
         self.start_open = start_items is not None and session.current == 1 and session.statuses[0] == "pending"
-        self.use_window: Optional[Callable[[], Optional[str]]] = None    # the window in front is the app → what it's called
+        self.executor_for: Optional[Callable[[object], object]] = None   # a tutorial across apps: step → its app's executor, or None
+        self.use_window: Optional[Callable[[str], Optional[str]]] = None    # the window in front is this app → what it's called
         self.window_name = ""
         self._start_said: Optional[list[dict]] = None
         self.inputs = inputs                     # live/inputs.Recent: recent clicks (acted_on, card placement)
@@ -148,12 +149,21 @@ class Player:
                 guide.extra["click_at"] = list(located["click_at"])
             if located.get("shortcut"):
                 guide.extra["shortcut"] = located["shortcut"]
-            if guide.card is not None and self.executor is not None and can_do(step, self._act_box(step.n, box)):
+            if guide.card is not None and self._executor(step) is not None and can_do(step, self._act_box(step.n, box)):
                 at = 1 if "show_me" in guide.card.actions else 0
                 guide.card.actions.insert(at, "do_it")
+            if located.get("switch_to") and guide.card is not None:
+                name = located["switch_to"]
+                guide.card.compact = False
+                if located.get("app_open"):
+                    guide.card.detail = f"This step is in {name}. Switch to it. Alt + Tab works."
+                else:
+                    guide.card.detail = f"This step is in {name}. Open it and click on it. If it's already in front, press Use this window."
+                    guide.card.actions.insert(0, "use_window")
             if guide.card is not None:
                 guide.card.source = source_view.label(s.tutorial, step)
-            if guide.card is not None and box is None and step.action not in NO_PIN_NEEDED and not located.get("route"):
+            if (guide.card is not None and box is None and step.action not in NO_PIN_NEEDED and not located.get("route")
+                    and not located.get("switch_to")):
                 first = "start point" if step.action in LINE_ACTIONS else "top-left corner"
                 second = "end point" if step.action in LINE_ACTIONS else "bottom-right corner"
                 if self.locator is None:
@@ -203,13 +213,17 @@ class Player:
         """The box Do it for me may click: not the outline on a route's hop, which isn't the control."""
         return None if self._located_extra.get(n, {}).get("route") else box
 
+    def _executor(self, step):
+        return self.executor_for(step) if self.executor_for is not None else self.executor
+
     def _do_it(self) -> list[m._Msg]:
         s = self.session
-        if self.executor is None:
-            return [m.Toast(text="Do it for me isn't available for this app.", kind="warn")]
         if s.finished or s.hidden or s.step is None:
             return []
         step = s.step
+        executor = self._executor(step)
+        if executor is None:
+            return [m.Toast(text="Do it for me isn't available for this app.", kind="warn")]
         box = self._act_box(step.n, self.target(step.n)[0])
         if not can_do(step, box):
             return [m.Toast(text="There's nothing sure to act on for this step, so it's yours.", kind="warn")]
@@ -219,7 +233,7 @@ class Player:
             return [m.Toast(text="Found by sight, not by name. Check the outline, then press Do it for me again.", ms=5000)]
         self._armed = None
         ops = plan_ops(step, box)
-        why = self.executor.run(ops)
+        why = executor.run(ops)
         if why:
             return [m.Toast(text=why, kind="warn", ms=4000)]
         activity.acted(step.n, step.title, [op.kind for op in ops])
@@ -393,10 +407,13 @@ class Player:
             self.start_open = False
             return self.current()
         if t == "use_window":
-            name = self.use_window() if self.use_window else None
+            extra = self._located_extra.get(s.current, {})
+            app = extra.get("switch_to") or self.window_name
+            name = self.use_window(app) if self.use_window else None
             if name is None:
-                return [m.Toast(text=f"Click on {self.window_name}'s window first, then press this.", kind="warn", ms=3500)]
-            return self.current() + [m.Toast(text=f"Using {name} as {self.window_name}.", ms=3500)]
+                return [m.Toast(text=f"Click on {app}'s window first, then press this.", kind="warn", ms=3500)]
+            extra.pop("switch_to", None)
+            return self.current() + [m.Toast(text=f"Using {name} as {app}.", ms=3500)]
         if self.start_open and t in ("next", "skip", "back", "jump"):      # moving at all means you're past the checklist
             self.start_open = False
             if t == "next":

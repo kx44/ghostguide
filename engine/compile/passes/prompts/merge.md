@@ -35,6 +35,9 @@ Each step needs
 - `why`: one short line, only if there's a real reason to give.
 - `source`: `{t: "mm:ss-mm:ss"}` in the video's own time, or `{anchor: "#section"}` for an article, using the anchors you were given.
 
+More than one program
+The tutorial's `app` is the program most of it happens in. A step that happens in another one gives that program's usual name in `app`, spelled the same way each time; a step in the main program leaves `app` out. A terminal or panel inside an editor belongs to the editor. When the work moves to another program and later steps depend on it, put a `switch_app` step at each move, with `target.label` that program's name and `kind: window`. Any other program that must be open first goes in `start_state`.
+
 `action`: click, draw_line, drag, type, shortcut, pick, menu_path, switch_app, wait, look.
 `kind`: button, tab, menu_item, field, tree_item, face, edge, canvas, window.
 `params` by action: `type` needs `value` or `suggested`. `shortcut` needs `keys`, a list like ["Ctrl", "S"]. `click_type` is right, double, middle, ctrl, shift or alt. `draw_line` and `drag` take `from`, `to` or `direction` in words. A `pick` that fills a named box in a panel takes `field`.

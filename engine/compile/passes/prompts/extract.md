@@ -25,10 +25,10 @@ Rules
 - `draw_line`: draw on a canvas, with `from`, `to` or `direction` in words.
 - `drag`: drag something from one place to another, in words.
 - `pick`: select geometry or an item on a canvas (a face, an edge, a point).
-- `switch_app`: move to another program.
+- `switch_app`: move to another program, when what follows is done there. `label` is that program's usual name, `kind` is `window`.
 - `wait`: wait for something to finish or appear.
 - `look`: nothing to do but check or read something on screen.
 
 `kind` is one of: button, tab, menu_item, field, tree_item, face, edge, canvas, window.
 
-For each action also give `label` (the visible name of the control), `why` if the source says why, `check` (what the screen shows once it's done) and `at`: the time as "mm:ss" or "mm:ss-mm:ss" for a video, the heading's anchor for an article.
+For each action also give `app`: the usual name of the program it happens in (VS Code, Google Chrome, Terminal, Blender). A terminal or panel inside an editor belongs to the editor. Also give `label` (the visible name of the control), `why` if the source says why, `check` (what the screen shows once it's done) and `at`: the time as "mm:ss" or "mm:ss-mm:ss" for a video, the heading's anchor for an article.

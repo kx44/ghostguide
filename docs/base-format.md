@@ -43,6 +43,7 @@ confidence: high
 
 | Field | Meaning |
 |---|---|
+| `app` | The program this step happens in, when it isn't the tutorial's `app`. The finder, the checks and Do it for me all follow it |
 | `action` | `click`, `draw_line`, `drag`, `type`, `shortcut`, `pick`, `menu_path`, `switch_app`, `wait`, `look`. This decides how it's drawn |
 | `target.label` | The visible text or tooltip name |
 | `target.kind` | `button`, `tab`, `menu_item`, `field`, `tree_item`, `face`, `edge`, `canvas`, `window` |

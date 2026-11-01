@@ -103,8 +103,7 @@ def watch(window: str) -> Watch:
         return at.x, at.y
 
     def in_front():
-        w, app = windows.foreground(), windows.find(window)
-        return bool(w and app and windows.program(w.hwnd) == windows.program(app.hwnd))
+        return windows.in_front(window)
 
     return Watch(lambda: read(window), cursor, in_front).start()
 

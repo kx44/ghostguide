@@ -25,6 +25,8 @@ def new_controls(tut: Tutorial, store: AppMapStore) -> list[str]:
     out: list[str] = []
     for s in tut.steps:
         label = s.target.label.strip()
+        if s.app:         # another program's control has no place in this app's map
+            continue
         if s.target.kind not in LOOKUP_KINDS or s.action not in LOOKUP_ACTIONS or label in out or label.casefold() in ("esc", "enter"):
             continue
         known = store.get(label)

@@ -26,7 +26,8 @@ from engine.schema.messages import Box, Line
 from engine.schema.tutorial import Step
 
 
-NOTHING_TO_CLICK = ("shortcut", "wait", "look")
+NOTHING_TO_CLICK = ("shortcut", "wait", "look", "switch_app")
+SIGHT_ONLY_KINDS = ("canvas", "edge", "face")     # geometry has no name to check a box against
 DROP_ARROW_PX = 9     # the small dropdown arrow, this far past a ribbon button's icon
 TIP_MARGIN_PX = 24    # the mouse this close to a box counts as on it: model boxes can be loose
 TOOLBAR_SHARE = 0.11  # the top of the window down to here is toolbars and ribbon icons, where every button has a tooltip
@@ -64,10 +65,83 @@ class GenericUIA:
         return uia.box_of(el), None
 
 
+class StepApps:
+    """A tutorial that moves between programs: one finder per app, made when first needed, and the step says which. A step's
+    control is only looked for while its app is in front: drawn over another program, an outline would point at nothing,
+    and a picture of a window you've left isn't for a model. Till then the card says where to go (`switch_to`)."""
+
+    def __init__(self, main, main_app: str, make: Callable[[str], object], in_front: Callable[[str], bool], is_open: Callable[[str], object]):
+        self.main = main
+        self.main_app = main_app
+        self.make = make                 # app's name → its own Resolver
+        self.in_front = in_front
+        self.is_open = is_open
+        self._finders: dict[str, object] = {}
+        self.on = main
+        self.last_how = ""
+        self.last_stage = ""
+        self.last_conf = ""
+        self.last_extra: dict = {}
+        self.last_seconds = 0.0
+
+    @property
+    def window(self) -> str:
+        return self.main.window
+
+    @property
+    def vision(self):
+        return self.main.vision
+
+    @property
+    def wonder(self):
+        return self.main.wonder
+
+    @property
+    def last_els(self):
+        return self.main.last_els if self.on is self.main else []      # the step check keeps these as the main app's
+
+    @property
+    def last_t(self):
+        return self.on.last_t
+
+    def _finder(self, step: Step):
+        if not step.app or step.app.strip().casefold() == self.main_app.strip().casefold():
+            return self.main
+        key = step.app.strip().casefold()
+        if key not in self._finders:
+            self._finders[key] = self.make(step.app)
+        return self._finders[key]
+
+    def locate(self, step: Step) -> tuple[Optional[Box], Optional[Line]]:
+        self.on = self._finder(step)
+        name = step.app or self.main.window
+        self.last_extra, self.last_conf, self.last_seconds = {}, "", 0.0
+        if step.action == "switch_app":
+            self.last_how, self.last_stage = "the card is the guidance", "none"
+            return None, None
+        if not self.in_front(self.on.window):
+            self.last_extra = {"switch_to": name, "app_open": self.is_open(self.on.window) is not None}
+            self.last_how, self.last_stage = f"waiting for {name} to be in front", "none"
+            return None, None
+        found = self.on.locate(step)
+        self.last_how, self.last_stage, self.last_conf = self.on.last_how, self.on.last_stage, self.on.last_conf
+        self.last_extra, self.last_seconds = self.on.last_extra, self.on.last_seconds
+        return found
+
+    def forget(self, n: int) -> None:
+        for f in (self.main, *self._finders.values()):
+            f.forget(n)
+
+    def learn(self, step: Step, box: Box) -> bool:
+        return self._finder(step).learn(step, box)
+
+
 class Resolver:
     def __init__(self, uia_stage, store=None, find_window: Optional[Callable[[str], Optional[tuple]]] = None,
                  vision=None, wonder=None, hops: Optional[menu.Hops] = None, looks=None, look_of=None, arrow=None,
-                 tip=None, rested=None):
+                 tip=None, rested=None, box_check=None):
+        self.box_check = box_check           # BoxCheck: a model's second opinion on a box found by sight, or None
+        self._checking = False
         self.uia = uia_stage                 # VSCodeLocator, SolidWorksUIA or GenericUIA
         self.store = store                   # appmap.store.AppMapStore
         self.find_window = find_window       # title part → window rect, for remembered boxes
@@ -108,6 +182,8 @@ class Resolver:
         self._hops_clicked.pop(n, None)
         if self.vision is not None and hasattr(self.vision, "forget"):
             self.vision.forget(n)
+        if self.box_check is not None:
+            self.box_check.forget(n)
 
     def quick(self, step: Step) -> Optional[Box]:
         """4a alone: instant, for a first draw before UIA has answered. With `looks` (apps whose controls share
@@ -156,7 +232,10 @@ class Resolver:
             return hit, None
         seen_route = None
         if self.vision is not None:
-            b = self._tip_check(step, step.target.label, self.vision.find(step), sight=True)
+            b = self._sure(step, step.target.label, self._tip_check(step, step.target.label, self.vision.find(step), sight=True))
+            if self._checking:
+                self.last_how, self.last_stage = "vision: a second look at the box", "none"
+                return None, None
             ln = getattr(self.vision, "last_line", None)
             if b is not None or ln is not None:
                 self.last_how, self.last_stage = self.vision.last_how, "vision"
@@ -241,6 +320,11 @@ class Resolver:
             why, stage = self.vision.last_how, "vision"
             self.last_conf = getattr(self.vision, "last_conf", "")
         box = self._tip_check(step, label, box) if stage != "uia" else box
+        if stage == "vision":
+            box = self._sure(step, label, box)
+            if self._checking:
+                self.last_how, self.last_stage = f"hop {i + 1} of {len(path)}, {label}: a second look at the box", "none"
+                return None, None
         self._hop_box[step.n] = box
         if box is not None and stage == "vision" and self.look_of is not None and label not in self._pending_look:
             look = self.look_of(box)
@@ -272,6 +356,24 @@ class Resolver:
         self.hops.found(step.n, box)
         self.last_how, self.last_stage = f"hop {i + 1} of {len(path)}, {label}: {why}", stage if box is not None or stage == "wonder" else "none"
         return box, None
+
+    def _sure(self, step: Step, label: str, box: Optional[Box]) -> Optional[Box]:
+        """A box found by sight that no tooltip has vouched for gets a model's second look before it's shown."""
+        self._checking = False
+        if (box is None or self.box_check is None or step.target.kind in SIGHT_ONLY_KINDS
+                or (label, box.x, box.y, box.w, box.h) in self._tip_ok):
+            return box
+        said, what = self.box_check.say(step, label, box)
+        if said == "wait":
+            self._checking = True
+            return None
+        if said != "no":
+            return box
+        reject = getattr(self.vision, "reject", None)
+        if reject is not None:
+            reject(step.n, label, what or "that box")
+        self._tip_note = f"; a second look says that's {what or 'something else'}, not {label}"
+        return None
 
     def _tip_check(self, step: Step, label: str, box: Optional[Box], sight: bool = False) -> Optional[Box]:
         """The mouse is on a box found by sight or memory and the app's tooltip is up: it says what's really there. Right,

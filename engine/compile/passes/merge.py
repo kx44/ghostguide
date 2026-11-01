@@ -32,7 +32,7 @@ SCHEMA = {
             "steps": {"type": "array", "items": {
                 "type": "object",
                 "properties": {
-                    "title": _S, "part": _S,
+                    "title": _S, "part": _S, "app": _S,
                     "action": {"type": "string", "enum": ACTIONS},
                     "target": {"type": "object", "properties": {
                         "label": _S, "kind": {"type": "string", "enum": KINDS}, "where": _S, "menu_path": _L, "shortcut": _S},
@@ -91,6 +91,9 @@ def to_tutorial(data: dict, ev: Evidence) -> tuple[Tutorial, list[str]]:
                         author_version=data.get("author_version"), source=source, start_state=data.get("start_state"),
                         units=data.get("units"))
     tut = Tutorial(meta=meta, steps=steps)
+    for s in tut.steps:          # the main program is left out, however the model spelled it
+        if s.app and s.app.strip().casefold() == meta.app.strip().casefold():
+            s.app = None
     _close_dialogs(tut)
     if not errors:
         errors = validate_tutorial(tut).errors + _can_start(tut)

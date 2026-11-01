@@ -6,7 +6,7 @@ import { codeBoxHtml } from "./codeCard";
 import { keycapsHtml } from "./keycaps";
 import { chipsHtml } from "./pathChips";
 
-const LABELS: Record<string, string> = { show_me: "Show me", do_it: "Do it for me", next: "Next ›", skip_wait: "Skip waiting" };
+const LABELS: Record<string, string> = { show_me: "Show me", do_it: "Do it for me", next: "Next ›", skip_wait: "Skip waiting", use_window: "Use this window" };
 
 /** Card content for the card-only fallback (no target on screen): what the style would have shown. */
 export function fallbackHtml(g: GuideMsg): { top: string; body: string } {

@@ -28,7 +28,7 @@ SCHEMA = {
             "actions": {"type": "array", "items": {
                 "type": "object",
                 "properties": {
-                    "action": {"type": "string", "enum": ACTIONS}, "label": _S, "kind": {"type": "string", "enum": KINDS},
+                    "app": _S, "action": {"type": "string", "enum": ACTIONS}, "label": _S, "kind": {"type": "string", "enum": KINDS},
                     "where": _S, "value": _S, "then_key": _S, "keys": _L, "click_type": _S, "path": _L, "from": _S, "to": _S,
                     "direction": _S, "why": _S, "check": _S, "at": _S,
                     "evidence": {"type": "string", "enum": ["shown", "said", "implied"]}, "note": _S,

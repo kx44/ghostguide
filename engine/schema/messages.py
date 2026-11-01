@@ -91,7 +91,7 @@ class Card(BaseModel):
     detail: Optional[str] = None      # what to do, e.g. "Type index.html, then press Enter."
     done_when: Optional[str] = None   # the step's `check`, in plain words
     suggested: Optional[str] = None   # our value when the author left it open; labelled as ours
-    actions: list[str] = Field(default_factory=list)   # show_me | do_it | next | skip_wait
+    actions: list[str] = Field(default_factory=list)   # show_me | do_it | next | skip_wait | use_window
     low_confidence: bool = False
     dev_hint: Optional[str] = None    # dev pins: "not pinned yet, Ctrl+Alt+P…"
     compact: bool = False             # repeat steps: title + Next only, so the instruction never vanishes

@@ -87,7 +87,7 @@ def test_use_window_message_says_what_happened():
     assert parse_from_overlay({"type": "use_window"}).type == "use_window"
     p = _player()
     p.window_name = "Some App"
-    p.use_window = lambda: None
+    p.use_window = lambda app: None
     assert "first" in p.handle({"type": "use_window"})[-1].text
-    p.use_window = lambda: "Mystery Tool"
+    p.use_window = lambda app: "Mystery Tool"
     assert p.handle({"type": "use_window"})[-1].text == "Using Mystery Tool as Some App."

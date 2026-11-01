@@ -30,7 +30,7 @@ flowchart LR
 | **What it looks at** | The app's own window and that app's dialogs and menus, using `PrintWindow`. Other windows on top aren't in the picture, and neither is the overlay. |
 | **Also** | A small ring of pixels around the target, measured to pick light or dark colours. It's thrown away at once and never sent. |
 | **Saved to disk?** | The live loop writes no screenshots. The check scripts under `tests/` do, into `cache/`, when you run them. |
-| **When it can go to a model** | Only if models are on and only with the tutorial's own app in the picture: to find a control UI Automation can't see, or to check a step that a rule and a pixel diff couldn't settle. A step can name another window to watch, but that window is never sent. |
+| **When it can go to a model** | Only if models are on and only with an app the tutorial works in in the picture: to find a control UI Automation can't see, to check a box found by sight, or to check a step that a rule and a pixel diff couldn't settle. A step can name another program to work in (`app`); that program's window goes only while it's the one in front. A window a step only watches is never sent. So a tutorial file does choose which programs can be looked at while you're in them: the card always says which program a step is in. |
 | **What stops it** | Hide. *Keep my screen on this PC*. A window title that names a secrets file (`.env`, `id_rsa`, `*.pem`, `*.key`, `*.kdbx`, or the words secrets, credentials, password, private key). In each case the step falls back to free checks and the Next button. |
 
 The title rule is a guard for the common case. It reads the title only, so a secret that's visible in a file with an ordinary name isn't caught. If you have one on screen, use the tray switch.

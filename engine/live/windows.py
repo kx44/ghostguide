@@ -31,6 +31,7 @@ KIND_PROGRAMS = {
 }
 KIND_ALIASES = {"windows terminal": "terminal", "powershell": "terminal", "windows powershell": "terminal",
                 "command prompt": "terminal", "cmd": "terminal", "web browser": "browser"}
+SAME_APP = {"vs code": "Visual Studio Code", "vscode": "Visual Studio Code", "code": "Visual Studio Code"}     # what titles say
 NOT_THE_NAME = {"microsoft", "ms", "adobe", "autodesk", "windows", "the", "app", "application", "desktop", "program", "software"}
 OVERLAY_TITLE = "GhostGuide overlay"
 OWN_TITLE = "GhostGuide"
@@ -70,6 +71,15 @@ def ours(title: str, wanted: str) -> bool:
     return title.startswith(OWN_TITLE) and OWN_TITLE.casefold() not in wanted.casefold()
 
 
+def canonical(app: str) -> str:
+    """The name an app's windows go by, for the few that people shorten."""
+    return SAME_APP.get(app.strip().casefold(), app)
+
+
+def is_vscode(app: str) -> bool:
+    return "visual studio code" in canonical(app).casefold()
+
+
 def program_is(label: str, p: Program) -> bool:
     """The program a tutorial's name for an app means. "Microsoft Word" is WINWORD.EXE, which calls itself that, though its
     window says "Document1 - Word". Every word of the name that says which app must be there."""
@@ -84,6 +94,7 @@ def pick(wins: list[Win], label: str, program_of: Optional[Callable[[Win], Progr
     a kind of app's programs ("Terminal"), a title containing the name, a program that goes by the name. `wins` is in
     z-order (front first); our overlay and minimised windows never count, and neither does a browser tab that happens
     to mention the app."""
+    label = canonical(label)
     low = label.strip().casefold()
     kind = KIND_ALIASES.get(low, low)
     usable = [w for w in wins if not (w.minimized or w.title == OVERLAY_TITLE or w.area <= 0 or ours(w.title, label))]
@@ -352,3 +363,9 @@ def use_front(label: str) -> Optional[str]:
 
 def find(label: str) -> Optional[Win]:
     return pick(top_windows(), label, lambda w: program(w.hwnd), bound_to(label))
+
+
+def in_front(label: str) -> bool:
+    """Is this app the one you're in? Its dialogs count: they're its own program's windows."""
+    w, app = foreground(), find(label)
+    return bool(w and app and (w.hwnd == app.hwnd or (program(w.hwnd).exe and program(w.hwnd) == program(app.hwnd))))

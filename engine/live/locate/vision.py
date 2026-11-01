@@ -267,7 +267,7 @@ class SparkVision:
         else:
             text = PROMPT.format(**fields)
         if memo.not_it:
-            text += "\nNot these, checked by their tooltips: " + ", ".join(memo.not_it) + "."
+            text += "\nNot these, already checked: " + ", ".join(memo.not_it) + "."
         if memo.on_nothing:
             text += "\nYour last box wasn't on a button: nothing showed a tooltip there. The control is close by. Box the icon itself, tightly."
         memo.calls += 1

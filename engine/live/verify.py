@@ -43,6 +43,7 @@ BASELINE_FRESH_S = 4.0   # a picture this recent still shows the app as a new st
 MODEL_IDLE_S = 1.0       # no keys or clicks for this long before a model looks
 MODEL_GAP_S = 4.0        # at least this long between two looks at one step
 MODEL_MAX_ASKS = 6       # …and this many in all; after that Next is the way on
+STUCK_S = 10.0           # a rule check that's said "not yet" this long, with the window changed, may just be a wrong rule
 
 
 @dataclass
@@ -180,7 +181,7 @@ def _file_verdict(fc: FileCheck, snap: Snapshot) -> Verdict:
 
 
 def _uia_verdict(step: Step, c: UiaCheck, snap: Snapshot) -> Verdict:
-    els = snap.elements(c.window)
+    els = snap.elements(c.window or step.app)
     if not els:
         return Verdict("unknown", why=f"can't read the {c.window or snap.app_window} window")
     last = lasting(c)
@@ -207,7 +208,7 @@ def _typed_verdict(step: Step, snap: Snapshot) -> Verdict:
     fname = step_file(step)
     if "\n" not in value.rstrip("\n") or fname is None:
         return Verdict("done", lasting=True)
-    eds = [e for e in snap.elements(None) if e.get("type") == "Edit" and _norm(e.get("name")) == _norm(fname)
+    eds = [e for e in snap.elements(step.app) if e.get("type") == "Edit" and _norm(e.get("name")) == _norm(fname)
            and e.get("value") is not None]
     text = eds[0]["value"] if eds else snap.read(fname)
     if text is None:
@@ -317,6 +318,8 @@ class Tracker:
         self.current_n: Optional[int] = None      # models only ever look at the step showing
         self.hidden = False                       # …and never while hidden (free checks only)
         self.gate: Optional[Callable[[], Optional[str]]] = None    # why the app's window mustn't go to a model now, or None
+        self.gate_for: Optional[Callable[[str], Optional[str]]] = None    # …for another app a step names
+        self.front_is: Optional[Callable[[str], bool]] = None      # is this app the one you're in?
         self.ladder.clock = clock
         self.showing_since = clock()              # when the step on screen came up
 
@@ -342,6 +345,9 @@ class Tracker:
         w = self._watch.setdefault(step.n, _StepWatch(shown_at=now))
         if step.action == "wait":
             v = self._wait(step, snap, w, now)
+        elif step.action == "switch_app" and self.front_is is not None:
+            there = self.front_is(step.target.label)
+            v = Verdict("done" if there else "not_yet", "rule", why="" if there else f"{step.target.label} isn't in front")
         else:
             v = self.ladder.rule(step, snap)
             if v.done and self.ladder.true_since.get(step.n, now) < self.showing_since:
@@ -350,6 +356,8 @@ class Tracker:
                 v = Verdict("done", "rule", lasting=v.lasting, why="holds, and you clicked the target during this step")
             if v.result == "unknown" and step.verify is None:
                 v = self._diff(step, w, now)
+            elif not v.done and self._rule_may_be_wrong(step):
+                v = self._second_look(step, v, w, now)
         if v.done and step.action == "type" and self.idle_s is not None and self.idle_s() < TYPE_SETTLE_S:
             v = Verdict("not_yet", "settle", why="still typing")
         self.cache[step.n] = v
@@ -376,7 +384,20 @@ class Tracker:
             return Verdict("not_yet", "diff", why="settling")
         return Verdict("done", "diff", why="the window has settled")
 
-    def _diff(self, step: Step, w: _StepWatch, now: float) -> Verdict:
+    def _rule_may_be_wrong(self, step: Step) -> bool:
+        """A hint is a guess at what the app shows, and on an app nobody has checked it can name something that never appears.
+        Words in a file or an editor are exact, though: no model overrules those. Only the step showing, and only with a model."""
+        if step.n != self.current_n or step.action == "look" or not (self.ladder.glimmer or self.ladder.spark):
+            return False
+        return not step.verify.file_checks() and not any(c.value or c.value_contains for c in step.verify.uia_checks())
+
+    def _second_look(self, step: Step, rule: Verdict, w: _StepWatch, now: float) -> Verdict:
+        """The rule can't tell, or has said "not yet" for a while: the window changed, so a model may look. Only its "done"
+        counts; anything else leaves the rule's answer standing, and Next always works."""
+        seen = self._diff(step, w, now, ask=rule.result == "unknown" or now - w.shown_at >= STUCK_S)
+        return seen if seen.done and seen.stage in ("glimmer", "spark") else rule
+
+    def _diff(self, step: Step, w: _StepWatch, now: float, ask: bool = True) -> Verdict:
         """9b for steps without a hint: unchanged since the step began = not yet, no model call. Changed =
         the model stages (off without credits) or unknown."""
         if self.grab is None:
@@ -399,8 +420,10 @@ class Tracker:
         self.last_img_t = now
         if not changed(w.baseline, img, **self.diff_opts):
             return Verdict("not_yet", "diff", why="nothing changed yet")
-        if self.hidden or not (self.ladder.glimmer or self.ladder.spark):
+        if self.hidden or not ask or not (self.ladder.glimmer or self.ladder.spark):
             return Verdict("unknown", "diff", why="changed; no model to ask")
+        if step.app and self.front_is is not None and not self.front_is(step.app):
+            return Verdict("unknown", "diff", why=f"{step.app} isn't in front")     # never a picture of a window you've left
         kept = self._kept_here(step)
         if kept:
             activity.withheld(kept)
@@ -408,12 +431,18 @@ class Tracker:
         return self._ask_model(step, w, now, img, for_model)
 
     def _kept_here(self, step: Step) -> Optional[str]:
-        """A step may watch any window it names, but only the tutorial's own app goes to a model."""
+        """A step may watch any window it names, but only the apps the tutorial works in go to a model."""
         if activity.local_only():
             return "set to stay on this PC"
-        if step.target.kind == "window" and step.target.label.casefold() not in self.app_window.casefold():
+        if step.target.kind == "window" and not self._tutorial_app(step.target.label):
             return "it isn't the tutorial's app"
+        if step.app and self.gate_for is not None:
+            return self.gate_for(step.app)
         return self.gate() if self.gate is not None else None
+
+    def _tutorial_app(self, label: str) -> bool:
+        low = label.casefold()
+        return low in self.app_window.casefold() or any(s.app and s.app.casefold() == low for s in self.tutorial.steps)
 
     def _ask_model(self, step: Step, w: _StepWatch, now: float, img, for_model) -> Verdict:
         """The window changed and no rule can tell, so look. Models are slow and cost money, and this runs every

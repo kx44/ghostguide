@@ -101,7 +101,7 @@ class Verify(_Strict):
 
 
 # Keys in the order they are written in a step's YAML block.
-STEP_KEYS = ("action", "target", "params", "why", "check", "verify", "source",
+STEP_KEYS = ("app", "action", "target", "params", "why", "check", "verify", "source",
              "confidence", "repeat_of", "optional", "simplified", "note")
 
 
@@ -110,6 +110,7 @@ class Step(_Strict):
     title: str = Field(exclude=True)
     part: Optional[str] = Field(default=None, exclude=True)   # the `# Part …` heading above it
 
+    app: Optional[str] = None                     # the program this step happens in, when it isn't the tutorial's own
     action: Action
     target: Target
     params: dict[str, Any] = Field(default_factory=dict)
