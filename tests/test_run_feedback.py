@@ -369,3 +369,18 @@ def test_a_shortcut_named_as_a_window_may_be_checked_by_a_model():
     assert t._kept_here(s) is None
     watched = s.model_copy(deep=True, update={"action": "wait"})
     assert t._kept_here(watched) == "it isn't the tutorial's app"
+
+
+def test_a_wait_step_doesnt_settle_before_it_comes_up():
+    from engine.live.verify import Snapshot, Tracker
+    s = MUG.step(22).model_copy(deep=True, update={"action": "wait", "verify": None})
+    now = [0.0]
+    t = Tracker(SimpleNamespace(steps=[s]), "App", None, lambda w: [], grab=lambda st: __import__("PIL.Image", fromlist=["new"]).new("L", (40, 40)), clock=lambda: now[0])
+    snap = Snapshot("App", lambda w: [])
+    t.current_n = s.n - 1
+    for now[0] in (0.0, 5.0, 10.0):
+        assert t.check(s, snap).result == "not_yet"
+    t.current_n = s.n
+    for now[0] in (11.0, 12.0, 14.0):
+        v = t.check(s, snap)
+    assert v.done

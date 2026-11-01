@@ -369,6 +369,8 @@ class Tracker:
             r = self.ladder.rule(step, snap)
             if r.result == "not_yet":
                 return r
+        if self.current_n is not None and step.n != self.current_n:
+            return Verdict("not_yet", "settle", why="not its turn")      # a window still from before it came up proves nothing
         if now - w.shown_at < WAIT_MIN_S:
             return Verdict("not_yet", "settle", why="just started")
         if self.grab is None:
