@@ -44,7 +44,6 @@ export function mountCard(ctx: Ctx, g: GuideMsg, c: Card, m: Mounted, onAction: 
       `<b>${esc(c.title)}</b>` +
       (c.why ? `<div>${esc(c.why)}</div>` : "") +
       (c.detail ? `<div class="detail">${esc(c.detail)}</div>` : "") +
-      (c.picture?.startsWith("file:") ? `<button class="pic" data-a="source" title="The tutorial's picture for this step. Click for the source."><img src="${esc(c.picture)}" alt=""></button>` : "") +
       (m.cardHtml ?? "") +
       (c.suggested ? `<div class="sug">Suggested: ${esc(c.suggested)} <span>(ours; the tutorial leaves it open)</span></div>` : "") +
       (c.done_when ? `<div class="done">Done when: ${esc(c.done_when)}</div>` : "") +
@@ -54,7 +53,6 @@ export function mountCard(ctx: Ctx, g: GuideMsg, c: Card, m: Mounted, onAction: 
                   html + `<div class="grip" title="Drag to resize · double-click to put it back"></div>`);
   if (sized) { card.style.width = `${sized}px`; card.style.maxWidth = "none"; }
   card.querySelectorAll<HTMLButtonElement>("button[data-a]").forEach(b => b.addEventListener("click", () => onAction(b.dataset.a!, b)));
-  card.querySelector<HTMLImageElement>(".pic img")?.addEventListener("error", e => (e.target as HTMLElement).parentElement?.remove(), { once: true });
   card.querySelectorAll<HTMLButtonElement>("button[data-copy]").forEach(b => b.addEventListener("click", () => copied(b)));
 
   const auto = () => {

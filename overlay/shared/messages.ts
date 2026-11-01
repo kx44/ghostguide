@@ -66,7 +66,6 @@ export interface Card {
   compact?: boolean;          // repeat steps: title + Up next + Next only
   up_next?: string;           // the next step's title (compact cards)
   confirm?: boolean;          // Do it for me is waiting for its second press
-  picture?: string;           // file:// address of the tutorial's picture for this step
   source?: string;            // the source button's words: "▶ 01:40" for a clip, "Source" for text
 }
 
@@ -103,7 +102,6 @@ export interface SourceViewMsg {
   type: "source_view"; kind: "video" | "text" | "none" | "loading"; n: number; of: number; title: string; tutorial: string;
   follow?: boolean;        // the step moved on while the window is open: no window of its own, no autoplay
   where?: string;          // "01:39–01:44", or the section's heading
-  figure?: SourceBlock;    // the tutorial's picture for this step
   video?: string;          // file:// address
   start?: number;          // seconds in that file
   end?: number;

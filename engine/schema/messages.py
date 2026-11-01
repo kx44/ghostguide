@@ -98,7 +98,6 @@ class Card(BaseModel):
     up_next: Optional[str] = None     # the next step's title, shown on compact cards
     source: Optional[str] = None      # the source button's words: "▶ 01:40" for a clip, "Source" for text
     confirm: bool = False             # Do it for me is waiting for its second press
-    picture: Optional[str] = None     # file:// address of the tutorial's picture for this step
 
 
 # ---------------- engine → overlay ----------------
@@ -213,7 +212,6 @@ class SourceView(_Msg):          # shell/sourceView.ts
     tutorial: str
     follow: bool = False                # the step moved on while the window is open: no window of its own, no autoplay
     where: Optional[str] = None         # "01:39–01:44", or the section's heading
-    figure: Optional[SourceBlock] = None    # the tutorial's picture for this step
     video: Optional[str] = None         # file:// address
     start: Optional[float] = None       # seconds in that file
     end: Optional[float] = None

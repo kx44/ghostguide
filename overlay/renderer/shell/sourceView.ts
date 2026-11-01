@@ -11,6 +11,7 @@ const player = $<HTMLVideoElement>("player");
 let view: SourceViewMsg | undefined;
 let doc: string | undefined;
 let stopAt: number | undefined;         // pause here, unless you've moved past it yourself
+let landing: HTMLElement | undefined;   // the section to stay on while pictures load
 
 function shown(id: "video" | "text" | "none") {
   for (const k of ["video", "text", "none"] as const) $(k).hidden = k !== id;
@@ -80,6 +81,7 @@ function markSection(anchor: string | undefined) {
     s.classList.toggle("here", here);
     if (here && !first) first = s;
   });
+  landing = first;
   if (first) first.scrollIntoView({ block: "start" });
 }
 
@@ -92,9 +94,6 @@ function render(m: SourceViewMsg) {
   $("where").textContent = m.where ?? "";
   $("note").hidden = !m.note;
   $("note").textContent = m.note ?? "";
-  const pic = m.figure?.image ?? m.figure?.web_image;
-  $("figure").hidden = !pic;
-  if (pic && $("figureimg").getAttribute("src") !== pic) $<HTMLImageElement>("figureimg").src = pic;
   $("replay").hidden = m.kind !== "video";
   $("link").hidden = !m.link;
   $("link").textContent = m.link_label ?? "Open in the browser";
@@ -116,7 +115,9 @@ function render(m: SourceViewMsg) {
   }
 }
 
-$("figureimg").addEventListener("error", () => { $("figure").hidden = true; });
+// Pictures load after the text and push the section down the page, so stay on it until you scroll for yourself.
+for (const ev of ["load", "error"]) $("text").addEventListener(ev, () => landing?.scrollIntoView({ block: "start" }), true);
+for (const ev of ["wheel", "pointerdown", "keydown", "touchstart"]) $("text").addEventListener(ev, () => { landing = undefined; }, { passive: true });
 bridge.on(render);
 $("replay").addEventListener("click", () => { if (view?.video) cue(view, true); });
 $("link").addEventListener("click", () => { if (view?.link) bridge.openLink(view.link); });

@@ -154,7 +154,7 @@ def _keep_for_source_view(src: str, opts: Options, ev: Evidence) -> list[str]:
             missing = sum(1 for i in kept.items if i.kind == "image" and i.image is None)
             if missing:
                 held = sum(1 for i in kept.items if i.image is not None)
-                return [f"This saved page holds {held} of its {held + missing} pictures, so some steps will have none. "
+                return [f"This saved page holds {held} of its {held + missing} pictures, so the rest won't show in Source. "
                         "For all of them, scroll to the bottom of the page and save it again with Ctrl+S → Webpage, Single File."]
     except (OSError, SourceError):
         pass

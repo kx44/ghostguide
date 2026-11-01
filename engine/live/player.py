@@ -170,7 +170,6 @@ class Player:
                     guide.card.actions.insert(0, "use_window")
             if guide.card is not None:
                 guide.card.source = source_view.label(s.tutorial, step)
-                guide.card.picture = self.sources.picture(step)
             if (guide.card is not None and box is None and step.action not in NO_PIN_NEEDED and not located.get("route")
                     and not located.get("switch_to") and not located.get("search")):
                 first = "start point" if step.action in LINE_ACTIONS else "top-left corner"
