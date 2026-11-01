@@ -21,7 +21,7 @@ from engine.basefile.render import render_file
 from engine.basefile.validate import validate_file
 from engine.compile import eval as evaluate
 from engine.compile.adapters import SourceError, text as text_adapter, video, web
-from engine.compile.enrich import enrich
+from engine.compile.enrich import enrich, look_up_search
 from engine.compile.passes import CompileError, prompts_version
 from engine.compile.passes.explain import explain
 from engine.compile.passes.extract import extract
@@ -204,6 +204,9 @@ def compile_tutorial(src: str, opts: Optional[Options] = None, *, client: Option
         progress("Looking up controls in the app's help", STAGES["explain"])
         info = enrich(client, model, tut, AppMapStore(tut.meta.app, version=opts.version), version=opts.version, log=log)
         log(f"  enrich: {info['found']} of {info['asked']} new controls, {info['searches']} searches")
+        look_up_search(client, tut.meta.app, AppMapStore(tut.meta.app, version=opts.version), version=opts.version, log=log)
+        for app in sorted({s.app for s in tut.steps if s.app}):
+            look_up_search(client, app, AppMapStore(app), log=log)
 
     progress("Saving", STAGES["enrich"])
     tut.meta.__pydantic_extra__["compiled"] = {"model": model, "prompts": prompts_version()}

@@ -6,9 +6,11 @@ because the live finder (Wonder) can still find the route.
 """
 from __future__ import annotations
 
+import re
 from typing import Optional
 
-from engine.appmap.store import AppMapStore
+from engine import config
+from engine.appmap.store import SEARCH_ENTRY, AppMapStore
 from engine.compile.passes import prompt, read_json
 from engine.models.client import BudgetExceeded, ModelError
 from engine.schema.tutorial import Tutorial
@@ -18,6 +20,7 @@ MAX_OUTPUT = 6000
 EFFORT = "low"
 LOOKUP_KINDS = ("button", "menu_item", "tab")
 LOOKUP_ACTIONS = ("click", "menu_path", "shortcut")
+KEYS = re.compile(r"[\w+ -]{1,24}")
 
 
 def new_controls(tut: Tutorial, store: AppMapStore) -> list[str]:
@@ -46,6 +49,43 @@ def _clean_entry(e: dict) -> Optional[dict]:
     if e.get("shortcut"):
         facts["shortcut"] = str(e["shortcut"])
     return facts if len(facts) > 1 else None
+
+
+def clean_search(answer) -> Optional[dict]:
+    """The lookup's answer as map facts. Whatever a web page says only ever ends up as words on a card, but it stays short and
+    plain, and needs a page behind it. `none` is remembered too, so it isn't paid for twice."""
+    if not isinstance(answer, dict):
+        return None
+    if answer.get("none") is True:
+        return {"source": "looked up, none found"}
+    name, keys, how, source = (answer.get(k) for k in ("name", "keys", "how", "source"))
+    if not isinstance(name, str) or not 0 < len(name) <= 40 or not str(source or "").startswith("http"):
+        return None
+    facts = {"aliases": [name.strip()], "source": source}
+    if isinstance(keys, str) and KEYS.fullmatch(keys.strip()):
+        facts["shortcut"] = keys.strip()
+    if isinstance(how, str) and 0 < len(how) <= 160:
+        facts["where"] = how.strip()
+    return facts
+
+
+def look_up_search(client, app: str, store: AppMapStore, version: Optional[str] = None, log=lambda s: None) -> bool:
+    """Once per app: its own command search, for the card to fall back on when nothing can point at a control. Only an app's
+    name goes out, so the Contributor rate is fine, and Spark can run up 27 searches on a question this small."""
+    if store.get(SEARCH_ENTRY) is not None:
+        return False
+    text = prompt("enrich_search").format(app=app, version_words=f", version {version}" if version else "")
+    try:
+        reply = client.respond(config.SPARK_CONTRIBUTOR, text, max_output_tokens=MAX_OUTPUT, tools=[{"type": "web_search"}],
+                               reasoning_effort=EFFORT, tag="compile-enrich-search")
+        facts = clean_search(read_json(reply.text))
+    except (ValueError, ModelError, BudgetExceeded) as e:
+        log(f"  enrich: no command search for {app} ({e.__class__.__name__})")
+        return False
+    if facts is None:
+        return False
+    store.add_facts(SEARCH_ENTRY, **facts)
+    return True
 
 
 def enrich(client, model: str, tut: Tutorial, store: AppMapStore, version: Optional[str] = None, log=lambda s: None) -> dict:

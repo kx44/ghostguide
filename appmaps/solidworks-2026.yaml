@@ -78,3 +78,10 @@ Hidden Lines Visible:
   - Display Style
   - Hidden Lines Visible
   source: Checked on screen, SOLIDWORKS 2026 SP4.1 (mug run, 31 Oct 2026)
+
+(command search):
+  aliases:
+  - Search Commands
+  shortcut: W
+  where: Hover the result and click Show Command Location to see where it is.
+  source: https://help.solidworks.com/2025/English/SolidWorks/sldworks/t_searching_commands.htm

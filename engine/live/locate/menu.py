@@ -19,6 +19,7 @@ WONDER_MAX_TOKENS = 2048
 WONDER_EFFORT = "low"
 WONDER_W = 2048
 WONDER_KINDS = ("button", "menu_item", "field", "tab")
+NOT_COMMANDS = {"ok", "cancel", "close", "yes", "no", "done", "apply", "next", "back", "finish", "open", "save as"}    # a dialog's own buttons
 RIBBON_TOOLBARS = r"\s*(sketch|features|surfaces|evaluate)\s+toolbar\b"    # not "Standard toolbar", which has no tab
 WONDER_PROMPT = ("This is a screenshot of {app} ({version}). A tutorial written for an older version asks for this "
                  "control, and it can't be found on the screen by name.\nStep: {title}\nControl: {label} ({kind})\n"
@@ -71,6 +72,17 @@ def describe(r: dict) -> str:
 def hop_label(chip: str) -> str:
     """A chip as the control's name: "Line ▾" → "Line"."""
     return re.sub(r"[\s▾▼›»]+$", "", chip).strip()
+
+
+def search_hint(store, label: str) -> Optional[str]:
+    """When nothing can point at a control: how to reach it through the app's own command search. Only ever words on the
+    card: typing there would be sending keys to your app just to look something up."""
+    search = getattr(store, "command_search", lambda: None)()
+    term = hop_label(re.sub(r"\s*\([^)]*\)\s*$", "", label))
+    if search is None or not term or term.casefold() in NOT_COMMANDS:
+        return None
+    how = f"press {search.shortcut} and type {term}." if search.shortcut else f"type {term}."
+    return f"Use {search.aliases[0]}: {how}" + (f" {search.where}" if search.where else "")
 
 
 class Hops:

@@ -152,6 +152,9 @@ class Player:
             if guide.card is not None and self._executor(step) is not None and can_do(step, self._act_box(step.n, box)):
                 at = 1 if "show_me" in guide.card.actions else 0
                 guide.card.actions.insert(at, "do_it")
+            if located.get("search") and guide.card is not None:
+                guide.card.detail = " ".join(x for x in (guide.card.detail, f"Can't point at it. {located['search']}") if x)
+                guide.card.compact = False
             if located.get("switch_to") and guide.card is not None:
                 name = located["switch_to"]
                 guide.card.compact = False
@@ -163,7 +166,7 @@ class Player:
             if guide.card is not None:
                 guide.card.source = source_view.label(s.tutorial, step)
             if (guide.card is not None and box is None and step.action not in NO_PIN_NEEDED and not located.get("route")
-                    and not located.get("switch_to")):
+                    and not located.get("switch_to") and not located.get("search")):
                 first = "start point" if step.action in LINE_ACTIONS else "top-left corner"
                 second = "end point" if step.action in LINE_ACTIONS else "bottom-right corner"
                 if self.locator is None:

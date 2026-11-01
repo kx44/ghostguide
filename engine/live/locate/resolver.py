@@ -28,6 +28,7 @@ from engine.schema.tutorial import Step
 
 NOTHING_TO_CLICK = ("shortcut", "wait", "look", "switch_app")
 SIGHT_ONLY_KINDS = ("canvas", "edge", "face")     # geometry has no name to check a box against
+SEARCH_KINDS = ("button", "menu_item", "tab")     # what an app's command search can find
 DROP_ARROW_PX = 9     # the small dropdown arrow, this far past a ribbon button's icon
 TIP_MARGIN_PX = 24    # the mouse this close to a box counts as on it: model boxes can be loose
 TOOLBAR_SHARE = 0.11  # the top of the window down to here is toolbars and ribbon icons, where every button has a tooltip
@@ -142,6 +143,7 @@ class Resolver:
                  tip=None, rested=None, box_check=None):
         self.box_check = box_check           # BoxCheck: a model's second opinion on a box found by sight, or None
         self._checking = False
+        self._looked_for = ""                # what sight was last asked to find on this step
         self.uia = uia_stage                 # VSCodeLocator, SolidWorksUIA or GenericUIA
         self.store = store                   # appmap.store.AppMapStore
         self.find_window = find_window       # title part → window rect, for remembered boxes
@@ -200,16 +202,34 @@ class Resolver:
     def locate(self, step: Step) -> tuple[Optional[Box], Optional[Line]]:
         t0 = time.perf_counter()
         self.last_conf = ""
+        self._checking = False
+        self._looked_for = step.target.label
         step = self._described(step)
         try:
             if (getattr(self.uia, "follows_hops", False) and step.action == "menu_path"
                     and len(step.target.menu_path or []) > 1):
-                return self._locate_hops(step)
-            return self._locate(step)
+                found = self._locate_hops(step)
+            else:
+                found = self._locate(step)
+            if found == (None, None) and not self._checking:
+                self._offer_search(step)
+            return found
         finally:
             self.last_how += self._tip_note
             self._tip_note = ""
             self.last_seconds = time.perf_counter() - t0
+
+    def _offer_search(self, step: Step) -> None:
+        """Nothing can point at it: the app's own command search still gets you there. Not while sight still has looks left,
+        or the card would change its mind a moment later."""
+        if step.action not in ("click", "menu_path") or step.target.kind not in SEARCH_KINDS:
+            return
+        spent = getattr(self.vision, "spent", None)
+        if spent is not None and not spent(step.n, self._looked_for):
+            return
+        hint = menu.search_hint(self.store, step.target.label)
+        if hint:
+            self.last_extra["search"] = hint
 
     def _described(self, step: Step) -> Step:
         """The step with the built-in map's words for where its control is: someone checked those on this version."""
@@ -301,6 +321,7 @@ class Resolver:
             self._prev_box[step.n] = self._hop_box.pop(step.n, None)
             self._hops_clicked.setdefault(step.n, []).append((menu.hop_label(path[before]), self._prev_box[step.n]))
         label = menu.hop_label(path[i])
+        self._looked_for = label
         box = self.uia.locate(step, label)[0]
         self.last_extra = {"path_done": i}
         known = self.store.get(step.target.label) if self.store is not None else None

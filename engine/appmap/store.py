@@ -23,6 +23,8 @@ from engine.schema.appmap import AppMap, Control, Seen
 # Apps by the name tutorials use (meta.app) → file slug.
 SLUGS = {"visual studio code": "vscode", "vs code": "vscode", "solidworks": "solidworks"}
 DOCS_FIELDS = ("aliases", "menu_path", "shortcut", "source", "where")
+# How to search an app's commands, kept like a control: its name in `aliases`, its key in `shortcut`, more to say in `where`.
+SEARCH_ENTRY = "(command search)"
 
 
 def slug(app: str) -> str:
@@ -110,6 +112,11 @@ class AppMapStore:
         """The label and its aliases, for the UIA stage."""
         c = self.get(label)
         return [label] + (list(c.aliases) if c else [])
+
+    def command_search(self) -> Optional[Control]:
+        """The app's own way of searching its commands, when it has one. Looked up and found to have none reads the same."""
+        c = self.get(SEARCH_ENTRY)
+        return c if c is not None and c.aliases else None
 
     # ---------- writing (local only) ----------
     def learn(self, label: str, window: str, box: tuple[int, int, int, int], win_rect: tuple[int, int, int, int],

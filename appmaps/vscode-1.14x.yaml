@@ -19,3 +19,9 @@ New File...:
   - Explorer folder (right-click)
   - New File...
   source: 'VS Code 1.143 UI: Explorer view title button (UIA name), not in the docs'
+
+(command search):
+  aliases:
+  - Command Palette
+  shortcut: Ctrl+Shift+P
+  source: https://code.visualstudio.com/docs/getstarted/tips-and-tricks

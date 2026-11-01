@@ -505,13 +505,13 @@ def test_compile_end_to_end_then_from_the_cache(tmp_path, monkeypatch):
     stages = []
     r = compile_tutorial(str(source), opts, client=client, progress=lambda s, p: stages.append((s, p)))
     assert r.steps == 1 and not r.cached and r.cost_usd > 0
-    assert fake.calls == ["raw_actions", "tutorial", "explanations", "enrich"]
+    assert fake.calls == ["raw_actions", "tutorial", "explanations", "enrich", "enrich"]      # the controls, then the app's command search
     assert stages[-1] == ("Done", 1.0) and [p for _, p in stages] == sorted(p for _, p in stages)
     t = parse_file(r.path)
     assert t.meta.title == "Build a box" and t.meta.source.hash == r.source_hash and not t.meta.gold
     assert t.meta.compiled["prompts"] == prompts_version()
     again = compile_tutorial(str(source), opts, client=client)
-    assert again.cached and again.path == r.path and len(fake.calls) == 4
+    assert again.cached and again.path == r.path and len(fake.calls) == 5
 
 
 def test_fresh_replays_recorded_replies_without_paying_twice(tmp_path, monkeypatch):
@@ -521,7 +521,7 @@ def test_fresh_replays_recorded_replies_without_paying_twice(tmp_path, monkeypat
     spent = client.spent_usd()
     opts.fresh = True
     r = compile_tutorial(str(source), opts, client=client)
-    assert client.spent_usd() == spent and r.cost_usd == 0 and len(fake.calls) == 4
+    assert client.spent_usd() == spent and r.cost_usd == 0 and len(fake.calls) == 5
 
 
 def test_a_gold_source_gets_scored_and_logged(tmp_path, monkeypatch):
