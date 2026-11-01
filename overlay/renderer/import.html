@@ -11,6 +11,8 @@
   main { padding:18px 20px; display:flex; flex-direction:column; gap:12px; height:100%; }
   h1 { font-size:15px; font-weight:500; margin:0; }
   label { display:block; color:var(--mute); font-size:12px; margin-bottom:4px; }
+  .hint { color:var(--mute); font-size:12px; margin-top:4px; }
+  .hint b { font-weight:500; color:var(--fg); }
   input, textarea { width:100%; font:inherit; color:var(--fg); background:var(--field); border:1px solid var(--line); border-radius:8px; padding:7px 10px; outline:none; }
   input:focus, textarea:focus { border-color:var(--acc); }
   textarea { height:64px; resize:none; }
@@ -36,7 +38,8 @@
 <main>
   <h1>Import a tutorial</h1>
   <section id="form" style="display:flex;flex-direction:column;gap:12px;flex:1">
-    <div><label for="link">Link to a video or article</label><input id="link" type="text" placeholder="https://" spellcheck="false"></div>
+    <div><label for="link">Link to a video or article</label><input id="link" type="text" placeholder="https://" spellcheck="false">
+      <div class="hint">An article's words and pictures are read for you. If the site refuses, open the page in Chrome, scroll to the bottom, press Ctrl+S, choose <b>Webpage, Single File</b>, and drop that file below.</div></div>
     <div class="times" id="times">
       <div><label for="start">Video starts at (optional)</label><input id="start" type="text" placeholder="01:28" spellcheck="false"></div>
       <div><label for="end">Ends at (optional)</label><input id="end" type="text" placeholder="10:25" spellcheck="false"></div>

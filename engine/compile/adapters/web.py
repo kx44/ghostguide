@@ -214,8 +214,8 @@ def guard_url(url: str) -> None:
     on the internet, never its own services or the local network."""
     u = urlparse(url)
     if u.scheme not in ("http", "https") or not is_public_host(u.hostname):
-        raise SourceError(f"{u.hostname or url} is on this PC or its local network, so it isn't fetched. Save the page "
-                          "from your browser and drop the file here.")
+        raise SourceError(f"{u.hostname or url} is on this PC or its local network, so it isn't fetched. Open it in your browser, "
+                          "scroll to the bottom so its pictures load, then save it (Ctrl+S → Webpage, Single File) and drop the file here.")
 
 
 def fetch_limited(url: str, limit: int, timeout: float) -> tuple[int, bytes, Optional[str]]:
@@ -244,12 +244,12 @@ def fetch_page(url: str, timeout: float = 30) -> str:
     try:
         status, body, encoding = fetch_limited(url, MAX_PAGE_BYTES, timeout)
     except (httpx.HTTPError, httpx.InvalidURL) as e:
-        raise SourceError(f"Couldn't reach {host} ({e.__class__.__name__}). Check the link, or save the page "
-                          "from your browser and drop the file here.") from e
+        raise SourceError(f"Couldn't reach {host} ({e.__class__.__name__}). Check the link, or open it in your browser, "
+                          "scroll to the bottom so its pictures load, then save it (Ctrl+S → Webpage, Single File) and drop the file here.") from e
     text = body.decode(encoding or "utf-8", errors="replace")
     if looks_blocked(status, text):
-        raise SourceBlocked(f"{host} doesn't allow automatic reading. Open the page in your browser, save it "
-                            "(Save as → Webpage, Complete) and drop the file here.")
+        raise SourceBlocked(f"{host} doesn't allow automatic reading. Open the page in your browser, "
+                            "scroll to the bottom so its pictures load, then save it (Ctrl+S → Webpage, Single File) and drop the file here.")
     if status != 200:
         raise SourceError(f"{host} answered {status} for that link.")
     return text
@@ -304,7 +304,7 @@ def from_html(html: str, url: Optional[str], load_image: Callable[[str], Optiona
     to a model that wasn't saved with the page."""
     if looks_blocked(200, html):
         raise SourceBlocked("That file is the site's security check, not the article. Wait for the article to "
-                            "appear in your browser, then save it again.")
+                            "appear in your browser, then save it again (Ctrl+S → Webpage, Single File).")
     page = read_page(html)
     items: list[Item] = []
     anchor = "#start"

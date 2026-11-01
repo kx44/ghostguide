@@ -394,3 +394,21 @@ def test_a_saved_challenge_page_is_explained(tmp_path):
 def test_a_compile_of_a_single_file_page_is_read_as_a_web_page():
     from engine.compile.pipeline import WEB_FILES
     assert ".mhtml" in WEB_FILES and ".mht" in WEB_FILES
+
+
+def test_a_saved_page_that_lost_pictures_says_so_and_how_to_keep_them(tmp_path, monkeypatch):
+    from engine.compile import pipeline
+    monkeypatch.setattr(source, "STORE", tmp_path / "s")
+    page = tmp_path / "saved.html"
+    page.write_text(SAVED, encoding="utf-8")
+    ev = pipeline.web.from_file(page)
+    said = pipeline._keep_for_source_view(str(page), pipeline.Options(), ev)
+    assert "0 of its 1 pictures" in said[0] and "Single File" in said[0]
+
+
+def test_a_single_file_page_with_all_its_pictures_says_nothing(tmp_path, monkeypatch):
+    from engine.compile import pipeline
+    monkeypatch.setattr(source, "STORE", tmp_path / "s")
+    f = tmp_path / "page.mhtml"
+    _single_file(f, PAGE, {"https://site.example/a-1024.png": _png()})
+    assert pipeline._keep_for_source_view(str(f), pipeline.Options(), pipeline.web.from_file(f)) == []

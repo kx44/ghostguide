@@ -139,8 +139,9 @@ def read_source(src: str, opts: Options, client: ModelClient, note: Callable[[st
     return ev
 
 
-def _keep_for_source_view(src: str, opts: Options, ev: Evidence) -> None:
-    """What this PC holds of the source, so a step can open it later. A failure here never stops a compile."""
+def _keep_for_source_view(src: str, opts: Options, ev: Evidence) -> list[str]:
+    """What this PC holds of the source, so a step can open it later. A failure here never stops a compile. → a warning,
+    when a saved page lost pictures: browsers' "Webpage, Complete" can leave them out, with no sign of it."""
     try:
         if ev.type == "video":
             lo, hi = video.seconds(opts.start), video.seconds(opts.end)
@@ -148,9 +149,16 @@ def _keep_for_source_view(src: str, opts: Options, ev: Evidence) -> None:
             source_view.remember_video(video.clip_path(src, lo, hi) if is_url else Path(src).resolve(), lo or 0.0, ev.hash, ev.url)
         else:
             saved = Path(src) if not src.startswith(("http://", "https://")) and src.casefold().endswith(WEB_FILES) else None
-            source_view.remember_reading(web.from_file(saved, web_images=True) if saved else ev, ev.hash, ev.url)
+            kept = web.from_file(saved, web_images=True) if saved else ev
+            source_view.remember_reading(kept, ev.hash, ev.url)
+            missing = sum(1 for i in kept.items if i.kind == "image" and i.image is None)
+            if missing:
+                held = sum(1 for i in kept.items if i.image is not None)
+                return [f"This saved page holds {held} of its {held + missing} pictures, so some steps will have none. "
+                        "For all of them, scroll to the bottom of the page and save it again with Ctrl+S → Webpage, Single File."]
     except (OSError, SourceError):
         pass
+    return []
 
 
 def _slug(text: str) -> str:
@@ -167,7 +175,7 @@ def compile_tutorial(src: str, opts: Optional[Options] = None, *, client: Option
     progress("Reading the tutorial", 0.02)
     ev = read_source(src, opts, client, note=lambda s: progress(s, 0.1))
     log(f"  source: {ev.type}, {len(ev.items)} items, {ev.images} images, hash {ev.hash}" + (f"; {ev.notes}" if ev.notes else ""))
-    _keep_for_source_view(src, opts, ev)
+    pictures_lost = _keep_for_source_view(src, opts, ev)
 
     gold = opts.gold or evaluate.find_gold(ev.url)
     key = hashlib.sha256(f"{ev.hash}|{prompts_version()}|{model}|{opts.enrich}".encode()).hexdigest()[:16]
@@ -177,7 +185,7 @@ def compile_tutorial(src: str, opts: Optional[Options] = None, *, client: Option
         if Path(d["path"]).exists():
             progress("Already compiled", 1.0)
             return Result(path=Path(d["path"]), title=d["title"], steps=d["steps"], model=model, source_hash=ev.hash,
-                          cached=True, score=d.get("score"), enrich=d.get("enrich"))
+                          cached=True, score=d.get("score"), enrich=d.get("enrich"), warnings=pictures_lost)
 
     segs = segments(ev)
     log(f"  {len(segs)} segment(s), images per segment: {[s.images for s in segs]}")
@@ -221,7 +229,7 @@ def compile_tutorial(src: str, opts: Optional[Options] = None, *, client: Option
     score = evaluate.score_files(out, gold) if gold else None
     result = Result(path=out, title=tut.meta.title, steps=len(tut.steps), model=model, source_hash=ev.hash,
                     cost_usd=client.spent_usd() - spent_at_start, score=score, enrich=info,
-                    warnings=told["warnings"] + check.warnings)
+                    warnings=told["warnings"] + check.warnings + pictures_lost)
     if not told["warnings"]:      # a compile short of explanations gets another try next time
         done_file.parent.mkdir(parents=True, exist_ok=True)
         done_file.write_text(json.dumps({"path": str(out), "title": result.title, "steps": result.steps, "score": score,

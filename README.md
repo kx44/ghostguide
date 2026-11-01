@@ -96,7 +96,7 @@ scripts\dev.bat tutorials\youtube-clone-vscode.md --restart --window "youtube-cl
 scripts\dev.bat import
 ```
 
-Paste a link or drop a saved page, a video or a text file. A site that refuses automatic reading is told apart and not retried; save the page from your browser instead.
+Paste a link or drop a saved page, a video or a text file. A link's words and pictures are read for you. A site that refuses automatic reading is told apart and not retried: open the page in Chrome, scroll to the bottom, save it with Ctrl+S → Webpage, Single File, and drop that file. "Webpage, Complete" can leave pictures out, and the import says so if it did.
 
 **Keys** (all Ctrl+Alt): `→` `←` next and back · `S` skip · `G` show me · `O` the step's source · `H` hide and resume · `D` light or dark · `I` import · `K` the shortcuts · `Q` quit. *Do it for me* has no key on purpose. `scripts\dev.bat nogpu <tutorial>` turns model checks off for one run.
 
