@@ -1,12 +1,14 @@
 // The source window: the step's clip or section of the original tutorial. It's a normal window, because you scroll,
 // select and seek in it, which the overlay's own windows can't take. It opens WITHOUT focus, so typing stays in the
 // app until you click it, and it keeps above the app, so you can watch while you work.
-import { BrowserWindow, Rectangle, dialog, ipcMain, shell } from "electron";
+import { BrowserWindow, Rectangle, dialog, ipcMain, session, shell } from "electron";
 import { join } from "node:path";
 import type { Box, SourceViewMsg } from "../shared/messages";
 
 export const SOURCE_TITLE = "GhostGuide: source";
 const GAP = 12;
+const PARTITION = "persist:ghost-source";    // its own cookies, apart from everything else in the overlay
+const VISIT_MS = 15000;
 const SIZE = { video: { width: 660, height: 470 }, text: { width: 520, height: 620 } };
 
 /** The corner of the screen's work area furthest from the target, so the window doesn't cover what you're about to do. */
@@ -43,6 +45,7 @@ export class SourceWindow {
       if (this.last) e.sender.send("source:msg", this.last);
     });
     ipcMain.on("source:link", (e, url) => { if (e.sender === this.win?.webContents && isWebLink(url)) void shell.openExternal(url); });
+    ipcMain.handle("source:pictures", (e, url) => e.sender === this.win?.webContents && isWebLink(url) ? this.visit(url) : undefined);
     ipcMain.on("source:close", () => this.close());
     ipcMain.on("source:choose", async (_e, kind: "video" | "page") => {
       const extensions = kind === "video" ? ["mp4", "mkv", "webm", "mov", "avi"] : ["html", "htm", "txt", "md"];
@@ -63,13 +66,30 @@ export class SourceWindow {
 
   close() { if (this.isOpen) this.win!.close(); }
 
+  /** You asked for the page's pictures: one ordinary visit to the page, as a browser makes, and the source window shares its
+   *  cookies. Some sites only send pictures to someone who has been to the page. Nothing is read from it. */
+  private visit(url: string): Promise<void> {
+    const page = new BrowserWindow({ show: false, webPreferences: { partition: PARTITION, contextIsolation: true, nodeIntegration: false, sandbox: true } });
+    page.webContents.setAudioMuted(true);
+    page.webContents.on("will-navigate", (e, to) => { if (!isWebLink(to)) e.preventDefault(); });
+    page.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+    return new Promise(done => {
+      const finish = () => { clearTimeout(timer); if (!page.isDestroyed()) page.destroy(); done(); };
+      const timer = setTimeout(finish, VISIT_MS);
+      page.webContents.once("did-finish-load", finish);
+      page.webContents.once("did-fail-load", finish);
+      page.loadURL(url).catch(finish);
+    });
+  }
+
   private open(m: SourceViewMsg) {
     const size = m.kind === "text" || m.kind === "loading" ? SIZE.text : SIZE.video;
+    session.fromPartition(PARTITION).setPermissionRequestHandler((_wc, _perm, answer) => answer(false));
     const win = new BrowserWindow({
       ...(this.bounds ? keepOnScreen(this.bounds, this.workArea()) : cornerAway(this.workArea(), size, this.target())),
       minWidth: 360, minHeight: 280, title: SOURCE_TITLE, backgroundColor: "#17151D", autoHideMenuBar: true, show: false,
       minimizable: true, maximizable: false, fullscreenable: false,
-      webPreferences: { preload: join(__dirname, "sourcePreload.js"), contextIsolation: true, nodeIntegration: false, sandbox: true,
+      webPreferences: { preload: join(__dirname, "sourcePreload.js"), partition: PARTITION, contextIsolation: true, nodeIntegration: false, sandbox: true,
                         autoplayPolicy: "no-user-gesture-required" },
     });
     win.setAlwaysOnTop(true, "pop-up-menu");

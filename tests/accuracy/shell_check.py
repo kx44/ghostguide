@@ -489,7 +489,12 @@ def main(argv=None) -> int:
         record("text: words only, nothing from the page runs", scripts == 0)
         pics = "(()=>{const t=document.getElementById('text');return {shown:[...t.querySelectorAll('img')].filter(i=>i.complete&&i.naturalWidth>0).length,waiting:[...t.querySelectorAll('img')].filter(i=>!i.complete).length,said:[...t.querySelectorAll('p')].filter(p=>p.textContent.startsWith('A picture goes here')).length}})()"
         p = wait(lambda: (lambda v: v if v and not v["waiting"] else None)(src.js(pics)), 20) or src.js(pics)
-        record("text: each picture shows, or says the site didn't send it", p["shown"] + p["said"] >= 10 and not p["waiting"], **p)
+        record("text: each picture shows, or says the site hasn't sent it", p["shown"] + p["said"] >= 10 and not p["waiting"], **p)
+        if p["said"]:
+            click_in_source(src, "#pics")
+            q = wait(lambda: (lambda v: v if v and v["shown"] >= 10 and not v["waiting"] else None)(src.js(pics)), 30) or src.js(pics)
+            record("text: Load the page's pictures brings them in", q["shown"] >= 10, **q)
+            bring_probe()
         shot("5-text")
         bring_probe()
         hotkey("right")     # past the start check

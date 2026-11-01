@@ -11,6 +11,8 @@ const player = $<HTMLVideoElement>("player");
 let view: SourceViewMsg | undefined;
 let doc: string | undefined;
 let stopAt: number | undefined;         // pause here, unless you've moved past it yourself
+let missing: { p: HTMLElement; b: SourceBlock }[] = [];      // pictures the site wouldn't send so far
+let visited = false;                    // you've asked for the page once this run
 
 function shown(id: "video" | "text" | "none") {
   for (const k of ["video", "text", "none"] as const) $(k).hidden = k !== id;
@@ -45,8 +47,11 @@ function block(b: SourceBlock): HTMLElement {
     img.alt = b.text;
     img.addEventListener("error", () => {
       const p = document.createElement("p");
-      p.textContent = "A picture goes here, but the site didn't send it. Open in the browser to see it.";
+      p.textContent = visited ? "The site didn't send this picture. Open in the browser to see it."
+                              : "A picture goes here, but the site hasn't sent it. Load the page's pictures below.";
+      if (!visited) missing.push({ p, b });
       img.replaceWith(p);
+      $("pics").hidden = visited;
     }, { once: true });
     return img;
   }
@@ -59,6 +64,8 @@ function block(b: SourceBlock): HTMLElement {
 function renderText(blocks: SourceBlock[]) {
   const box = $("text");
   box.textContent = "";
+  missing = [];
+  $("pics").hidden = true;
   let sec: HTMLElement | undefined, at: string | undefined;
   for (const b of blocks) {
     if (!sec || b.anchor !== at) {
@@ -116,6 +123,18 @@ function render(m: SourceViewMsg) {
 
 bridge.on(render);
 $("replay").addEventListener("click", () => { if (view?.video) cue(view, true); });
+$("pics").addEventListener("click", async () => {
+  if (!view?.link) return;
+  const btn = $<HTMLButtonElement>("pics");
+  btn.disabled = true;
+  btn.textContent = "Loading the page…";
+  await bridge.loadPictures(view.link);
+  visited = true;
+  btn.disabled = false;
+  btn.textContent = "Load the page's pictures";
+  btn.hidden = true;
+  for (const { p, b } of missing.splice(0)) p.replaceWith(block(b));    // now from the same address, with the visit behind them
+});
 $("link").addEventListener("click", () => { if (view?.link) bridge.openLink(view.link); });
 $("choose").addEventListener("click", () => { if (view?.choose) bridge.choose(view.choose); });
 $("close").addEventListener("click", () => bridge.close());

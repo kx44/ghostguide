@@ -13,6 +13,7 @@ from __future__ import annotations
 import sys
 from typing import Optional
 
+GAP_PX = 2       # snug: an icon's parts are this close
 DIFF_W = 160            # thumbnail width for diffs
 CELL_DELTA = 18         # grey levels a thumbnail pixel must move to count as changed
 CHANGED_SHARE = 0.004   # this share of changed cells = "the screen changed" (~100 of 25,000)
@@ -92,6 +93,47 @@ def dropdown_arrow(img, box: tuple[int, int, int, int], origin: tuple[int, int] 
                 if best is None or d < best[0]:
                     best = (d, x0 + round(mid), sy)
     return (best[1] + origin[0], best[2] + origin[1]) if best else None
+
+
+def snug(img, box: tuple[int, int, int, int], origin: tuple[int, int] = (0, 0), pad: int = 2, ink: int = 28) -> tuple[int, int, int, int]:
+    """A loose box moved onto what it's loosely on: looks a little around it for the thing that overlaps it most, and takes
+    that thing's edges. Model boxes name the right control and can sit half off it, which is also where a click would land.
+    Keeps the box when nothing there looks like one control: a line across the window, or a thing much bigger than the box."""
+    x, y, w, h = box[0] - origin[0], box[1] - origin[1], box[2], box[3]
+    around = max(10, min(w, h) // 2)
+    x0, y0, x1, y1 = max(0, x - around), max(0, y - around), min(img.width, x + w + around), min(img.height, y + h + around)
+    if x1 - x0 < 6 or y1 - y0 < 6:
+        return box
+    part = img.crop((x0, y0, x1, y1)).convert("L")
+    px, W, H = part.load(), part.width, part.height
+    bg = sorted(part.getdata())[W * H // 2]
+    ink_at = [[abs(px[i, j] - bg) > ink for i in range(W)] for j in range(H)]
+    seen: set[tuple[int, int]] = set()
+    best, best_overlap = None, 0
+    for j0 in range(H):
+        for i0 in range(W):
+            if not ink_at[j0][i0] or (i0, j0) in seen:
+                continue
+            todo, l, t, r, b, overlap = [(i0, j0)], i0, j0, i0, j0, 0
+            seen.add((i0, j0))
+            while todo:
+                i, j = todo.pop()
+                l, t, r, b = min(l, i), min(t, j), max(r, i), max(b, j)
+                overlap += x <= x0 + i < x + w and y <= y0 + j < y + h
+                for di in range(-GAP_PX, GAP_PX + 1):         # an icon's parts are close together, not always touching
+                    for dj in range(-GAP_PX, GAP_PX + 1):
+                        n = (i + di, j + dj)
+                        if 0 <= n[0] < W and 0 <= n[1] < H and ink_at[n[1]][n[0]] and n not in seen:
+                            seen.add(n)
+                            todo.append(n)
+            if overlap > best_overlap and r - l + 1 <= w * 2 and b - t + 1 <= h * 2 and l > 0 and t > 0 and r < W - 1 and b < H - 1:
+                best, best_overlap = (l, t, r, b), overlap
+    if best is None or best[2] - best[0] < 5 or best[3] - best[1] < 5:
+        return box
+    l, t, r, b = best
+    if not (x <= x0 + (l + r) / 2 <= x + w and y <= y0 + (t + b) / 2 <= y + h):
+        return box                            # mostly outside it: that's the control next door
+    return x0 + l - pad + origin[0], y0 + t - pad + origin[1], r - l + 1 + 2 * pad, b - t + 1 + 2 * pad
 
 
 def near_clicks(img, clicks: list[tuple[int, int]], origin: tuple[int, int], pad: int = 320):

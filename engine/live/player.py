@@ -9,6 +9,7 @@ Resume lands on the first step you haven't done.
 """
 from __future__ import annotations
 
+import time
 from typing import Callable, Optional, Protocol
 
 from pydantic import ValidationError
@@ -26,6 +27,7 @@ from engine.schema import messages as m
 NO_PIN_NEEDED = {"shortcut", "wait", "look", "switch_app"}
 LINE_ACTIONS = {"draw_line", "drag"}
 AHEAD_STEPS = 3          # how many coming steps to look for
+DID_IT_WAIT_S = 8.0      # after Do it for me, this long for the step to check done before saying it hasn't
 
 SchemeFn = Callable[[Optional[m.Box]], tuple[str, Optional[float]]]
 
@@ -46,6 +48,7 @@ class Player:
         self._acted: set[int] = set()            # steps Do it for me acted on
         self.executor = executor                # live/execute.Executor: Do it for me; None = not offered
         self._armed: Optional[int] = None        # the step whose Do it for me is waiting for its second press
+        self._did_it: Optional[tuple[int, float]] = None     # the step Do it for me last pressed, and when
         # The start check: only for a tutorial that hasn't begun. start_items() reads the real screen.
         self.start_items = start_items
         self.start_open = start_items is not None and session.current == 1 and session.statuses[0] == "pending"
@@ -245,6 +248,7 @@ class Player:
         activity.acted(step.n, step.title, [op.kind for op in ops])
         if self.tracker is not None:     # we just acted on this step's target: a hint already true now counts
             self._acted.add(step.n)
+            self._did_it = (step.n, time.monotonic())
         return [m.Toast(text=say_done(step), ms=2000)]
 
     def _look_ahead(self) -> None:
@@ -331,6 +335,21 @@ class Player:
         return s.current, s.hidden, done
 
     def apply_checked(self, r) -> list[m._Msg]:
+        return self._apply_checked(r) + self._didnt_take()
+
+    def _didnt_take(self) -> list[m._Msg]:
+        """A press going out doesn't mean the app took it. Only the step's check can say, so say when it hasn't."""
+        if self._did_it is None:
+            return []
+        n, t = self._did_it
+        if self.session.finished or self.session.current != n:
+            self._did_it = None
+        elif time.monotonic() - t >= DID_IT_WAIT_S:
+            self._did_it = None
+            return [m.Toast(text="I pressed it, but this step hasn't checked done. It may be slow, or it didn't take: try it yourself, or Next.", kind="warn", ms=6000)]
+        return []
+
+    def _apply_checked(self, r) -> list[m._Msg]:
         """Act on a check_round() result: while showing, mark the steps done and move on; while hidden,
         remember them for Resume. Steps you already passed (Back, Jump) never auto-advance: only a step
         still pending does, so going back to look at one isn't undone a second later."""
@@ -472,8 +491,9 @@ class Player:
             had_target = self.last_guide is not None and self.last_guide.box is not None
             if not s.finished and s.status(s.current) == "pending" and self._clicked_it(s.current):
                 self._remember(s.current)     # you clicked the outline and went on: as good as a check saying done
+            unsure = self._not_seen_yet()
             ev = s.next()
-            return ([m.Mark(result="ok")] if had_target and ev.kind != "noop" else []) + self._after(ev)
+            return ([m.Mark(result="ok")] if had_target and ev.kind != "noop" else []) + self._after(ev) + unsure
         if t == "back":
             return self._after(s.back())
         if t == "skip":
@@ -494,6 +514,16 @@ class Player:
             s.checker = None
             return self._after(ev)
         return []
+
+    def _not_seen_yet(self) -> list[m._Msg]:
+        """Next always works, but a step left undone can spoil later ones, so a rule that still says "not yet" is worth a word."""
+        s = self.session
+        if self.tracker is None or s.finished or s.step is None or s.status(s.current) != "pending":
+            return []
+        v = self.tracker.cached(s.step)
+        if v.result != "not_yet" or v.stage != "rule" or not v.why:
+            return []
+        return [m.Toast(text=f"Moved on, but step {s.current} hasn't checked done ({v.why}). If later steps look wrong, go Back.", kind="warn", ms=6000)]
 
     def _toggle_scheme(self) -> list[m._Msg]:
         """Ctrl+Alt+D: the other colours from now on; again: back to matching the app behind each target."""

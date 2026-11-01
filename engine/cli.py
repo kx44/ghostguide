@@ -5,6 +5,7 @@ import argparse
 import glob
 import json
 import sys
+import time
 from pathlib import Path
 
 from engine import activity, config
@@ -484,13 +485,14 @@ def _serve(player, args) -> int:
 class _Both:
     """What the engine prints goes to its window and to a file, which outlives the window."""
 
-    def __init__(self, *to):
-        self.to = to
+    def __init__(self, window, file):
+        self.window, self.file = window, file
 
     def write(self, s: str) -> int:
-        for f in self.to:
+        when = time.strftime("%H:%M:%S ") if s.strip() else ""
+        for f, text in ((self.window, s), (self.file, when + s)):
             try:
-                f.write(s)
+                f.write(text)
                 f.flush()
             except (OSError, ValueError):     # a closed window or a full disk never stops a tutorial
                 pass

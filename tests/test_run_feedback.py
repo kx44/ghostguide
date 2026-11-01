@@ -184,3 +184,61 @@ def test_end_stops_the_engine(tmp_path):
 def test_end_is_a_message_on_both_sides():
     assert "end" in m.FROM_OVERLAY_TYPES
     assert m.parse_from_overlay('{"type": "end"}').type == "end"
+
+
+# ---------- the second run's comments
+def test_snug_moves_a_box_half_off_a_control_onto_it():
+    from PIL import Image, ImageDraw
+
+    from engine.live.capture import snug
+    img = Image.new("RGB", (300, 200), (225, 225, 225))
+    d = ImageDraw.Draw(img)
+    d.rectangle((100, 40, 124, 68), fill=(40, 40, 40))         # the icon
+    d.rectangle((150, 40, 174, 68), fill=(40, 40, 40))         # its neighbour
+    d.line((0, 90, 299, 90), fill=(90, 90, 90))                # a line across the window
+    assert snug(img, (98, 52, 26, 36), pad=2) == (98, 38, 29, 33)
+    assert snug(Image.new("RGB", (200, 200)), (50, 45, 60, 70)) == (50, 45, 60, 70)     # nothing there
+    assert snug(img, (40, 84, 20, 12)) == (40, 84, 20, 12)                               # only the line
+
+
+def test_after_do_it_a_step_that_hasnt_checked_done_is_said(tmp_path, monkeypatch):
+    from engine.live import player as pl
+    p = player(tmp_path)
+    p._did_it = (11, 0.0)
+    monkeypatch.setattr(pl.time, "monotonic", lambda: 1.0)
+    assert p._didnt_take() == []
+    monkeypatch.setattr(pl.time, "monotonic", lambda: pl.DID_IT_WAIT_S + 1)
+    assert "hasn't checked done" in p._didnt_take()[0].text
+    assert p._didnt_take() == []       # once
+
+
+def test_next_past_a_rule_that_says_not_yet_is_said(tmp_path):
+    from engine.live.verify import Verdict
+    p = player(tmp_path)
+    p.tracker = SimpleNamespace(cached=lambda s: Verdict("not_yet", "rule", why="no Sketch2"), forget=lambda n: None)
+    assert "no Sketch2" in p._not_seen_yet()[0].text
+    p.tracker = SimpleNamespace(cached=lambda s: Verdict("not_yet", "diff", why="nothing changed yet"), forget=lambda n: None)
+    assert p._not_seen_yet() == []
+
+
+def test_a_shortcut_alone_doesnt_stop_a_box_being_remembered(tmp_path):
+    from engine.appmap.store import AppMapStore
+    store = SimpleNamespace(learn=lambda *a: True)
+    r = Resolver(SimpleNamespace(window="W", last_how="", last_extra={}), store, lambda w: (0, 0, 500, 500), None, None, Hops())
+    step = MUG.step(1)
+    r.last_extra = {"route": {"shortcut": "Ctrl+N"}}
+    assert r.learn(step, BOX)
+    r.last_extra = {"route": {"path": ["File", "New"]}}
+    assert not r.learn(step, BOX)
+
+
+def test_a_route_that_dead_ended_offers_the_apps_own_search(monkeypatch):
+    from engine.live.locate import menu
+    monkeypatch.setattr(menu, "search_hint", lambda store, label: f"search for {label}")
+    r = Resolver(SimpleNamespace(window="W", last_how="", last_extra={}, follows_hops=True, locate=lambda s, l=None: (None, None)), None, None, None, None, Hops())
+    s = MUG.step(29)
+    r._gave_up.add(s.n)
+    r.locate(s)
+    assert r.last_extra["search"] == "search for Plane"
+    r.forget(s.n)
+    assert s.n not in r._gave_up

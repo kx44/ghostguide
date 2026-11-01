@@ -659,7 +659,7 @@ def test_second_press_runs_and_a_refusal_is_said():
     ex = FakeExecutor()
     p = player_at(11, executor=ex)
     assert "press again" in p.handle({"type": "do_it"})[-1].text and ex.ran == []
-    assert p.handle({"type": "do_it"})[0].text.startswith("Done for you") and len(ex.ran) == 1
+    assert p.handle({"type": "do_it"})[0].text.startswith("Pressed it") and len(ex.ran) == 1
     ex = FakeExecutor(refuse="Bring SOLIDWORKS to the front first")
     p = player_at(11, stage="uia", executor=ex)
     assert p.handle({"type": "do_it"})[0].kind == "warn"
@@ -794,7 +794,7 @@ def test_do_it_uses_the_shortcut_when_nothing_was_found_or_only_a_route_hop():
     ex = FakeExecutor()
     p = player_at(8, stage="route", executor=ex)
     p._located_extra[8] = {"route": {"path": ["Sketch", "Line"], "shortcut": "L"}}
-    assert p.handle({"type": "do_it"})[0].text.startswith("Done for you")
+    assert p.handle({"type": "do_it"})[0].text.startswith("Pressed it")
     assert ex.ran[0][0].keys == ("L",)
 
 

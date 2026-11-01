@@ -134,7 +134,7 @@ def plan(step: Step, box: Optional[Box], click_at: Optional[tuple[int, int]] = N
 
 
 def say_done(step: Step) -> str:
-    return f"Done for you: {step.title}."
+    return f"Pressed it for you: {step.title}. Watching for it to take."
 
 
 # ---------- Windows -------------------------------------------------------------------------------
@@ -256,6 +256,7 @@ def _click(op: Op) -> None:
             u32.keybd_event(v, 0, 0, 0)
         for _ in range(op.count):
             u32.mouse_event(down, 0, 0, 0, 0)
+            time.sleep(0.04)                                    # a press and release in the same instant can be dropped
             u32.mouse_event(up, 0, 0, 0, 0)
             time.sleep(0.05)
     finally:

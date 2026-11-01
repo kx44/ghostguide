@@ -339,6 +339,9 @@ class SparkVision:
                 memo.conf, memo.how = call.confidence, f"vision: Spark pointed ({call.confidence})"
                 if near is None and not line_step and t.kind not in ("canvas", "edge", "face"):
                     self._refine(step, fields["label"], img, origin, memo, c)
+                    if memo.box is not None and not is_tab:
+                        from engine.live.capture import snug
+                        memo.box = Box(**dict(zip("xywh", snug(img, (memo.box.x, memo.box.y, memo.box.w, memo.box.h), origin))))
                     if memo.box is not None and is_tab and self.regions:
                         memo.box = Box(x=memo.box.x, y=origin[1] + round(TAB_TOP * s), w=memo.box.w, h=round(TAB_H * s))
                 break

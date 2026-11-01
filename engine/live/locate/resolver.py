@@ -180,6 +180,7 @@ class Resolver:
         self._hop_box: dict[int, Optional[Box]] = {}  # the current chip's control, as found (no dropdown arrow)
         self._pending_look: dict[str, list[int]] = {}  # its pixels as first found, before a click changes them
         self._new_route: dict[int, list[str]] = {}    # a route Wonder gave, replacing the tutorial's
+        self._gave_up: set[int] = set()               # steps whose route got as far as a hop nothing could find
         self.last_how = ""
         self.last_stage = ""
         self.last_conf = ""
@@ -199,6 +200,7 @@ class Resolver:
         """The step is showing again: fresh hops and a fresh vision allowance."""
         self.hops.forget(n)
         self._hops_clicked.pop(n, None)
+        self._gave_up.discard(n)
         if self.vision is not None and hasattr(self.vision, "forget"):
             self.vision.forget(n)
         if self.box_check is not None:
@@ -319,6 +321,10 @@ class Resolver:
             if self._still_looking(step, step.target.label):
                 self.last_how, self.last_stage = "vision: already looking", "none"
                 return None, None
+            if b is not None and self.look_of is not None and step.target.label not in self._pending_look:
+                look = self.look_of(b)        # as first found: with the mouse on it later, or after the click, it looks different
+                if look is not None:
+                    self._pending_look[step.target.label] = look
             if self._checking:
                 self.last_how, self.last_stage = "vision: a second look at the box", "none"
                 return None, None
@@ -390,6 +396,10 @@ class Resolver:
         self._looked_for = label
         box = self.uia.locate(step, label)[0]
         self.last_extra = {"path_done": i}
+        if step.n in self._gave_up:       # the route dead-ended once: the outline starts over, and the app's own search is there too
+            hint = menu.search_hint(self.store, step.target.label)
+            if hint:
+                self.last_extra["search"] = hint
         known = self.store.get(step.target.label) if self.store is not None else None
         if known is not None and known.shortcut and not step.target.shortcut:
             self.last_extra["shortcut"] = known.shortcut       # the card offers it: small icons are where a box can miss
@@ -442,6 +452,7 @@ class Resolver:
                 why, stage = self.wonder.last_how, "wonder"
         if box is None and i > 0 and tried:
             self.hops.back_to_start(step.n)       # it had its tries: the menu must have closed again
+            self._gave_up.add(step.n)
             self.last_extra["path_done"] = 0
         self.hops.found(step.n, box)
         self.last_how, self.last_stage = f"hop {i + 1} of {len(path)}, {label}: {why}", stage if box is not None or stage == "wonder" else "none"
@@ -542,10 +553,10 @@ class Resolver:
             self._learn_hop(label, hop_box)
         if self.store is None or self.find_window is None or not appmap_hit.learnable(step):
             return False
-        if self.last_extra.get("route") or (step.action == "menu_path" and len(step.target.menu_path or []) > 1):
+        if len((self.last_extra.get("route") or {}).get("path") or []) > 1 or (step.action == "menu_path" and len(step.target.menu_path or []) > 1):
             return False       # the box drawn last was a hop on the way, not the control itself
         rect = self.find_window(self.window)
         if rect is None:
             return False
-        look = self.look_of(box) if self.look_of else None
+        look = self._pending_look.pop(step.target.label, None) or (self.look_of(box) if self.look_of else None)
         return self.store.learn(step.target.label, self.window, (box.x, box.y, box.w, box.h), rect, look)

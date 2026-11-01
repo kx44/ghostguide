@@ -161,6 +161,7 @@ export interface ShellInfo { keyBar: boolean; keys: KeyHint[] }
 // The bridge exposed by sourcePreload.ts as window.ghostSource (the source window: a normal window, opened without focus).
 export interface SourceBridge {
   on(cb: (m: SourceViewMsg) => void): void;
+  loadPictures(url: string): Promise<void>;
   openLink(url: string): void;
   choose(kind: "video" | "page"): void;
   close(): void;
