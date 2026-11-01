@@ -14,7 +14,7 @@ export const TO_OVERLAY = [
 ] as const;
 export const FROM_OVERLAY = [
   "hello", "show_me", "do_it", "next", "back", "skip", "hide", "resume", "jump", "pin", "unpin", "import", "open_tutorial", "start_ok", "use_window",
-  "source", "source_file", "toggle_scheme", "toggle_local",
+  "source", "source_file", "toggle_scheme", "toggle_local", "end",
 ] as const;
 
 export interface Box { x: number; y: number; w: number; h: number }
@@ -65,6 +65,7 @@ export interface Card {
   dev_hint?: string;          // dev pins: how to pin this step's target
   compact?: boolean;          // repeat steps: title + Up next + Next only
   up_next?: string;           // the next step's title (compact cards)
+  confirm?: boolean;          // Do it for me is waiting for its second press
   source?: string;            // the source button's words: "▶ 01:40" for a clip, "Source" for text
 }
 
@@ -96,7 +97,7 @@ export interface CompileDoneMsg {
   score?: string[]; warnings?: string[]; error?: string; blocked?: boolean;
 }
 
-export interface SourceBlock { kind: "heading" | "text" | "image"; text: string; anchor?: string; image?: string }
+export interface SourceBlock { kind: "heading" | "text" | "image"; text: string; anchor?: string; image?: string; web_image?: string }
 export interface SourceViewMsg {
   type: "source_view"; kind: "video" | "text" | "none" | "loading"; n: number; of: number; title: string; tutorial: string;
   follow?: boolean;        // the step moved on while the window is open: no window of its own, no autoplay
@@ -119,7 +120,7 @@ export type ToOverlay = GuideMsg | ClearMsg | StateMsg | ToastMsg | ShowMeMsg | 
 export interface DisplayInfo { id: number | string; x: number; y: number; w: number; h: number; scale: number; primary: boolean }
 export type FromOverlay =
   | { type: "hello"; displays: DisplayInfo[]; version?: string; replay?: boolean }
-  | { type: "show_me" | "do_it" | "next" | "back" | "skip" | "hide" | "resume" | "unpin" | "start_ok" | "use_window" | "toggle_scheme" | "toggle_local" }
+  | { type: "show_me" | "do_it" | "next" | "back" | "skip" | "hide" | "resume" | "unpin" | "start_ok" | "use_window" | "toggle_scheme" | "toggle_local" | "end" }
   | { type: "pin"; at: Pt }
   | { type: "jump"; n: number }
   | { type: "import"; url?: string; file?: string; text?: string; start?: string; end?: string }

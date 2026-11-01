@@ -1,5 +1,6 @@
 // The source window: the step's clip, its section of the text, or why neither is on this PC. It only shows what the
-// engine sends. The tutorial's words go in as text, never as HTML, and nothing here loads from the web.
+// engine sends. The tutorial's words go in as text, never as HTML. The one thing that loads from the web is a picture a
+// saved page didn't keep, from the address the page gives for it, with no referrer.
 import type { SourceBlock, SourceBridge, SourceViewMsg } from "../../shared/messages";
 
 declare global { interface Window { ghostSource: SourceBridge } }
@@ -37,10 +38,16 @@ player.addEventListener("seeking", () => {
 });
 
 function block(b: SourceBlock): HTMLElement {
-  if (b.kind === "image" && b.image) {
+  if (b.kind === "image" && (b.image || b.web_image)) {
     const img = document.createElement("img");
-    img.src = b.image;
+    img.referrerPolicy = "no-referrer";
+    img.src = (b.image ?? b.web_image)!;
     img.alt = b.text;
+    img.addEventListener("error", () => {
+      const p = document.createElement("p");
+      p.textContent = "A picture goes here, but the site didn't send it. Open in the browser to see it.";
+      img.replaceWith(p);
+    }, { once: true });
     return img;
   }
   const e = document.createElement(b.kind === "heading" ? "h2" : "p");

@@ -153,6 +153,7 @@ class Player:
             if guide.card is not None and self._executor(step) is not None and can_do(step, self._act_box(step.n, box)):
                 at = 1 if "show_me" in guide.card.actions else 0
                 guide.card.actions.insert(at, "do_it")
+                guide.card.confirm = self._armed == step.n
             if located.get("search") and guide.card is not None:
                 guide.card.detail = " ".join(x for x in (guide.card.detail, f"Can't point at it. {located['search']}") if x)
                 guide.card.compact = False
@@ -232,11 +233,12 @@ class Player:
         if not can_do(step, box):
             return [m.Toast(text="There's nothing sure to act on for this step, so it's yours.", kind="warn")]
         stage = getattr(self.locator, "last_stage", "")
-        if needs_confirm(step, stage, box) and step.n not in self.pins.steps and self._armed != step.n:
+        vouched = box is not None and getattr(self.locator, "vouched", lambda b: False)(box) is True
+        if needs_confirm(step, stage, box, vouched) and step.n not in self.pins.steps and self._armed != step.n:
             self._armed = step.n
-            return [m.Toast(text="Found by sight, not by name. Check the outline, then press Do it for me again.", ms=5000)]
+            return self.current() + [m.Toast(text="Nothing has confirmed this outline yet. If it's on the right spot, press again.", ms=5000)]
         self._armed = None
-        ops = plan_ops(step, box)
+        ops = plan_ops(step, box, self._located_extra.get(step.n, {}).get("click_at"))
         why = executor.run(ops)
         if why:
             return [m.Toast(text=why, kind="warn", ms=4000)]
@@ -267,7 +269,27 @@ class Player:
         except Exception as e:      # UIA hiccups (window closing, element gone) must not end the session
             self.locator.last_how = f"locator error: {e}"
             box, line = None, None
-        return step.n, box, line, dict(getattr(self.locator, "last_extra", None) or {})
+        found = step.n, box, line, dict(getattr(self.locator, "last_extra", None) or {})
+        self._peek_next()
+        return found
+
+    def _peek_next(self) -> None:
+        """Where the next step's target is on this same reading of the app, so its outline comes up with its card. The next
+        round's reading corrects it within a second, if that step's own action moved things."""
+        s = self.session
+        peek = getattr(self.locator, "peek", None)
+        n = s.current + 1
+        if peek is None or n > s.of or n in self.pins.steps or s.status(n) != "pending":
+            return
+        try:
+            seen = peek(s.tutorial.step(n))
+        except Exception:         # only ever a head start
+            return
+        if seen is None:
+            self._located.pop(n, None)
+            self._located_extra.pop(n, None)
+        else:
+            self._located[n], self._located_extra[n] = seen[:2], seen[2]
 
     def apply_located(self, found) -> list[m._Msg]:
         """Store a locate_current() result; the guide again when the target moved, appeared or went away

@@ -27,6 +27,7 @@ class Item:
     end: Optional[float] = None
     anchor: Optional[str] = None       # "#section" (web, text)
     image: Optional[bytes] = None      # JPEG
+    link: Optional[str] = None         # source view only: where a picture a saved page didn't keep lives on the web
 
     def to_wire(self, name: Optional[str] = None) -> dict:
         d = {"kind": self.kind, "text": self.text, "t": self.t, "end": self.end, "anchor": self.anchor}

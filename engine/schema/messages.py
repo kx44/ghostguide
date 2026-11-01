@@ -97,6 +97,7 @@ class Card(BaseModel):
     compact: bool = False             # repeat steps: title + Next only, so the instruction never vanishes
     up_next: Optional[str] = None     # the next step's title, shown on compact cards
     source: Optional[str] = None      # the source button's words: "▶ 01:40" for a clip, "Source" for text
+    confirm: bool = False             # Do it for me is waiting for its second press
 
 
 # ---------------- engine → overlay ----------------
@@ -198,6 +199,7 @@ class SourceBlock(BaseModel):
     text: str = ""
     anchor: Optional[str] = None
     image: Optional[str] = None         # file:// address of a picture kept on this PC
+    web_image: Optional[str] = None     # https address of one a saved page left behind: the source window shows it from there
 
 
 class SourceView(_Msg):          # shell/sourceView.ts
@@ -328,13 +330,18 @@ class ToggleLocal(_Simple):
     type: Literal["toggle_local"] = "toggle_local"
 
 
+class End(_Simple):
+    """The person ended the tutorial: the overlay is quitting, and the engine stops too. Its place is already saved."""
+    type: Literal["end"] = "end"
+
+
 FromOverlay = Union[Hello, ShowMeReq, DoIt, Next, Back, Skip, Hide, Resume, Jump, PinReq, Unpin, Import, OpenTutorial, StartOk, UseWindow,
-                    SourceReq, SourceFile, ToggleScheme, ToggleLocal]
+                    SourceReq, SourceFile, ToggleScheme, ToggleLocal, End]
 
 TO_OVERLAY_TYPES = ("guide", "clear", "state", "toast", "show_me", "mark", "start_check", "compile_progress", "compile_done",
                     "source_view")
 FROM_OVERLAY_TYPES = ("hello", "show_me", "do_it", "next", "back", "skip", "hide", "resume", "jump", "pin", "unpin", "import",
-                      "open_tutorial", "start_ok", "use_window", "source", "source_file", "toggle_scheme", "toggle_local")
+                      "open_tutorial", "start_ok", "use_window", "source", "source_file", "toggle_scheme", "toggle_local", "end")
 
 
 def parse_from_overlay(raw: Union[str, bytes, dict]) -> FromOverlay:

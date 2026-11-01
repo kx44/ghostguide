@@ -23,12 +23,14 @@ export function fallbackHtml(g: GuideMsg): { top: string; body: string } {
 // Where the user dragged the card to (window px). Once set, every later card goes there too, until a
 // double-click on its top row hands placement back to the automatic rule.
 let pinned: { x: number; y: number } | null = null;
+let sized: number | null = null;       // the width dragged to, for every card from then on; double-click the corner to undo
+const MIN_W = 240, MAX_W = 900;
 
 export function mountCard(ctx: Ctx, g: GuideMsg, c: Card, m: Mounted, onAction: (a: string, btn: HTMLElement) => void,
                           reserveBottom: number, avoid: Rect[] = []): HTMLDivElement {
   const actions = c.actions.map(a => {
-    const label = a === "do_it" && g.extra.action === "type" ? "Fill it for me" : LABELS[a] ?? a;
-    return `<button data-a="${esc(a)}" class="${a === "next" && c.actions.length > 1 ? "link" : a === "next" ? "pri" : ""}">${esc(label)}</button>`;
+    const label = a === "do_it" && c.confirm ? "Press again to do it" : a === "do_it" && g.extra.action === "type" ? "Fill it for me" : LABELS[a] ?? a;
+    return `<button data-a="${esc(a)}" class="${a === "next" && c.actions.length > 1 ? "link" : a === "next" || (a === "do_it" && c.confirm) ? "pri" : ""}">${esc(label)}</button>`;
   }).join("");
   const meta = `<div class="meta" title="Drag to move · double-click to put it back"><span>${esc(c.meta)}</span>` +
     `${c.low_confidence ? `<span class="unsure" title="This step was inferred or unclear in the source">unsure</span>` : ""}` +
@@ -47,7 +49,9 @@ export function mountCard(ctx: Ctx, g: GuideMsg, c: Card, m: Mounted, onAction: 
       (c.done_when ? `<div class="done">Done when: ${esc(c.done_when)}</div>` : "") +
       (c.dev_hint ? `<div class="devhint">${esc(c.dev_hint)}</div>` : "") +
       (actions ? `<div class="acts">${actions}</div>` : "");
-  const card = el(ctx.ov, `card hit${m.wide && !c.compact ? " wide" : ""}${c.compact ? " compact" : ""}`, "visibility:hidden", html);
+  const card = el(ctx.ov, `card hit${m.wide && !c.compact ? " wide" : ""}${c.compact ? " compact" : ""}`, "visibility:hidden",
+                  html + `<div class="grip" title="Drag to resize · double-click to put it back"></div>`);
+  if (sized) { card.style.width = `${sized}px`; card.style.maxWidth = "none"; }
   card.querySelectorAll<HTMLButtonElement>("button[data-a]").forEach(b => b.addEventListener("click", () => onAction(b.dataset.a!, b)));
   card.querySelectorAll<HTMLButtonElement>("button[data-copy]").forEach(b => b.addEventListener("click", () => copied(b)));
 
@@ -68,7 +72,41 @@ export function mountCard(ctx: Ctx, g: GuideMsg, c: Card, m: Mounted, onAction: 
   if (pinned) put(pinned.x, pinned.y); else auto();
   card.style.visibility = "";
   draggable(card, ctx, put, auto);
+  resizable(card, ctx, () => { if (pinned) put(pinned.x, pinned.y); else auto(); });
   return card;
+}
+
+/** Wider or narrower, by the bottom-right corner, with a shield like a drag so a fast move can't drop it. Height follows. */
+function resizable(card: HTMLDivElement, ctx: Ctx, place: () => void) {
+  const grip = card.querySelector<HTMLElement>(".grip")!;
+  grip.addEventListener("pointerdown", e => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const sx = e.clientX, w0 = card.offsetWidth;
+    const shield = el(ctx.ov, "dragshield hit", "cursor:ew-resize");
+    window.dispatchEvent(new Event("ghost:hits"));
+    const move = (ev: PointerEvent) => {
+      sized = Math.round(Math.min(Math.max(MIN_W, w0 + ev.clientX - sx), Math.min(MAX_W, ctx.W - 8)));
+      card.style.width = `${sized}px`;
+      card.style.maxWidth = "none";
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      shield.remove();
+      place();                // the arrow and the room around the target follow the new size
+      window.dispatchEvent(new Event("ghost:hits"));
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  });
+  grip.addEventListener("dblclick", () => {
+    sized = null;
+    card.style.width = card.style.maxWidth = "";
+    place();
+    window.dispatchEvent(new Event("ghost:hits"));
+  });
 }
 
 /** Drag the card by its top row. While dragging, a full-window hit area keeps the (normally click-through)

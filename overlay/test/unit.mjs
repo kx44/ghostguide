@@ -146,7 +146,7 @@ test("tray: the menu matches what can be done now", () => {
   assert.equal(item(nothing, "Next").enabled, false);
   assert.equal(item(nothing, "Open this").enabled, false);
   assert.notEqual(item(nothing, "Import").enabled, false);
-  assert.notEqual(item(nothing, "Quit").enabled, false);
+  assert.notEqual(item(nothing, "End and quit").enabled, false);
 
   const paused = L.trayMenu({ engineUp: true, state: state({ hidden: true }), keyBar: false, sourceOpen: false }, actions);
   assert.ok(item(paused, "Resume"));

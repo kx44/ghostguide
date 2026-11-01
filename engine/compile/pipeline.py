@@ -147,8 +147,9 @@ def _keep_for_source_view(src: str, opts: Options, ev: Evidence) -> None:
             is_url = src.startswith(("http://", "https://"))
             source_view.remember_video(video.clip_path(src, lo, hi) if is_url else Path(src).resolve(), lo or 0.0, ev.hash, ev.url)
         else:
-            source_view.remember_reading(ev)
-    except OSError:
+            saved = Path(src) if not src.startswith(("http://", "https://")) and src.casefold().endswith(WEB_FILES) else None
+            source_view.remember_reading(web.from_file(saved, web_images=True) if saved else ev, ev.hash, ev.url)
+    except (OSError, SourceError):
         pass
 
 

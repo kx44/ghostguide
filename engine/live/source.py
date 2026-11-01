@@ -65,6 +65,8 @@ def remember_reading(ev, *keys: Optional[str]) -> None:
             name = f"i{n:04d}.jpg"
             (folder / name).write_bytes(item.image)
             block["image"] = name
+        elif item.link:
+            block["web_image"] = item.link
         blocks.append(block)
     (folder / "reading.json").write_text(json.dumps(blocks, ensure_ascii=False), encoding="utf-8")
     _remember({"reading": ev.hash}, ev.hash, ev.url, *keys)
@@ -86,6 +88,8 @@ def _reading(entry: Optional[dict]) -> Optional[list[dict]]:
     for b in blocks:
         if b.get("image"):
             b["image"] = (folder / b["image"]).resolve().as_uri()
+        if b.get("web_image") and not (safe_link(b["web_image"]) or "").startswith("https://"):
+            del b["web_image"]
     return blocks
 
 
@@ -243,7 +247,7 @@ class Sources:
         host = urlparse(url).netloc
         src = self.tut.meta.source
         try:
-            ev = from_html(fetch_page(url, timeout=FETCH_TIMEOUT_S), url, lambda _: None)    # words only: no images fetched
+            ev = from_html(fetch_page(url, timeout=FETCH_TIMEOUT_S), url, lambda _: None, web_images=True)    # pictures stay on the site
             remember_reading(ev, src.hash, src.url)
         except SourceBlocked:
             self.refused = (f"This page isn't saved on this PC, and {host} doesn't allow automatic reading. "
@@ -269,7 +273,7 @@ class Sources:
         from engine.compile.adapters import SourceError, text, web
 
         try:
-            ev = web.from_file(p) if suffix in (".html", ".htm") else text.from_file(p)
+            ev = web.from_file(p, web_images=True) if suffix in (".html", ".htm") else text.from_file(p)
         except SourceError as e:
             view = self.view(step, of)
             view.note = str(e)

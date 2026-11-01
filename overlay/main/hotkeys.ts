@@ -17,7 +17,7 @@ export const HOTKEYS: Hotkey[] = [
   { accel: "Control+Alt+D", what: "light / dark, or back to automatic", bar: "Light / dark", msg: () => ({ type: "toggle_scheme" }) },
   { accel: "Control+Alt+I", what: "import a tutorial", bar: "Import a tutorial", msg: () => "import" },
   { accel: "Control+Alt+K", what: "show / hide the shortcuts", bar: "These shortcuts", msg: () => "keybar" },
-  { accel: "Control+Alt+Q", what: "quit overlay", bar: "Quit", msg: () => "quit" },
+  { accel: "Control+Alt+Q", what: "end the tutorial and quit", bar: "End", msg: () => "quit" },
   { accel: "Control+Alt+P", what: "pin a corner under the mouse", dev: true, msg: () => ({ type: "pin", at: cursorPhysical() }) },
   { accel: "Control+Alt+U", what: "remove this step's pin", dev: true, msg: () => ({ type: "unpin" }) },
 ];

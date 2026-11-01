@@ -207,7 +207,8 @@ app.whenReady().then(() => {
     sendShell(w);
     for (const r of w.queue.splice(0)) w.win.webContents.send("ghost:msg", r);
   });
-  ipcMain.on("ghost:send", (e, msg: FromOverlay) => {      // the overlay's own windows and the import window; never the source window
+  ipcMain.on("ghost:send", (e, msg: FromOverlay) => {
+    if (msg.type === "end" && [...wins.values()].some(x => x.win.webContents === e.sender)) { endAll(); return; }      // the overlay's own windows and the import window; never the source window
     if ([...wins.values()].some(x => x.win.webContents === e.sender) || importWin?.webContents === e.sender) link?.send(msg);
   });
   ipcMain.on("ghost:copy", (_e, text: string) => { if (typeof text === "string") clipboard.writeText(text); });
@@ -256,7 +257,7 @@ app.whenReady().then(() => {
       });
 
   const failed = registerHotkeys(() => !!lastState?.hidden, {
-    send: m => link?.send(m), quit: () => app.quit(), openImport, toggleSource, toggleKeyBar: () => setKeyBar(!settings.keyBar),
+    send: m => link?.send(m), quit: endAll, openImport, toggleSource, toggleKeyBar: () => setKeyBar(!settings.keyBar),
   }, DEV);
   failedKeys = failed;
   for (const w of wins.values()) if (w.ready) sendShell(w);
@@ -269,7 +270,7 @@ app.whenReady().then(() => {
     localOnly: () => link?.send({ type: "toggle_local" }),
     importTutorial: openImport,
     setKeyBar,
-    quit: () => app.quit(),
+    quit: endAll,
   });
   if (argv.includes("--import")) openImport();
   if (failed.length) {
@@ -288,3 +289,9 @@ app.whenReady().then(() => {
 // The link closing updates the tray, so the tray goes first and for good: an update on a destroyed tray is an error dialog on quit.
 app.on("will-quit", () => { unregisterHotkeys(); tray?.destroy(); tray = undefined; link?.close(); });
 app.on("window-all-closed", () => app.quit());
+
+/** End the tutorial: the engine stops too, so the next run doesn't connect to this one. Its place is saved as it goes. */
+function endAll() {
+  link?.send({ type: "end" });
+  setTimeout(() => app.quit(), 150);
+}

@@ -43,7 +43,7 @@ export function trayMenu(v: TrayView, a: TrayActions): MenuItemConstructorOption
     { label: "Import a tutorial…", accelerator: "Ctrl+Alt+I", registerAccelerator: false, click: a.importTutorial },
     { label: "Show the shortcuts", type: "checkbox", checked: v.keyBar, accelerator: "Ctrl+Alt+K", registerAccelerator: false, click: item => a.setKeyBar(item.checked) },
     { type: "separator" },
-    { label: "Quit GhostGuide", accelerator: "Ctrl+Alt+Q", registerAccelerator: false, click: a.quit },
+    { label: "End and quit GhostGuide", accelerator: "Ctrl+Alt+Q", registerAccelerator: false, click: a.quit },
   ];
 }
 

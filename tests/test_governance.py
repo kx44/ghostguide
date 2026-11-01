@@ -496,7 +496,10 @@ def test_every_permission_request_is_denied():
 def test_every_page_has_a_strict_content_policy(page):
     html = (OVERLAY / "renderer" / page).read_text(encoding="utf-8")
     policy = re.search(r'Content-Security-Policy" content="([^"]+)"', html).group(1)
-    assert "script-src 'self'" in policy and "unsafe-eval" not in policy and "http" not in policy
+    # The source window's pictures are the one thing that may come from the web, and only over https.
+    rules = [r.strip() for r in policy.split(";")]
+    assert "script-src 'self'" in policy and "unsafe-eval" not in policy
+    assert not [r for r in rules if "http" in r and not (page == "source.html" and r == "img-src file: https:")]
     assert "'unsafe-inline'" not in policy.split("script-src")[1].split(";")[0]
 
 

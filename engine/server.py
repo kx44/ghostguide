@@ -62,6 +62,7 @@ async def serve(player: Optional[Player], port: int = DEFAULT_PORT, record: Opti
     loop = asyncio.get_running_loop()
     busy = asyncio.Lock()      # one player call at a time; the slow locator walk itself runs outside it
     poke_locate, poke_check = asyncio.Event(), asyncio.Event()
+    ended = loop.create_future()
 
     class poke:                # set after each overlay message: locate and check the (new) step now, not in a second
         @staticmethod
@@ -177,6 +178,10 @@ async def serve(player: Optional[Player], port: int = DEFAULT_PORT, record: Opti
                     data, kind = {}, "?"
                 if kind == "hello":
                     last_displays[:] = data.get("displays") or []
+                if kind == "end":        # the overlay is quitting: the next run mustn't find this engine on the port
+                    if not ended.done():
+                        ended.set_result(None)
+                    return
                 if kind == "import":
                     await start_import(data)
                     continue
@@ -280,7 +285,7 @@ async def serve(player: Optional[Player], port: int = DEFAULT_PORT, record: Opti
         tasks = [asyncio.create_task(round_loop(poke_locate, locate_round)),
                  asyncio.create_task(round_loop(poke_check, check_round))]
         try:
-            await asyncio.Future()
+            await ended
         finally:
             for t in tasks:
                 t.cancel()

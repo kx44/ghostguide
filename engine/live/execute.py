@@ -2,7 +2,7 @@
 
 Only buttons, menus, fields and shortcuts: never drawing on the canvas, where a guess makes a wrong model. Offered
 only when there's something sure to act on. A box from accessibility data is exact, so it just runs; a box Spark
-found by sight first asks you to look (`needs_confirm`): the first press says so, the second one runs it.
+found by sight that nothing has vouched for first asks you to look (`needs_confirm`): the first press says so, the second runs it.
 
 Input only ever goes to the app: it refuses unless the app is the front window and the spot it would click is the
 app's own. A tutorial file is someone else's text, so what it may ask for is limited too (`unsafe`). The pure part (what to do) is tested off Windows; everything that sends input is under `# ---- Windows`.
@@ -86,23 +86,26 @@ def can_do(step: Step, box: Optional[Box]) -> bool:
         return False
     if step.action == "shortcut":
         return bool(step.params.get("keys"))
-    if step.action == "menu_path":          # a route of several clicks is yours; its shortcut is one key press
-        return bool(step.target.shortcut)
+    if step.action == "menu_path":          # its shortcut is one key press; without one, the hop the outline is on
+        return bool(step.target.shortcut) or box is not None
     if step.action == "type":
         return box is not None and _value(step) is not None
     return box is not None or bool(step.target.shortcut)     # no box, but one key press does the same
 
 
-def needs_confirm(step: Step, stage: str, box: Optional[Box] = None) -> bool:
-    """A shortcut needs no box; UIA's box is exact; anything found by sight or memory waits for a second press. So does
-    a key that deletes, wherever it came from."""
+def needs_confirm(step: Step, stage: str, box: Optional[Box] = None, vouched: bool = False) -> bool:
+    """A shortcut needs no box; UIA's box is exact; so is a box the app's tooltip, a second look or a remembered look has
+    vouched for. Anything else found by sight or memory waits for a second press. So does a key that deletes, wherever it
+    came from."""
     keys = _step_keys(step)
     if keys and _key_set(keys) & {"del"}:
         return True
-    return (box is not None and step.action not in ("shortcut", "menu_path") and stage not in SURE_STAGES)
+    if box is None or vouched or stage in SURE_STAGES or step.action == "shortcut":
+        return False
+    return not (step.action == "menu_path" and step.target.shortcut)
 
 
-def plan(step: Step, box: Optional[Box]) -> list[Op]:
+def plan(step: Step, box: Optional[Box], click_at: Optional[tuple[int, int]] = None) -> list[Op]:
     from engine.live.locate.uia import in_tree
     from engine.live.plan import click_type, line_start
 
@@ -110,7 +113,9 @@ def plan(step: Step, box: Optional[Box]) -> list[Op]:
     if step.action == "shortcut":
         return [Op("keys", keys=tuple(str(k) for k in p["keys"]))]
     if step.action == "menu_path":
-        return [Op("keys", keys=tuple(k.strip() for k in step.target.shortcut.split("+")))]
+        if step.target.shortcut:
+            return [Op("keys", keys=tuple(k.strip() for k in step.target.shortcut.split("+")))]
+        return [Op("click", at=tuple(click_at) if click_at else box.center)]      # this hop: the route moves on to the next
     if step.action == "type":
         rename = step.target.kind == "tree_item" or in_tree(step.target.where)
         ops = [Op("click", at=box.center)]

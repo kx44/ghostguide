@@ -63,7 +63,7 @@ GhostGuide watches input with Windows Raw Input, a copy of events that sits outs
 It sends real clicks and keys, so it has the tightest limits.
 
 - **It's a button.** It has no hotkey and never runs by itself. It's only offered for buttons, menus, fields and shortcuts, and never for drawing on the canvas.
-- **A box found by sight or from memory takes a second press,** so you can look at the outline first. So does any key that deletes.
+- **A box only sight has found takes a second press,** so you can look at the outline first; the button says so. A box the app's tooltip, a model's second look or a remembered look has confirmed runs on the first press. Any key that deletes always takes a second press.
 - **It only acts on the app.** The app must be the front window and own the spot it would click. That's re-checked before each input and before each typed character, so if you switch windows mid-text, typing stops.
 - **It won't do everything a tutorial file asks.** It refuses to press keys that leave the app (Alt+Tab, Alt+Esc, Ctrl+Esc, Ctrl+Shift+Esc, Alt+Space, Ctrl+Alt+Del). It refuses to type a value with control characters, including line breaks, or longer than 200 characters; those stay on the card to copy. The only keys allowed after typing are Enter and Tab.
 - **It's on the record.** Each act goes in the activity log as the step and the kinds of input, not the text.
@@ -78,6 +78,7 @@ A tutorial, whether you compiled it or were sent it, is treated as untrusted.
 - **Text is shown as text.** The overlay escapes every value it draws, and the source window uses `textContent`, never HTML. All three pages have a content policy that blocks outside scripts.
 - **Windows are locked down.** Each one is sandboxed with context isolation and no Node in the page. None can navigate or open another window. Every permission request (camera, microphone, screen) is denied.
 - **Only web links reach your browser,** checked in both the engine and the overlay's main process.
+- **A saved page's missing pictures can load from the site.** When a saved page didn't keep a picture, the source window shows it from the address the page gives, over https, with no referrer. So that site sees your IP address, as it would in a browser. Nothing else in that window loads from the web, and these pictures never go to a model.
 - **A saved page's pictures must sit beside it.** A page can't point at another file on your disk to get it sent to a model.
 - **This PC and its network aren't fetched.** A link to `localhost`, a private address or a `.local` name is refused, on each redirect as well. Pages stop at 8 MB and pictures at 20 MB.
 - **A model's answer can't run anything.** Live, its only tools are `point_at`, `draw_line`, `menu_path` and `not_found`, which become something to draw. Compiled, its answer has to pass the same checks as any tutorial file. A route from Muse Wonder goes to your local map marked unreviewed.
@@ -105,7 +106,7 @@ It doesn't authenticate other programs running under your account. Those can alr
 | `cache/sources/` | Tutorial clips and readings, for the source view |
 | `cache/compiled/` | What compiling read: the tutorial's frames and text |
 | `cache/cassettes/` | Recorded model answers, in `record` mode. Pictures are replaced by a hash |
-| `cache/logs/` | Spend, activity and scores |
+| `cache/logs/` | Spend, activity, scores, and `engine.log`: what the finder and checks said on the last run, not what's on screen |
 | `%APPDATA%\GhostGuide\appmaps\` | Where this app's buttons are, relative to its window, with a 16×16 grey thumbnail of each to tell neighbours apart |
 | `%APPDATA%\GhostGuide\overlay-settings.json` | Whether the shortcuts panel is open |
 

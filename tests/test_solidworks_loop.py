@@ -658,7 +658,7 @@ def test_card_offers_do_it_only_when_it_can():
 def test_second_press_runs_and_a_refusal_is_said():
     ex = FakeExecutor()
     p = player_at(11, executor=ex)
-    assert "Check the outline" in p.handle({"type": "do_it"})[0].text and ex.ran == []
+    assert "press again" in p.handle({"type": "do_it"})[-1].text and ex.ran == []
     assert p.handle({"type": "do_it"})[0].text.startswith("Done for you") and len(ex.ran) == 1
     ex = FakeExecutor(refuse="Bring SOLIDWORKS to the front first")
     p = player_at(11, stage="uia", executor=ex)
@@ -667,7 +667,7 @@ def test_second_press_runs_and_a_refusal_is_said():
     p.handle({"type": "do_it"})
     p.handle({"type": "next"})
     p.handle({"type": "back"})                             # arming doesn't survive moving away
-    assert "Check the outline" in p.handle({"type": "do_it"})[0].text
+    assert "press again" in p.handle({"type": "do_it"})[-1].text
 
 
 # ---------- suggested values ----------

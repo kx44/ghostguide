@@ -443,6 +443,29 @@ class VSCodeLocator:
         self.last_seconds = time.perf_counter() - t0
         return box, line
 
+    def peek(self, step: Step) -> Optional[tuple]:
+        """(box, line, extra) for a step not showing yet, from the last reading, or None. Nothing new is read: no walk of the
+        window, no screen grab."""
+        if not self.last_els:
+            return None
+        ed = editor_from(self.last_els)
+        bg = None
+        if ed is not None:
+            pitch, bg = self._gutter.get((ed.left, ed.top, ed.bottom, int(ed.line_h)), (None, None))
+            ed.line_h = pitch or ed.line_h
+        box, line, how = locate_in(step, self.last_els, ed)
+        if box is None and line is None:
+            return None
+        extra: dict = {}
+        if box is not None and ed is not None and how.startswith("editor line"):
+            n = int(how.split()[2])
+            col = insert_col(ed.text, step.target.where, n)
+            extra = {**editor_extra(ed, bg, col), **insert_context(ed.text, n, col)}
+            away = ed.scrolled_away(n)
+            if away:
+                extra["scroll"] = away
+        return box, line, extra
+
     def _gutter_info(self, ed: Editor) -> tuple[Optional[float], Optional[str]]:
         key = (ed.left, ed.top, ed.bottom, int(ed.line_h))
         if key not in self._gutter:

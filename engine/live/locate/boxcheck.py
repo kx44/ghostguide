@@ -65,6 +65,10 @@ class BoxCheck:
         for k in [k for k, look in self._looks.items() if k[0] == n and look.shown]:
             del self._looks[k]
 
+    def agrees(self, box: Box) -> bool:
+        """A model has said this very box is on its control."""
+        return any(k[2:] == (box.x, box.y, box.w, box.h) and look.said == "yes" for k, look in self._looks.items())
+
     def say(self, step: Step, label: str, box: Box, ahead: bool = False) -> tuple[str, str]:
         """(yes | no | wait | unsure, what it's on instead). "unsure" shows the box as it is. `ahead`: the step isn't showing
         yet, so the answer is waiting when it comes up."""

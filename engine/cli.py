@@ -471,12 +471,42 @@ def _serve(player, args) -> int:
         return current["player"], getattr(args, "_inputs", None)
 
     print("start the overlay: cd overlay && npm start   (Ctrl+C here to stop)")
+    _log_to_file()
     try:
         asyncio.run(serve(player, port=args.port, record=Path(args.record) if args.record else None,
                           inputs=getattr(args, "_inputs", None), importer=_importer, opener=opener))
     except KeyboardInterrupt:
         pass
+    print("Ended. Your place is kept, and this window can be closed.")
     return 0
+
+
+class _Both:
+    """What the engine prints goes to its window and to a file, which outlives the window."""
+
+    def __init__(self, *to):
+        self.to = to
+
+    def write(self, s: str) -> int:
+        for f in self.to:
+            try:
+                f.write(s)
+                f.flush()
+            except (OSError, ValueError):     # a closed window or a full disk never stops a tutorial
+                pass
+        return len(s)
+
+    def flush(self) -> None:
+        pass
+
+
+def _log_to_file() -> None:
+    """cache/logs/engine.log: this run only. What each step's finder and check said, never what's on the screen."""
+    try:
+        config.LOGS.mkdir(parents=True, exist_ok=True)
+        sys.stdout = _Both(sys.stdout, (config.LOGS / "engine.log").open("w", encoding="utf-8"))
+    except OSError:
+        pass
 
 
 def _console(player) -> int:

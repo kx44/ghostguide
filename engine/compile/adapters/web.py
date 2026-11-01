@@ -43,6 +43,24 @@ class _Block:
     path: tuple[int, ...]           # ids of the containers it sits in
     src: Optional[str] = None
     anchor: Optional[str] = None
+    web: Optional[str] = None       # the picture's address on the site, for a saved page that didn't keep it
+
+
+def web_address(a: dict, min_side: int) -> Optional[str]:
+    """Where an <img> lives on the web: its largest srcset entry, else src. None when it isn't a web address, or it says it's
+    too small to be an illustration (a logo, an avatar)."""
+    for side in ("width", "height"):
+        if a.get(side, "").isdigit() and int(a[side]) < min_side:
+            return None
+    best, best_w = None, -1
+    for part in a.get("srcset", "").split(","):
+        bits = part.split()
+        if bits and bits[0].startswith("https://"):
+            w = int(bits[1][:-1]) if len(bits) > 1 and bits[1].endswith("w") and bits[1][:-1].isdigit() else 0
+            if w > best_w:
+                best, best_w = bits[0], w
+    src = a.get("src") or a.get("data-src") or ""
+    return best or (src if src.startswith("https://") else None)
 
 
 @dataclass
@@ -102,7 +120,7 @@ class _Reader(HTMLParser):
                 src = a.get("src") or a.get("data-src") or ""
                 if src:
                     self._flush()
-                    self.page.blocks.append(_Block("image", a.get("alt", "").strip(), self._path(), src=src))
+                    self.page.blocks.append(_Block("image", a.get("alt", "").strip(), self._path(), src=src, web=web_address(a, MIN_IMAGE_SIDE)))
             elif tag == "br" and self.open_block:
                 self.buf.append("\n")
             return
@@ -274,7 +292,9 @@ def _web_loader(base: str) -> Callable[[str], Optional[bytes]]:
     return load
 
 
-def from_html(html: str, url: Optional[str], load_image: Callable[[str], Optional[bytes]]) -> Evidence:
+def from_html(html: str, url: Optional[str], load_image: Callable[[str], Optional[bytes]], web_images: bool = False) -> Evidence:
+    """`web_images`: for the source view, a picture that isn't here keeps its web address. Never for a compile: nothing goes
+    to a model that wasn't saved with the page."""
     if looks_blocked(200, html):
         raise SourceBlocked("That file is the site's security check, not the article. Wait for the article to "
                             "appear in your browser, then save it again.")
@@ -300,6 +320,8 @@ def from_html(html: str, url: Optional[str], load_image: Callable[[str], Optiona
             if jpeg:
                 items.append(Item("image", b.text, anchor=anchor, image=jpeg))
                 digest.update(jpeg)
+            elif web_images and b.web:
+                items.append(Item("image", b.text, anchor=anchor, link=b.web))
     if not any(i.kind == "text" for i in items):
         raise SourceError("No readable article text on that page. Paste the text here instead.")
     title = unescape(page.title).strip() if page.title else None
@@ -311,6 +333,6 @@ def from_url(url: str) -> Evidence:
     return from_html(fetch_page(url), url, _web_loader(url))
 
 
-def from_file(path: Path) -> Evidence:
+def from_file(path: Path, web_images: bool = False) -> Evidence:
     path = Path(path)
-    return from_html(path.read_text(encoding="utf-8", errors="replace"), None, _local_loader(path))
+    return from_html(path.read_text(encoding="utf-8", errors="replace"), None, _local_loader(path), web_images)

@@ -137,6 +137,14 @@ class StepApps:
     def learn(self, step: Step, box: Box) -> bool:
         return self._finder(step).learn(step, box)
 
+    def vouched(self, box: Box) -> bool:
+        return self.on.vouched(box)
+
+    def peek(self, step: Step) -> Optional[tuple]:
+        """Only for the app you're in, like anything found."""
+        f = self._finder(step)
+        return f.peek(step) if self.in_front(f.window) else None
+
     def look_ahead(self, steps: list[Step]) -> None:
         """Only the app you're in: a picture of a window you've left isn't for a model."""
         for f in (self.main, *self._finders.values()):
@@ -195,6 +203,19 @@ class Resolver:
             self.vision.forget(n)
         if self.box_check is not None:
             self.box_check.forget(n)
+
+    def vouched(self, box: Box) -> bool:
+        """Has something other than sight said this box is right: a remembered look that still matches, the app's tooltip
+        or a second look by a model?"""
+        if self.last_stage == "appmap" and self.looks is not None:
+            return True
+        if any(k[1:] == (box.x, box.y, box.w, box.h) for k in self._tip_ok):
+            return True
+        return self.box_check is not None and self.box_check.agrees(box)
+
+    def peek(self, step: Step) -> Optional[tuple]:
+        peek = getattr(self.uia, "peek", None)
+        return peek(step) if peek is not None else None
 
     def look_ahead(self, steps: list[Step]) -> None:
         """Find the coming steps' controls before they show, from a picture of the window. Nothing moves the mouse or presses

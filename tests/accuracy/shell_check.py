@@ -284,7 +284,7 @@ def main(argv=None) -> int:
         hotkey("k")
         wait(lambda: ov.js(f"!!document.querySelector('{panel}')"), 3)
         text = ov.js(f"document.querySelector('{panel}')?.innerText") or ""
-        record("panel: Ctrl+Alt+K opens it, with every key", all(w in text for w in ("Next", "Back", "Skip", "Show me", "Source", "Hide", "Light / dark", "Import", "shortcuts", "Quit")), text=text.replace("\n", " "))
+        record("panel: Ctrl+Alt+K opens it, with every key", all(w in text for w in ("Next", "Back", "Skip", "Show me", "Source", "Hide", "Light / dark", "Import", "shortcuts", "End")), text=text.replace("\n", " "))
         time.sleep(0.4)      # let it finish fading in
         shot("1-panel")
         box, ctl = rect_of(ov, panel), rect_of(ov, ".bar-ctl")
