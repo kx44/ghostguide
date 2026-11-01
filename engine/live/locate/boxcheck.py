@@ -48,6 +48,7 @@ class _Look:
     t: float
     said: Optional[str] = None       # yes | no | unsure
     why: str = ""
+    shown: bool = False              # asked for a step on screen, not ahead of it
 
 
 class BoxCheck:
@@ -61,11 +62,12 @@ class BoxCheck:
         self._looks: dict[tuple, _Look] = {}
 
     def forget(self, n: int) -> None:
-        for k in [k for k in self._looks if k[0] == n]:
+        for k in [k for k, look in self._looks.items() if k[0] == n and look.shown]:
             del self._looks[k]
 
-    def say(self, step: Step, label: str, box: Box) -> tuple[str, str]:
-        """(yes | no | wait | unsure, what it's on instead). "unsure" shows the box as it is."""
+    def say(self, step: Step, label: str, box: Box, ahead: bool = False) -> tuple[str, str]:
+        """(yes | no | wait | unsure, what it's on instead). "unsure" shows the box as it is. `ahead`: the step isn't showing
+        yet, so the answer is waiting when it comes up."""
         key = (step.n, label, box.x, box.y, box.w, box.h)
         look = self._looks.get(key)
         if look is None:
@@ -78,6 +80,7 @@ class BoxCheck:
             text = QUESTION.format(app=self.app, label=label, kind=step.target.kind, where=step.target.where or "-")
             png = picture(shot[0], shot[1], box)
             self.start(lambda: self._ask(step, png, text, look))
+        look.shown = look.shown or not ahead
         if look.said is not None:
             return look.said, look.why
         return ("unsure" if self.clock() - look.t >= WAIT_S else "wait"), ""

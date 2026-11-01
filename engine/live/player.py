@@ -25,6 +25,7 @@ from engine.schema import messages as m
 # Steps that need no on-screen target (their card alone is the guidance), so no "not pinned" hint.
 NO_PIN_NEEDED = {"shortcut", "wait", "look", "switch_app"}
 LINE_ACTIONS = {"draw_line", "drag"}
+AHEAD_STEPS = 3          # how many coming steps to look for
 
 SchemeFn = Callable[[Optional[m.Box]], tuple[str, Optional[float]]]
 
@@ -244,10 +245,20 @@ class Player:
             self._acted.add(step.n)
         return [m.Toast(text=say_done(step), ms=2000)]
 
+    def _look_ahead(self) -> None:
+        """The next steps' controls, found before they show. The first step's too, while the start check holds it back."""
+        s = self.session
+        ahead = getattr(self.locator, "look_ahead", None)
+        if ahead is None or s.finished or s.hidden:
+            return
+        first = s.current if self.start_open else s.current + 1
+        ahead([s.tutorial.step(n) for n in range(first, min(s.of, s.current + AHEAD_STEPS) + 1) if n not in self.pins.steps])
+
     def locate_current(self) -> Optional[tuple]:
         """Ask the locator about the current step: (step, box, line, extra), or None when there's nothing to ask.
         Reads the session but changes nothing, so the server runs it outside its lock."""
         s = self.session
+        self._look_ahead()
         if self.start_open or self.locator is None or s.finished or s.hidden or s.step is None or s.step.n in self.pins.steps:
             return None
         step = s.step
@@ -314,20 +325,34 @@ class Player:
             return []
         had_target = self.last_guide is not None and self.last_guide.box is not None
         s.apply_done(done)
-        learn = getattr(self.locator, "learn", None)
         for n in done:                     # checked done: stable controls are remembered for next time
-            boxes = self._drawn.get(n)
-            if learn is not None and boxes and n not in self.pins.steps:
-                try:
-                    learn(s.tutorial.step(n), boxes[-1])
-                except Exception:
-                    pass
+            self._remember(n)
         self._step_changed()
         out = ([m.Mark(result="ok")] if had_target else []) + self.current()
         text = ("✓ You finished it" if s.finished else
                 f"✓ Step {done[0]} done" if len(done) == 1 else f"✓ Steps {done[0]}–{done[-1]} done")
         out.append(m.Toast(text=text, kind="ok", ms=1600))
         return out
+
+    def _remember(self, n: int) -> None:
+        learn = getattr(self.locator, "learn", None)
+        boxes = self._drawn.get(n)
+        if learn is None or not boxes or n in self.pins.steps:
+            return
+        step = self.session.tutorial.step(n)
+        try:
+            if learn(step, boxes[-1]):
+                print(f"  remembered where {step.target.label} is")
+        except Exception as e:
+            print(f"  couldn't remember where {step.target.label} is: {e}")
+
+    def _clicked_it(self, n: int) -> bool:
+        """You clicked inside the outline as it last stood."""
+        boxes = self._drawn.get(n)
+        if not boxes or self.inputs is None:
+            return False
+        b = boxes[-1]
+        return any(b.x <= e.x <= b.x + b.w and b.y <= e.y <= b.y + b.h for e in self.inputs.clicks(within_s=600))
 
     def acted_on(self, n: int, since: float, pad: int = 6) -> bool:
         """Did you click inside one of step n's drawn targets since `since`? (A click is never proof on its own:
@@ -423,6 +448,8 @@ class Player:
                 return self.current()
         if t == "next":
             had_target = self.last_guide is not None and self.last_guide.box is not None
+            if not s.finished and s.status(s.current) == "pending" and self._clicked_it(s.current):
+                self._remember(s.current)     # you clicked the outline and went on: as good as a check saying done
             ev = s.next()
             return ([m.Mark(result="ok")] if had_target and ev.kind != "noop" else []) + self._after(ev)
         if t == "back":

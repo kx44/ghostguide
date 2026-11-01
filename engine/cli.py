@@ -205,7 +205,7 @@ def _finder(app: str, window, args):
     from engine.live.locate.boxcheck import BoxCheck
     from engine.live.locate.menu import Hops, Wonder
     from engine.live.locate.resolver import GenericUIA, Resolver
-    from engine.live.locate.vision import SparkVision, enabled
+    from engine.live.locate.vision import SparkVision, ahead_enabled, enabled
     from engine.models.glimmer import check_stages
 
     vscode = _is_vscode(app)
@@ -272,7 +272,8 @@ def _finder(app: str, window, args):
     tips = None if vscode else tooltip.watch(window)
     return Resolver(stage, store, find_window, vision, wonder, Hops(clicked),
                     looks=looks if solidworks else None, look_of=look_of if solidworks else None, arrow=arrow if solidworks else None,
-                    tip=tips and tips.tip, rested=tips and tips.rested if solidworks else None, box_check=box_check)
+                    tip=tips and tips.tip, rested=tips and tips.rested if solidworks else None, box_check=box_check,
+                    ahead=ahead_enabled() and not vscode)     # VS Code's rule pack names its controls for free
 
 
 def _for_hard_apps(player, tut, locator, args) -> None:

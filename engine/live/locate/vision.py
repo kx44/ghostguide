@@ -31,6 +31,8 @@ EFFORT = config.env("FINDER_EFFORT", "low")
 MAX_CALLS = 3            # per target, per run of a step
 MAX_REFUNDS = 3          # looks a tooltip's "no" can give back, per target
 MIN_GAP_S = 3.0          # between calls for one target
+AHEAD_TRIES = 2          # looks ahead for a target that isn't on screen yet
+AHEAD_MAX_ASKS = 60      # looks ahead in one run: the window can keep changing while you do something else
 SAME_SHARE = 0.35        # the patch around an answer may change this much (a hover highlight) and still stand
 PAD_PX = 24              # around an answer, for that patch
 MAX_BOX_SHARE = 0.25     # a "control" bigger than this share of the picture isn't one
@@ -73,6 +75,10 @@ TAB_TOP, TAB_H = 115, 19     # the row of ribbon tab names: thin, and Spark's y 
 
 def enabled() -> bool:
     return config.env("FINDER_VISION", "off").lower() in ("on", "1", "true", "yes")
+
+
+def ahead_enabled() -> bool:
+    return enabled() and config.env("FINDER_AHEAD", "on").lower() in ("on", "1", "true", "yes")
 
 
 def to_screen(p: PointAt, scale: float, origin: tuple[int, int]) -> Box:
@@ -154,6 +160,8 @@ class _Memo:
     on_nothing: bool = False     # a box it gave showed no tooltip: it wasn't on a button
     patch: object = None         # the pixels around the answer, or the whole window for a miss
     patch_at: tuple = (0, 0, 0, 0)
+    shown: bool = False          # its step has been on screen; a look made ahead of that survives the step coming up
+    busy: bool = False           # a look ahead is out for it right now
 
 
 class SparkVision:
@@ -170,11 +178,46 @@ class SparkVision:
         self.last_route: Optional[dict] = None
         self.last_conf = ""
         self._memo: dict[tuple, _Memo] = {}
+        self._ahead_missed: dict[tuple, list] = {}    # target → [the window when it wasn't there, how many times]
+        self._ahead_asks = 0
 
     def forget(self, n: int) -> None:
-        """The step is showing again: a fresh allowance of calls."""
-        for k in [k for k in self._memo if k[0] == n]:
+        """The step is showing again: a fresh allowance of calls. What was found ahead for it hasn't been used yet, so it stays."""
+        for k in [k for k, memo in self._memo.items() if k[0] == n and memo.shown]:
             del self._memo[k]
+
+    def look_ahead(self, step: Step, label: Optional[str] = None, route: Optional[list[str]] = None, hop: int = 0) -> Optional[Box]:
+        """Look for a step that isn't showing yet, in the window as it is now, so the box is ready when the step comes up. Runs
+        on its own thread. A target that isn't on screen yet costs at most AHEAD_TRIES looks, and only after the window changes."""
+        key = (step.n, label or step.target.label)
+        if key in self._memo or self.grab is None or self._ahead_asks >= AHEAD_MAX_ASKS:
+            return None
+        shot = self.grab()
+        if shot is None:
+            return None
+        img, origin, s = shot
+        missed = self._ahead_missed.get(key)
+        if missed is not None:
+            from engine.live.capture import changed
+            if missed[1] >= AHEAD_TRIES or (missed[0].size == img.size and not changed(missed[0], img)):
+                return None
+        memo = self._memo[key] = _Memo(busy=True)
+        self._ahead_asks += 1
+        try:
+            self._ask(step, key[1], img, origin, s, memo, route, hop)
+        finally:
+            memo.busy = False
+        if memo.box is not None:
+            memo.calls, memo.t = 0, -1e9      # the allowance and the gap are for the step's own looks, if this box goes stale
+            return memo.box
+        self._ahead_missed[key] = [img, (missed[1] if missed else 0) + 1]
+        if not memo.shown:                    # the step came up meanwhile: then that was its first look, and it stands
+            self._memo.pop(key, None)
+        return None
+
+    def looking(self, n: int, label: str) -> bool:
+        memo = self._memo.get((n, label))
+        return memo is not None and memo.busy
 
     def reject(self, n: int, label: str, shown: str) -> None:
         """A tooltip says that box is something else: look again, and that look is on us, not on the allowance."""
@@ -214,6 +257,10 @@ class SparkVision:
         img, origin, s = shot
         key = (step.n, label or step.target.label)
         memo = self._memo.setdefault(key, _Memo())
+        memo.shown = True
+        if memo.busy:
+            self.last_how = "vision: already looking"
+            return None
         if self._still_good(memo, img, origin) or memo.calls >= self.max_calls or self.clock() - memo.t < MIN_GAP_S:
             return self._answer(memo)
         self._ask(step, label or step.target.label, img, origin, s, memo, route, hop, near)

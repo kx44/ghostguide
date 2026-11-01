@@ -18,6 +18,7 @@ player and server didn't change.
 """
 from __future__ import annotations
 
+import threading
 import time
 from typing import Callable, Optional
 
@@ -136,12 +137,20 @@ class StepApps:
     def learn(self, step: Step, box: Box) -> bool:
         return self._finder(step).learn(step, box)
 
+    def look_ahead(self, steps: list[Step]) -> None:
+        """Only the app you're in: a picture of a window you've left isn't for a model."""
+        for f in (self.main, *self._finders.values()):
+            if self.in_front(f.window):
+                f.look_ahead([s for s in steps if self._finder(s) is f])
+
 
 class Resolver:
     def __init__(self, uia_stage, store=None, find_window: Optional[Callable[[str], Optional[tuple]]] = None,
                  vision=None, wonder=None, hops: Optional[menu.Hops] = None, looks=None, look_of=None, arrow=None,
-                 tip=None, rested=None, box_check=None):
+                 tip=None, rested=None, box_check=None, ahead=False):
         self.box_check = box_check           # BoxCheck: a model's second opinion on a box found by sight, or None
+        self.ahead = ahead                   # look for the next steps' controls before they come up
+        self._ahead_running = False
         self._checking = False
         self._looked_for = ""                # what sight was last asked to find on this step
         self.uia = uia_stage                 # VSCodeLocator, SolidWorksUIA or GenericUIA
@@ -186,6 +195,39 @@ class Resolver:
             self.vision.forget(n)
         if self.box_check is not None:
             self.box_check.forget(n)
+
+    def look_ahead(self, steps: list[Step]) -> None:
+        """Find the coming steps' controls before they show, from a picture of the window. Nothing moves the mouse or presses
+        a key and the app can sit behind other windows, so all it can find is what's on screen right now. It tries again when
+        the window changes. Never holds anything up: the finder picks up what it left."""
+        if not self.ahead or self.vision is None or self._ahead_running:
+            return
+        todo = [s for s in steps if s.action in ("click", "menu_path") and s.target.kind in SEARCH_KINDS]
+        if not todo:
+            return
+        self._ahead_running = True
+        threading.Thread(target=self._look_ahead, args=(todo,), daemon=True, name="look-ahead").start()
+
+    def _look_ahead(self, steps: list[Step]) -> None:
+        try:
+            for step in steps:
+                step = self._described(step)
+                route, label = None, step.target.label
+                if getattr(self.uia, "follows_hops", False) and step.action == "menu_path" and len(step.target.menu_path or []) > 1:
+                    route = getattr(self.store, "reviewed_route", lambda label: None)(label) or step.target.menu_path
+                    label = menu.hop_label(route[0])
+                    known = self._remembered(label)
+                else:
+                    known = self.quick(step)
+                if known is not None:
+                    continue
+                box = self.vision.look_ahead(step, label, route)
+                if box is not None and self.box_check is not None:
+                    self.box_check.say(step, label, box, ahead=True)
+        except Exception:         # a window closing, a network error: the step's own look is still to come
+            pass
+        finally:
+            self._ahead_running = False
 
     def quick(self, step: Step) -> Optional[Box]:
         """4a alone: instant, for a first draw before UIA has answered. With `looks` (apps whose controls share
@@ -253,6 +295,9 @@ class Resolver:
         seen_route = None
         if self.vision is not None:
             b = self._sure(step, step.target.label, self._tip_check(step, step.target.label, self.vision.find(step), sight=True))
+            if self._still_looking(step, step.target.label):
+                self.last_how, self.last_stage = "vision: already looking", "none"
+                return None, None
             if self._checking:
                 self.last_how, self.last_stage = "vision: a second look at the box", "none"
                 return None, None
@@ -343,6 +388,9 @@ class Resolver:
         box = self._tip_check(step, label, box) if stage != "uia" else box
         if stage == "vision":
             box = self._sure(step, label, box)
+            if self._still_looking(step, label):
+                self.last_how, self.last_stage = f"hop {i + 1} of {len(path)}, {label}: already looking", "none"
+                return None, None
             if self._checking:
                 self.last_how, self.last_stage = f"hop {i + 1} of {len(path)}, {label}: a second look at the box", "none"
                 return None, None
@@ -377,6 +425,11 @@ class Resolver:
         self.hops.found(step.n, box)
         self.last_how, self.last_stage = f"hop {i + 1} of {len(path)}, {label}: {why}", stage if box is not None or stage == "wonder" else "none"
         return box, None
+
+    def _still_looking(self, step: Step, label: str) -> bool:
+        """A look ahead is out for this very target: its answer is coming, so no route or Wonder yet."""
+        looking = getattr(self.vision, "looking", None)
+        return looking is not None and looking(step.n, label) is True
 
     def _sure(self, step: Step, label: str, box: Optional[Box]) -> Optional[Box]:
         """A box found by sight that no tooltip has vouched for gets a model's second look before it's shown."""
