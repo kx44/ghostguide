@@ -160,6 +160,24 @@ def page_link(url: Optional[str], anchor: Optional[str], heading: Optional[str] 
     return urlunparse(urlparse(url)._replace(fragment=":~:text=" + quote(words, safe="")))
 
 
+def section_words(anchor: Optional[str]) -> Optional[str]:
+    """A section's words, from an anchor made out of its heading. None for an anchor that only numbers it."""
+    words = re.sub(r"^[\d.\s]+", "", re.sub(r"^#", "", anchor or "").replace("-", " ")).strip()
+    return None if len(words.split()) < 2 or re.fullmatch(r"(step|part|section)\s*\d*", words, re.I) else words
+
+
+def step_words(step) -> list[str]:
+    """The names to look for on the page: a route's stops in order, then the control. "OK (green check)" is "OK"."""
+    from engine.live.locate.menu import hop_label
+
+    out: list[str] = []
+    for name in [*(step.target.menu_path or []), step.target.label]:
+        name = re.sub(r"\(.*?\)", "", hop_label(name)).strip()
+        if len(name) >= 2 and name.casefold() not in (x.casefold() for x in out):
+            out.append(name)
+    return out
+
+
 def label(tut, step) -> str:
     """What the card's source button says."""
     return f"▶ {clock(times(step.source.t)[0])}" if tut.meta.source.type == "video" and step.source.t else "Source"
@@ -174,6 +192,7 @@ class Sources:
         self.refused: Optional[str] = None
         self.asked = False
         self.to_fetch: Optional[str] = None     # a page to try outside the player's lock (the server does it)
+        self._may_show: Optional[bool] = None
 
     def _base(self, step, of: int, follow: bool) -> dict:
         return dict(n=step.n, of=of, title=step.title, tutorial=self.tut.meta.title, follow=follow)
@@ -217,9 +236,26 @@ class Sources:
                 return clip, lo
         return None, 0.0
 
+    def _real_page(self) -> Optional[str]:
+        """The page to show, when it's on the public web: a tutorial file is someone else's text, and it can't point this
+        window at the PC's own services or the local network."""
+        from engine.compile.adapters import SourceError
+        from engine.compile.adapters.web import guard_url
+
+        src = self.tut.meta.source
+        link = safe_link(src.url) if src.type == "web" else None
+        if link and self._may_show is None:
+            try:
+                guard_url(link)
+                self._may_show = True
+            except (SourceError, OSError, ValueError):
+                self._may_show = False
+        return link if link and self._may_show else None
+
     def _page(self, step, of: int, follow: bool) -> m.SourceView:
         src = self.tut.meta.source
         base = self._base(step, of, follow)
+        base.update(page=self._real_page(), section=section_words(step.source.anchor), words=step_words(step))
         blocks = _reading(held(src.hash, src.url))
         if blocks is None:
             link = page_link(src.url, step.source.anchor)
@@ -235,6 +271,7 @@ class Sources:
         anchor = resolve_anchor(step.source.anchor, anchors)
         heading = next((b["text"] for b in blocks if b["kind"] == "heading" and b.get("anchor") == anchor), None)
         note = None if anchor or not step.source.anchor else "This copy has no section matching this step, so here's the whole tutorial."
+        base["section"] = heading or base["section"]
         return m.SourceView(kind="text", where=heading, doc=str(src.hash or src.url), blocks=[m.SourceBlock(**b) for b in blocks],
                             anchor=anchor, note=note, link=page_link(src.url, step.source.anchor, heading),
                             link_label="Open in the browser", **base)

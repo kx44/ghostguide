@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 const dir = mkdtempSync(join(tmpdir(), "gg-unit-"));
 const out = join(dir, "logic.mjs");
 await build({
-  stdin: { contents: `export * from "./main/settings"; export * from "./main/hotkeys"; export { trayStatus, trayMenu, trayKey } from "./main/tray"; export { cornerAway, keepOnScreen, isWebLink, SOURCE_TITLE } from "./main/sourceWindow"; export { esc, kc } from "./renderer/dom"; export { codeBoxHtml } from "./renderer/guidance/codeCard"; export { chipsHtml } from "./renderer/guidance/pathChips"; export { keycapsHtml } from "./renderer/guidance/keycaps"; export { fallbackHtml } from "./renderer/guidance/card";`,
+  stdin: { contents: `export * from "./main/settings"; export * from "./main/hotkeys"; export { trayStatus, trayMenu, trayKey } from "./main/tray"; export { cornerAway, keepOnScreen, isWebLink, isPublicLink, SOURCE_TITLE } from "./main/sourceWindow"; export { esc, kc } from "./renderer/dom"; export { codeBoxHtml } from "./renderer/guidance/codeCard"; export { chipsHtml } from "./renderer/guidance/pathChips"; export { keycapsHtml } from "./renderer/guidance/keycaps"; export { fallbackHtml } from "./renderer/guidance/card";`,
            resolveDir: process.cwd(), loader: "ts" },
   bundle: true, platform: "node", format: "esm", outfile: out, logLevel: "warning",
   alias: { electron: join(process.cwd(), "test", "electronStub.mjs") },
@@ -116,6 +116,9 @@ test("source window: a place you left it stays on the screen", () => {
 test("source window: only web links leave for the browser", () => {
   for (const good of ["https://youtu.be/a?t=9s", "http://example.com/x#:~:text=a%20b"]) assert.equal(L.isWebLink(good), true);
   for (const bad of ["file:///c:/x", "javascript:alert(1)", "ms-settings:", "https://a b", "", null, 7]) assert.equal(L.isWebLink(bad), false);
+  assert.equal(L.isPublicLink("https://www.engineersrule.com/10-steps/"), true);
+  for (const bad of ["http://localhost:8765/", "http://127.0.0.1/", "http://192.168.1.1/", "http://10.0.0.5/", "http://172.20.0.1/", "http://169.254.169.254/", "http://[::1]/", "http://router/", "http://printer.local/", "file:///c:/x"])
+    assert.equal(L.isPublicLink(bad), false, bad);
 });
 
 test("source window: its title is the one the engine leaves out", () => assert.ok(L.SOURCE_TITLE.startsWith("GhostGuide")));

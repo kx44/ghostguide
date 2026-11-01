@@ -1,7 +1,7 @@
 // The source window: the step's clip, its section of the text, or why neither is on this PC. It only shows what the
 // engine sends. The tutorial's words go in as text, never as HTML. The one thing that loads from the web is a picture a
-// saved page didn't keep, from the address the page gives for it, with no referrer. Show the page opens the real one in a
-// window of its own, which is the way to see pictures a site won't send to anything else.
+// saved page didn't keep, from the address the page gives for it, with no referrer. A web tutorial's real page is what shows
+// first, drawn by the main process over #pagearea; this text is the fallback when the page won't load, or when you ask for it.
 import type { SourceBlock, SourceBridge, SourceViewMsg } from "../../shared/messages";
 
 declare global { interface Window { ghostSource: SourceBridge } }
@@ -13,8 +13,17 @@ let view: SourceViewMsg | undefined;
 let doc: string | undefined;
 let stopAt: number | undefined;         // pause here, unless you've moved past it yourself
 
-function shown(id: "video" | "text" | "none") {
-  for (const k of ["video", "text", "none"] as const) $(k).hidden = k !== id;
+let useCopy = false;                    // our copy of the text: you asked for it, or the page wouldn't load
+let pageFailed = false;
+
+function shown(id: "video" | "text" | "none" | "pagearea") {
+  for (const k of ["video", "text", "none", "pagearea"] as const) $(k).hidden = k !== id;
+  if (id === "pagearea") reportArea();
+}
+
+function reportArea() {
+  const r = $("pagearea").getBoundingClientRect();
+  if (r.width && r.height) bridge.pageArea({ x: r.left, y: r.top, width: r.width, height: r.height });
 }
 
 function cue(m: SourceViewMsg, play: boolean) {
@@ -46,7 +55,7 @@ function block(b: SourceBlock): HTMLElement {
     img.alt = b.text;
     img.addEventListener("error", () => {
       const p = document.createElement("p");
-      p.textContent = "A picture goes here, but the site didn't send it. Show the page below to see it.";
+      p.textContent = "A picture goes here, but the site didn't send it. It's on the page itself.";
       img.replaceWith(p);
     }, { once: true });
     return img;
@@ -91,19 +100,28 @@ function render(m: SourceViewMsg) {
   $("title").textContent = m.title;
   $("where").hidden = !m.where;
   $("where").textContent = m.where ?? "";
-  $("note").hidden = !m.note;
-  $("note").textContent = m.note ?? "";
+  const note = pageFailed && useCopy ? "The page didn't load, so this is our copy of its text." : m.note;
+  $("note").hidden = !note;
+  $("note").textContent = note ?? "";
   $("replay").hidden = m.kind !== "video";
-  $("page").hidden = m.kind !== "text" || !m.link;
+  const realPage = !!m.page && m.kind !== "video" && !useCopy;
+  $("page").hidden = !m.page || realPage;
+  $("copy").hidden = !realPage;
   $("link").hidden = !m.link;
   $("link").textContent = m.link_label ?? "Open in the browser";
   $("link").classList.toggle("pri", m.kind === "none");
   $("choose").hidden = !m.choose;
   $("choose").textContent = m.choose === "video" ? "Choose the video file…" : "Choose a saved copy…";
-  if (m.kind === "video") {
+  if (realPage) {
+    player.pause();
+    shown("pagearea");
+    bridge.showPage(m.page!, m.section, m.words);
+  } else if (m.kind === "video") {
+    bridge.hidePage();
     shown("video");
     cue(m, !m.follow || before === undefined);
   } else {
+    bridge.hidePage();
     player.pause();
     if (m.kind === "text") {
       shown("text");
@@ -118,7 +136,12 @@ function render(m: SourceViewMsg) {
 
 bridge.on(render);
 $("replay").addEventListener("click", () => { if (view?.video) cue(view, true); });
-$("page").addEventListener("click", () => { if (view?.link) bridge.showPage(view.link, view.where); });
+$("page").addEventListener("click", () => { useCopy = false; pageFailed = false; if (view) render(view); });
+$("copy").addEventListener("click", () => { useCopy = true; if (view) render(view); });
+bridge.onPage(state => {
+  if (state === "failed") { useCopy = true; pageFailed = true; if (view) render(view); }
+});
+new ResizeObserver(reportArea).observe($("pagearea"));
 $("link").addEventListener("click", () => { if (view?.link) bridge.openLink(view.link); });
 $("choose").addEventListener("click", () => { if (view?.choose) bridge.choose(view.choose); });
 $("close").addEventListener("click", () => bridge.close());

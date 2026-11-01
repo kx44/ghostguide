@@ -13,7 +13,8 @@
   header .meta { color:var(--mute); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   header b { display:block; font-size:14px; font-weight:500; }
   header .where { color:var(--acc); font-size:12px; }
-  #video, #text, #none { flex:1; min-height:0; }
+  #video, #text, #none, #pagearea { flex:1; min-height:0; }
+  #pagearea { padding:20px 16px; color:var(--mute); background:#fff; }
   #video { display:flex; flex-direction:column; background:#000; }
   video { flex:1; min-height:0; width:100%; background:#000; outline:none; }
   #text { overflow-y:auto; padding:6px 16px 40px; }
@@ -41,10 +42,12 @@
 <div id="note" hidden></div>
 <div id="video" hidden><video id="player" controls preload="auto"></video></div>
 <div id="text" hidden></div>
+<div id="pagearea" hidden>Opening the page…</div>
 <div id="none" hidden><div id="message"></div></div>
 <footer>
   <button id="replay" hidden>Play this step again</button>
-  <button id="page" hidden>Show the page here</button>
+  <button id="page" hidden>Show the page</button>
+  <button id="copy" hidden>Our copy of the text</button>
   <button id="link" hidden></button>
   <button id="choose" hidden></button>
   <span class="gap"></span>

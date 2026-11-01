@@ -452,6 +452,8 @@ def main(argv=None) -> int:
         hotkey("o")
         wait(source_open, 15)
         src = source_page()
+        wait(lambda: src.js("!document.getElementById('copy').hidden"), 8)
+        click_in_source(src, "#copy")
         said = wait(lambda: (lambda t: t if t and "automatic reading" in t or (t and "reached" in t) else None)(src.js("document.getElementById('message').innerText")), 15)
         record("fresh clone, refusing site: explained, with a link and a saved copy", bool(said) and bool(src.js("!document.getElementById('link').hidden && !document.getElementById('choose').hidden")), message=said)
         shot("4-refused")
@@ -466,6 +468,8 @@ def main(argv=None) -> int:
         hotkey("o")
         wait(source_open, 15)
         src = source_page()
+        wait(lambda: src.js("!document.getElementById('copy').hidden"), 8)
+        click_in_source(src, "#copy")
         here = wait(lambda: src.js("document.querySelector('.sec.here h2')?.innerText"), 15)
         record("page never read: fetched, and open at the section", bool(here) and "virtual" in here.lower(), section=here)
         src.close()
@@ -480,8 +484,20 @@ def main(argv=None) -> int:
         hotkey("o")
         wait(source_open, 15)
         time.sleep(0.5)
-        record("text: opening it doesn't take focus", front_is_probe() and types_into_probe())
         src = source_page()
+        site = wait(lambda: page("engineersrule"), 20)
+        marked = ("({shown:[...document.images].filter(i=>i.complete&&i.naturalWidth>200).length,at:scrollY,"
+                  "section:CSS.highlights.has('ghost-section'),word:CSS.highlights.has('ghost-word')})")
+        seen = wait(lambda: (lambda v: v if v and v["shown"] and v["section"] else None)(site.js(marked)), 25) if site else None
+        record("page: the real page shows first, with its pictures", bool(seen) and seen["shown"] > 0, seen=seen)
+        record("page: the step's section is marked and in view", bool(seen) and seen["section"] and seen["at"] > 0, seen=seen)
+        shot("5a-page")
+        record("page: opening it doesn't take focus", front_is_probe() and types_into_probe())
+        if site:
+            site.close()
+        click_in_source(src, "#copy")
+        wait(lambda: src.js("!document.getElementById('text').hidden"), 5)
+        bring_probe()
         here = wait(lambda: src.js("document.querySelector('.sec.here h2')?.innerText"), 8)
         top = src.js("(()=>{const r=document.querySelector('.sec.here').getBoundingClientRect();return r.top})()")
         scripts = src.js("document.querySelectorAll('#text script,#text iframe,#text a').length")
@@ -490,14 +506,6 @@ def main(argv=None) -> int:
         pics = "(()=>{const t=document.getElementById('text');return {shown:[...t.querySelectorAll('img')].filter(i=>i.complete&&i.naturalWidth>0).length,waiting:[...t.querySelectorAll('img')].filter(i=>!i.complete).length,said:[...t.querySelectorAll('p')].filter(p=>p.textContent.startsWith('A picture goes here')).length}})()"
         p = wait(lambda: (lambda v: v if v and not v["waiting"] else None)(src.js(pics)), 20) or src.js(pics)
         record("text: each picture shows, or says the site hasn't sent it", p["shown"] + p["said"] >= 10 and not p["waiting"], **p)
-        click_in_source(src, "#page")
-        record("text: Show the page opens a window of its own", bool(wait(lambda: next((w for w in windows.top_windows() if w.title == "GhostGuide: page"), None), 15)))
-        site = wait(lambda: page("engineersrule"), 20)
-        seen = wait(lambda: (lambda v: v if v and v["shown"] and v["at"] > 0 else None)(site.js("({shown:[...document.images].filter(i=>i.complete&&i.naturalWidth>200).length,at:scrollY})")), 25) if site else None
-        record("text: and its pictures show, at the step's section", bool(seen) and seen["shown"] > 0 and seen["at"] > 0, seen=seen)
-        shot("5b-page")
-        if site:
-            site.close()
         shot("5-text")
         bring_probe()
         hotkey("right")     # past the start check
@@ -511,7 +519,24 @@ def main(argv=None) -> int:
         src.close()
         hotkey("o")
         wait(lambda: not source_open(), 4)
-        record("text: closing the source closes the page", not any(w.title == "GhostGuide: page" for w in windows.top_windows()))
+
+        # ---------- a page that won't load: our copy ----------
+        dead = tmp / "dead-page.md"
+        text = (config.ROOT / VENV).read_text(encoding="utf-8")
+        old = next(l for l in text.splitlines() if l.strip().startswith("url:"))
+        dead.write_text(text.replace(old, old[:old.index("url:")] + "url: https://www.engineersrule.com/this-page-does-not-exist-here", 1), encoding="utf-8")
+        rig.start_engine(str(dead), "dead-page")
+        time.sleep(3)
+        bring_probe()
+        hotkey("o")
+        wait(source_open, 15)
+        src = source_page()
+        fell_back = wait(lambda: src.js("!document.getElementById('text').hidden && document.getElementById('note').innerText.includes('did' + 'n\'t load')"), 25)
+        record("page: one that won't load falls back to our copy, and says so", bool(fell_back), note=src.js("document.getElementById('note').innerText"))
+        shot("5c-fallback")
+        src.close()
+        hotkey("o")
+        wait(lambda: not source_open(), 4)
 
         # ---------- the tray ----------
         rig.start_engine(VIDEO, "tray")

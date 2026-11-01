@@ -242,3 +242,38 @@ def test_a_route_that_dead_ended_offers_the_apps_own_search(monkeypatch):
     assert r.last_extra["search"] == "search for Plane"
     r.forget(s.n)
     assert s.n not in r._gave_up
+
+
+# ---------- the real page first
+def test_a_web_tutorial_says_its_page_section_and_words(tmp_path, monkeypatch):
+    monkeypatch.setattr(source, "STORE", tmp_path)
+    monkeypatch.setattr("engine.compile.adapters.web.is_public_host", lambda h: True)
+    v = source.Sources(MUG).view(MUG.step(4), 45)
+    assert v.page == MUG.meta.source.url and v.words == ["View Orientation", "Front"]
+
+
+def test_the_page_isnt_shown_when_its_on_this_pc_and_the_copy_still_is(tmp_path, monkeypatch):
+    monkeypatch.setattr(source, "STORE", tmp_path)
+    tut = MUG.model_copy(deep=True)
+    tut.meta.source.url = "http://localhost:8000/admin"
+    assert source.Sources(tut).view(tut.steps[0], 45).page is None
+
+
+def test_a_saved_reading_gives_the_page_the_real_heading(tmp_path, monkeypatch):
+    monkeypatch.setattr(source, "STORE", tmp_path)
+    monkeypatch.setattr("engine.compile.adapters.web.is_public_host", lambda h: True)
+    html = "<article><h2>(1) Create a New Part</h2>" + TEXT + "</article>"
+    source.remember_reading(from_html(html, None, lambda s: None), MUG.meta.source.url)
+    v = source.Sources(MUG).view(MUG.step(1), 45)
+    assert v.kind == "text" and v.section == "(1) Create a New Part" and v.blocks
+
+
+def test_step_words_are_a_routes_stops_then_the_control():
+    s = MUG.step(29)
+    assert source.step_words(s) == ["Features", "Reference Geometry", "Plane"]
+    assert source.step_words(MUG.step(13))[0] == "OK"
+
+
+def test_section_words_skip_anchors_that_only_number_it():
+    assert source.section_words("#3-sketch-a-camping-mug-profile") == "sketch a camping mug profile"
+    assert source.section_words("#step-3") is None and source.section_words(None) is None

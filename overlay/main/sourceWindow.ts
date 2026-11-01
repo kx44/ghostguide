@@ -1,16 +1,16 @@
 // The source window: the step's clip or section of the original tutorial. It's a normal window, because you scroll,
 // select and seek in it, which the overlay's own windows can't take. It opens WITHOUT focus, so typing stays in the
 // app until you click it, and it keeps above the app, so you can watch while you work.
-import { BrowserWindow, Rectangle, dialog, ipcMain, session, shell } from "electron";
+import { BrowserWindow, Rectangle, WebContentsView, dialog, ipcMain, session, shell } from "electron";
 import { join } from "node:path";
-import type { Box, SourceViewMsg } from "../shared/messages";
+import type { Box, PageState, SourceViewMsg } from "../shared/messages";
+import { MARK_CSS, markScript } from "./pageMark";
 
 export const SOURCE_TITLE = "GhostGuide: source";
 const GAP = 12;
 const PARTITION = "persist:ghost-page";      // the page window's cookies, apart from everything else in the overlay
-export const PAGE_TITLE = "GhostGuide: page";
-const PAGE_SIZE = { width: 900, height: 820 };
-const SIZE = { video: { width: 660, height: 470 }, text: { width: 520, height: 620 } };
+const PAGE_WAIT_MS = 15000;
+const SIZE = { video: { width: 660, height: 470 }, text: { width: 520, height: 620 }, page: { width: 860, height: 760 } };
 
 /** The corner of the screen's work area furthest from the target, so the window doesn't cover what you're about to do. */
 export function cornerAway(area: Rectangle, size: { width: number; height: number }, target?: Box): Rectangle {
@@ -31,11 +31,24 @@ export function keepOnScreen(r: Rectangle, area: Rectangle): Rectangle {
 /** A tutorial file is someone else's text: only web links may leave for the browser. */
 export const isWebLink = (url: unknown): url is string => typeof url === "string" && /^https?:\/\/[^\s]+$/i.test(url);
 
+/** The real page may only be on the public web. Names that resolve to this PC later aren't caught here (see the privacy doc). */
+export const isPublicLink = (url: unknown): url is string => {
+  if (!isWebLink(url)) return false;
+  let host: string;
+  try { host = new URL(url).hostname.toLowerCase(); } catch { return false; }
+  return !(host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal") || !host.includes(".") ||
+           host.startsWith("[") || /^(0|10|127)\.\d/.test(host) || /^192\.168\./.test(host) || /^169\.254\./.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host));
+};
+
 export class SourceWindow {
   private win?: BrowserWindow;
-  private page?: BrowserWindow;
+  private view?: WebContentsView;
+  private area?: Rectangle;
   private pageBase?: string;
-  private pageHeading?: string;
+  private pageShown = false;
+  private pageTimer?: ReturnType<typeof setTimeout>;
+  private section?: string;
+  private words: string[] = [];
   private ready = false;
   private last?: SourceViewMsg;
   private bounds?: Rectangle;       // where you moved it to, this run; until then, the corner away from each step's target
@@ -49,8 +62,19 @@ export class SourceWindow {
       if (this.last) e.sender.send("source:msg", this.last);
     });
     ipcMain.on("source:link", (e, url) => { if (e.sender === this.win?.webContents && isWebLink(url)) void shell.openExternal(url); });
-    ipcMain.on("source:page", (e, url, heading) => {
-      if (e.sender === this.win?.webContents && isWebLink(url)) this.showPage(url, typeof heading === "string" ? heading : undefined);
+    ipcMain.on("source:page", (e, url, section, words) => {
+      if (e.sender !== this.win?.webContents || !isWebLink(url)) return;
+      this.showPage(url, typeof section === "string" ? section : undefined, Array.isArray(words) ? words.filter(w => typeof w === "string") : []);
+    });
+    ipcMain.on("source:page-off", e => {
+      if (e.sender !== this.win?.webContents) return;
+      clearTimeout(this.pageTimer);
+      this.view?.setVisible(false);
+    });
+    ipcMain.on("source:page-area", (e, r) => {
+      if (e.sender !== this.win?.webContents || !r) return;
+      this.area = { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) };
+      this.view?.setBounds(this.area);
     });
     ipcMain.on("source:close", () => this.close());
     ipcMain.on("source:choose", async (_e, kind: "video" | "page") => {
@@ -68,59 +92,75 @@ export class SourceWindow {
     this.last = m;
     if (!this.isOpen) this.open(m);
     else if (this.ready) this.win!.webContents.send("source:msg", m);
-    if (m.link && m.where && this.page && !this.page.isDestroyed()) this.showPage(m.link, m.where);     // it follows the step
   }
 
   close() { if (this.isOpen) this.win!.close(); }
 
-  /** The tutorial's real page, pictures and all, in a window you asked for: an ordinary browser window with no bridge to us. It
-   *  stays beside the source window and follows the step. A site that wants a person to prove themselves asks you, there. */
-  private showPage(url: string, heading?: string) {
+  /** The tutorial's real page, inside this window, with the step's title and buttons around it. It has no bridge to us. */
+  private showPage(url: string, section?: string, words?: string[]) {
+    this.section = section;
+    this.words = words ?? [];
+    if (!this.win || this.win.isDestroyed()) return;
+    if (!isPublicLink(url)) { this.pageSaid("failed"); return; }
+    if (!this.view) this.view = this.makeView();
+    this.view.setVisible(true);
     const base = url.split("#")[0];
-    this.pageHeading = heading;
-    if (this.page && !this.page.isDestroyed()) {
-      if (this.pageBase === base) void this.scrollTo();
-      else this.loadPage(url);
-      this.page.showInactive();
+    if (base === this.pageBase && this.pageShown) {
+      void this.markStep();
+      this.pageSaid("shown");
       return;
     }
+    this.pageBase = base;
+    this.pageShown = false;
+    this.pageSaid("loading");
+    clearTimeout(this.pageTimer);
+    this.pageTimer = setTimeout(() => this.pageFailed(), PAGE_WAIT_MS);     // a site's own check can take a while, so not at once
+    this.view.webContents.loadURL(base).catch(() => {});
+  }
+
+  private makeView(): WebContentsView {
     session.fromPartition(PARTITION).setPermissionRequestHandler((_wc, _perm, answer) => answer(false));
-    const beside = this.win?.getBounds();
-    const area = this.workArea();
-    const width = Math.min(PAGE_SIZE.width, area.width - 2 * GAP), height = Math.min(PAGE_SIZE.height, area.height - 2 * GAP);
-    const page = new BrowserWindow({
-      ...keepOnScreen({ width, height, x: beside ? beside.x - width - GAP : area.x + GAP, y: beside ? beside.y : area.y + GAP }, area),
-      title: PAGE_TITLE, autoHideMenuBar: true, show: false, fullscreenable: false,
-      webPreferences: { partition: PARTITION, contextIsolation: true, nodeIntegration: false, sandbox: true },
+    const view = new WebContentsView({ webPreferences: { partition: PARTITION, contextIsolation: true, nodeIntegration: false, sandbox: true } });
+    const wc = view.webContents;
+    wc.setAudioMuted(true);
+    wc.on("will-navigate", (e, to) => { if (!isPublicLink(to)) e.preventDefault(); });
+    wc.on("will-redirect", (e, to) => { if (!isPublicLink(to)) e.preventDefault(); });
+    wc.setWindowOpenHandler(() => ({ action: "deny" }));
+    let status = 0;
+    wc.on("did-navigate", (_e, _url, code) => { status = code; });
+    wc.on("did-fail-load", (_e, code, _text, _url, mainFrame) => { if (mainFrame && code !== -3) this.pageFailed(); });
+    wc.on("did-finish-load", () => {
+      if (status >= 400) return;              // a refusal, or a site's check that reloads when it's done: the wait decides
+      clearTimeout(this.pageTimer);
+      this.pageShown = true;
+      void wc.insertCSS(MARK_CSS).catch(() => {});
+      void this.markStep();
+      this.pageSaid("shown");
     });
-    page.setAlwaysOnTop(true, "pop-up-menu");
-    page.webContents.setAudioMuted(true);
-    page.webContents.on("will-navigate", (e, to) => { if (!isWebLink(to)) e.preventDefault(); });
-    page.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-    page.on("page-title-updated", e => e.preventDefault());    // the engine must never take this for the app
-    page.once("ready-to-show", () => page.showInactive());
-    // Every load: a site's own check can come first, and the page you wanted loads after it.
-    page.webContents.on("did-finish-load", () => void this.scrollTo());
-    page.on("closed", () => { this.page = undefined; });
-    this.page = page;
-    this.loadPage(url);
+    this.win!.contentView.addChildView(view);
+    if (this.area) view.setBounds(this.area);
+    return view;
   }
 
-  private loadPage(url: string) {
-    this.pageBase = url.split("#")[0];
-    this.page!.loadURL(this.pageBase).catch(() => {});
+  private pageFailed() {
+    clearTimeout(this.pageTimer);
+    this.pageBase = undefined;
+    this.pageShown = false;
+    this.view?.setVisible(false);
+    this.pageSaid("failed");
   }
 
-  /** To the step's section, going by its heading's words. Nothing is read back from the page. */
-  private async scrollTo() {
-    if (!this.pageHeading || !this.page || this.page.isDestroyed()) return;
-    const words = JSON.stringify(this.pageHeading.trim().toLowerCase());
-    await this.page.webContents.executeJavaScript(
-      `[...document.querySelectorAll("h1,h2,h3,h4,h5")].find(h => h.textContent.trim().toLowerCase().includes(${words}))?.scrollIntoView(); 0`).catch(() => {});
+  private pageSaid(state: PageState) {
+    if (this.isOpen && this.ready) this.win!.webContents.send("source:page-state", state);
+  }
+
+  private async markStep() {
+    if (!this.view) return;
+    await this.view.webContents.executeJavaScript(markScript(this.section, this.words)).catch(() => {});
   }
 
   private open(m: SourceViewMsg) {
-    const size = m.kind === "text" || m.kind === "loading" ? SIZE.text : SIZE.video;
+    const size = m.page ? SIZE.page : m.kind === "text" || m.kind === "loading" ? SIZE.text : SIZE.video;
     const win = new BrowserWindow({
       ...(this.bounds ? keepOnScreen(this.bounds, this.workArea()) : cornerAway(this.workArea(), size, this.target())),
       minWidth: 360, minHeight: 280, title: SOURCE_TITLE, backgroundColor: "#17151D", autoHideMenuBar: true, show: false,
@@ -137,8 +177,10 @@ export class SourceWindow {
     // Only when you move it: read back and reopened at a scaled display, a window grows a little each time.
     for (const ev of ["moved", "resized"] as const) win.on(ev as "moved", () => { this.bounds = win.getBounds(); });
     win.on("closed", () => {
+      clearTimeout(this.pageTimer);
+      this.view?.webContents.close();
+      this.view = undefined; this.pageBase = undefined; this.pageShown = false;
       this.win = undefined; this.ready = false;
-      if (this.page && !this.page.isDestroyed()) this.page.close();
       this.onClosed();
     });
     this.win = win;

@@ -483,7 +483,8 @@ OVERLAY = ROOT / "overlay"
 def test_every_window_is_sandboxed_and_cant_navigate():
     for name in ("main.ts", "sourceWindow.ts"):
         src = (OVERLAY / "main" / name).read_text(encoding="utf-8")
-        windows, safe = src.count("new BrowserWindow("), src.count("contextIsolation: true, nodeIntegration: false")
+        windows = src.count("new BrowserWindow(") + src.count("new WebContentsView(")
+        safe = src.count("contextIsolation: true, nodeIntegration: false")
         assert windows and windows == safe and src.count("sandbox: true") == windows, name
         assert src.count('"will-navigate"') == windows and src.count("setWindowOpenHandler") == windows, name
 
