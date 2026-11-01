@@ -363,10 +363,11 @@ def _tracker(tut, app_window: str, args):
 
     def grab(step):
         # wait steps watch their window ("Browser"); others the app window around where the target was drawn
-        w = windows.find(step.target.label) if step.target.kind == "window" else windows.find(step.app or app_window)
+        watches = step.target.kind == "window" and step.action != "shortcut"      # a shortcut's "window" just names its keys
+        w = windows.find(step.target.label) if watches else windows.find(step.app or app_window)
         if w is None:
             return None
-        box = None if step.target.kind == "window" else getattr(args, "_player_box", lambda n: None)(step.n)
+        box = None if watches else getattr(args, "_player_box", lambda n: None)(step.n)
         return capture.window_region(w.hwnd, box)
 
     def folder_fn():

@@ -337,3 +337,35 @@ def test_a_single_file_page_with_all_its_pictures_says_nothing(tmp_path, monkeyp
     f = tmp_path / "page.mhtml"
     _single_file(f, PAGE, {"https://site.example/a-1024.png": _png()})
     assert pipeline._keep_for_source_view(str(f), pipeline.Options(), pipeline.web.from_file(f)) == []
+
+
+# ---------- from the Roblox run
+def _drag(where):
+    s = MUG.step(6).model_copy(deep=True)
+    s.action, s.target.where, s.params = "drag", where, {"direction": "in whatever direction you want"}
+    return s
+
+
+def test_a_drag_says_what_to_hold():
+    from engine.live.plan import _detail
+    assert _detail(_drag("3D viewport, while holding right-click"), "ghost_line") == "Drag in whatever direction you want while holding right-click."
+    assert _detail(_drag("3D viewport"), "ghost_line") == "Drag in whatever direction you want."
+
+
+def _keys(*keys):
+    return MUG.step(22).model_copy(deep=True, update={"params": {"keys": list(keys)}})
+
+
+def test_separate_keys_arent_pressed_as_one_chord():
+    assert execute.unsafe(_keys("W", "A", "S", "D")) and not execute.can_do(_keys("W", "A", "S", "D"), None)
+    assert execute.can_do(_keys("F"), None) and execute.can_do(_keys("Ctrl", "S"), None)
+
+
+def test_a_shortcut_named_as_a_window_may_be_checked_by_a_model():
+    from engine.live.verify import Tracker
+    s = MUG.step(22).model_copy(deep=True)
+    s.target.kind, s.target.label = "window", "WASD"
+    t = Tracker(SimpleNamespace(steps=[s]), "Roblox Studio", None, lambda w: [])
+    assert t._kept_here(s) is None
+    watched = s.model_copy(deep=True, update={"action": "wait"})
+    assert t._kept_here(watched) == "it isn't the tutorial's app"

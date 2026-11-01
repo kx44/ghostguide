@@ -2,8 +2,8 @@
 tutorial. The app's tooltip settles it for free, but only when the mouse is on the box, and in a flyout it usually isn't. So
 a model looks at the box drawn on that part of the window: Glimmer, then Spark if Glimmer can't say.
 
-It doesn't hold anything up for long: the answer comes in the background, and the finder keeps asking. Past WAIT_S (a cold
-Glimmer takes up to a minute) the box is shown as it is, and goes away if a "no" comes later. Pure but for `_picture`'s PIL.
+It doesn't hold anything up for long: the answer comes in the background, and the finder keeps asking. Past WAIT_S (Glimmer takes
+about 3 s warm, and up to a minute cold) the box is shown as it is, and goes away if a "no" comes later. Pure but for `_picture`'s PIL.
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from typing import Callable, Optional
 from engine.schema.messages import Box
 from engine.schema.tutorial import Step
 
-WAIT_S = 15.0
+WAIT_S = 5.0
 PAD_X, PAD_Y = 240, 120     # around the box, window px
 ZOOM = 2
 MAX_LOOKS = 5               # per target, per run of a step

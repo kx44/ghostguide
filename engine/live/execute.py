@@ -24,6 +24,7 @@ SETTLE_S = 0.15
 RENAME_SETTLE_S = 0.5
 HIT_SETTLE_S = 0.1       # the overlay checks the cursor every 30 ms and lets go of the mouse once it's off a card
 MAX_TYPED = 200          # a value longer than this stays on the card, to copy
+MODIFIERS = {"ctrl", "shift", "alt", "win"}
 THEN_KEYS = {"enter", "return", "tab"}       # the only keys a tutorial may press after typing
 KEY_NAMES = {"control": "ctrl", "escape": "esc", "delete": "del", "return": "enter"}
 NEVER_KEYS = [{"alt", "tab"}, {"alt", "esc"}, {"ctrl", "esc"}, {"ctrl", "shift", "esc"}, {"alt", "space"}, {"ctrl", "alt", "del"}]
@@ -68,6 +69,8 @@ def unsafe(step: Step) -> Optional[str]:
         return "its keys aren't a list"       # `keys: Esc` read letter by letter would be a chord of E, S and C
     if keys and _key_set(keys) in NEVER_KEYS:
         return "it would switch away from the app"
+    if keys and len(keys) > 1 and not _key_set(keys) & MODIFIERS:
+        return "those are separate keys, not one press"
     if step.action == "type":
         v = _value(step)
         if v is not None and len(v) > MAX_TYPED:

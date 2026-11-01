@@ -263,6 +263,7 @@ async def serve(player: Optional[Player], port: int = DEFAULT_PORT, record: Opti
         checked = await asyncio.to_thread(p.check_round)            # rule checks reuse the locator's dump
         if p is not player:
             return
+        was = p.session.current
         async with busy:
             # In a thread, like every other player call: drawing a step can measure its colours, which clears the overlay
             # through this very loop, so on the loop itself that waits two seconds for nothing and then fails.
@@ -272,8 +273,8 @@ async def serve(player: Optional[Player], port: int = DEFAULT_PORT, record: Opti
         if said != last_check:
             log(f"  check step {said[0]}: {said[1]} ({said[2]})" if said else "  check: -")
             last_check = said
-        if out:
-            s = p.session
+        s = p.session
+        if s.finished or s.current != was:
             log(f"  ✓ auto → {'finished' if s.finished else f'step {s.current}/{s.of}'}")
         await send_all(out)
 

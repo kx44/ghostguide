@@ -284,6 +284,9 @@ def _detail(step: Step, style: str) -> Optional[str]:
         bits = [f"from {p['from']}" if p.get("from") else "", f"{p['direction']}" if p.get("direction") else "",
                 f"to {p['to']}" if p.get("to") else ""]
         s = " ".join(b for b in bits if b)
+        hold = re.search(r"\b(?:while |when )?hold(?:ing)?\b[^,.;]*", step.target.where or "", re.I)     # "3D viewport, while holding right-click"
+        if hold:
+            s = f"{s} {hold.group(0).strip()}".strip()
         return ("Drag " + s + ".") if s else None
     if a == "click":
         ct = click_type(p)

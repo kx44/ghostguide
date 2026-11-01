@@ -434,7 +434,7 @@ class Tracker:
         """A step may watch any window it names, but only the apps the tutorial works in go to a model."""
         if activity.local_only():
             return "set to stay on this PC"
-        if step.target.kind == "window" and not self._tutorial_app(step.target.label):
+        if step.target.kind == "window" and step.action != "shortcut" and not self._tutorial_app(step.target.label):
             return "it isn't the tutorial's app"
         if step.app and self.gate_for is not None:
             return self.gate_for(step.app)
