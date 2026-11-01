@@ -1,0 +1,50 @@
+Add:
+  where: "The word Add in the row just under the top menu bar, to the right of Object Mode, View and Select"
+  aliases: []
+  source: Checked on screen, Blender 5.2.1 (barrel run, 2 Nov 2026)
+Mesh:
+  where: "The first row of the open Add menu, with a triangle icon. Point at that one row only"
+  aliases: []
+  source: Checked on screen, Blender 5.2.1 (barrel run, 2 Nov 2026)
+Cylinder:
+  where: "A row in the Mesh submenu, to the right of the open Add menu, between Circle or UV Sphere and Cone"
+  aliases: []
+  source: Checked on screen, Blender 5.2.1 (barrel run, 2 Nov 2026)
+Add Cylinder:
+  where: "A small collapsed panel titled Add Cylinder, with a small arrow, at the bottom left corner of the 3D viewport. It appears after adding a mesh"
+  aliases: []
+  source: Checked on screen, Blender 5.2.1 (barrel run, 2 Nov 2026)
+Vertices:
+  where: "The Vertices number box in the open Add Cylinder panel, at the bottom left of the 3D viewport"
+  aliases: []
+  source: Blender 5.2 manual
+Loop Cut and Slide:
+  where: "A small collapsed panel titled Loop Cut and Slide, with a small arrow, at the bottom left corner of the 3D viewport"
+  aliases: []
+  source: Blender 5.2 manual
+Factor:
+  where: "The Factor number box in the open Loop Cut and Slide panel, at the bottom left of the 3D viewport"
+  aliases: []
+  source: Blender 5.2 manual
+Viewport Shading drop-down:
+  where: "The small down arrow right of the four round shading icons, at the top right of the 3D viewport"
+  aliases: []
+  source: Blender 5.2 manual
+Edge Select:
+  where: "The middle of three small square icons right of Edit Mode, in the row under the top menu bar"
+  aliases: []
+  shortcut: '2'
+  source: Blender 5.2 manual
+Face Select:
+  where: "The right one of three small square icons right of Edit Mode, in the row under the top menu bar"
+  aliases: []
+  shortcut: '3'
+  source: Blender 5.2 manual
+Modifiers:
+  where: "The blue wrench icon in the vertical row of tabs at the left edge of the Properties editor, on the right of the window"
+  aliases: []
+  source: Blender 5.2 manual
+Eye:
+  where: "The eye icon at the right of the Outliner row named in the step"
+  aliases: []
+  source: Blender 5.2 manual

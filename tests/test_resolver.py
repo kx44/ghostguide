@@ -7,8 +7,16 @@ from engine.appmap.store import AppMapStore, pick_file, slug, version_pattern
 from engine.basefile.parse import parse_file
 from engine.live.locate import menu
 from engine.live.locate.appmap_hit import learnable, place
-from engine.live.locate.resolver import GenericUIA, Resolver
+from engine.live.locate.resolver import GenericUIA, Resolver, names_same_control
 from engine.live.locate.vision import to_screen
+
+
+def test_a_second_look_naming_the_same_control_isnt_a_no():
+    assert names_same_control("Add menu item", "Add") and names_same_control("the Revolve button", "Revolve")
+    assert names_same_control("Mesh menu item in the Add dropdown", "Mesh")
+    assert names_same_control("Mesh menu item in the Add dropdown (the red rectangle overlaps Mesh and Curve)", "Mesh")
+    assert not names_same_control("Add menu Mesh and Curve menu items", "Mesh") and not names_same_control("Curve", "Mesh")
+    assert not names_same_control("", "Mesh") and not names_same_control(None, "Mesh")
 from engine.models.tools import PointAt
 from engine.schema.messages import Box
 

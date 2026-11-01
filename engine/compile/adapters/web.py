@@ -88,6 +88,7 @@ class _Reader(HTMLParser):
         self.skip_depth = 0
         self.buf: list[str] = []
         self.open_block: Optional[tuple[str, Optional[str]]] = None
+        self.open_at = 0
         self.in_title = False
         self.title_buf: list[str] = []
 
@@ -135,6 +136,7 @@ class _Reader(HTMLParser):
         if not self.skip_depth and (tag in BLOCKS or tag in HEADINGS):
             self._flush()
             self.open_block = (tag, a.get("id"))
+            self.open_at = len(self.stack)
         self.stack.append((tag, self.next_id))
         self.next_id += 1
 
@@ -146,7 +148,9 @@ class _Reader(HTMLParser):
             return
         if not any(t == tag for t, _ in self.stack):
             return
-        if not self.skip_depth and (tag in BLOCKS or tag in HEADINGS or (self.open_block and tag in CONTAINERS)):
+        # a container closing ends a block only if the block is inside it: site builders nest <div>s inside a heading too
+        at = max(i for i, (t, _) in enumerate(self.stack) if t == tag)
+        if not self.skip_depth and (tag in BLOCKS or tag in HEADINGS or (self.open_block and tag in CONTAINERS and at < self.open_at)):
             self._flush()
         while self.stack:
             t, _ = self.stack.pop()
@@ -173,8 +177,9 @@ def main_blocks(page: _Page) -> list[_Block]:
     """The blocks inside the main part of the page: the deepest container holding most of the paragraph text."""
     size: dict[int, int] = {}
     total = 0
+    body = "text" if any(b.kind == "text" for b in page.blocks) else "heading"     # some site builders make every line a heading
     for b in page.blocks:
-        if b.kind == "text":
+        if b.kind == body:
             total += len(b.text)
             for c in b.path:
                 size[c] = size.get(c, 0) + len(b.text)
@@ -313,13 +318,15 @@ def from_html(html: str, url: Optional[str], load_image: Callable[[str], Optiona
     anchor = "#start"
     seen_h: set[str] = set()
     digest = hashlib.sha256()
-    for b in main_blocks(page):
+    blocks = main_blocks(page)
+    only_headings = not any(b.kind == "text" for b in blocks)
+    for b in blocks:
         if b.kind == "heading":
             anchor = b.anchor or slug(b.text)
             if anchor in seen_h:
                 anchor = f"{anchor}-{len(seen_h)}"
             seen_h.add(anchor)
-            items.append(Item("heading", b.text, anchor=anchor))
+            items.append(Item("text" if only_headings else "heading", b.text, anchor=anchor))
             digest.update(b.text.encode())
         elif b.kind == "text":
             items.append(Item("text", b.text, anchor=anchor))
@@ -366,7 +373,8 @@ def _from_single_file(path: Path, web_images: bool) -> Evidence:
 
     def load(src: str) -> Optional[bytes]:
         return pictures.get(src) or pictures.get(urljoin(base, src))
-    return from_html(html, None, load, web_images, offline=True)
+    saved_from = str(msg.get("Snapshot-Content-Location") or "")        # browsers write the page's address here
+    return from_html(html, saved_from if saved_from.startswith("https://") else None, load, web_images, offline=True)
 
 
 def from_file(path: Path, web_images: bool = False) -> Evidence:

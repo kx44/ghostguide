@@ -117,7 +117,7 @@ def enrich(client, model: str, tut: Tutorial, store: AppMapStore, version: Optio
             store.add_facts(label, **facts)
     for s in tut.steps:
         c = found.get(s.target.label.strip())
-        if c:
+        if c and s.target.kind in LOOKUP_KINDS and s.action in LOOKUP_ACTIONS:    # the same name on the canvas or in a list isn't this control
             s.target.aliases = s.target.aliases or c.get("aliases")
             s.target.menu_path = s.target.menu_path or c.get("menu_path")
             s.target.shortcut = s.target.shortcut or c.get("shortcut")

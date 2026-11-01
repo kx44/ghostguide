@@ -21,3 +21,5 @@ dist/
 .obsidian/workspace.json
 .vscode/
 Thumbs.db
+
+video/public/generated/

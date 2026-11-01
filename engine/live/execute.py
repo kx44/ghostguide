@@ -300,8 +300,9 @@ def _keys(keys: tuple[str, ...]) -> None:
 
 
 def _text(text: str, still_ok=lambda: True, send=None) -> bool:
-    """Characters as typed text (KEYEVENTF_UNICODE), so the keyboard layout doesn't matter. Looks before every character:
-    a long value takes seconds, and if you change window meanwhile the rest mustn't follow you. → False if it stopped."""
+    """Characters as key presses on this keyboard's layout, or as typed text where it has no key for one. Apps that draw their own
+    fields, such as Blender, ignore typed text. Looks before every character: a long value takes seconds, and if you change window
+    meanwhile the rest mustn't follow you. → False if it stopped."""
     send = send or _send_char
     for ch in text:
         if not still_ok():
@@ -314,6 +315,22 @@ def _text(text: str, still_ok=lambda: True, send=None) -> bool:
 def _send_char(ch: str) -> None:
     import ctypes
     import ctypes.wintypes as wt
+
+    scan = ctypes.windll.user32.VkKeyScanW(ctypes.c_wchar(ch)) if len(ch) == 1 and ord(ch) < 128 else -1
+    if scan != -1 and not (scan >> 8) & ~1 & 0xFF:       # a key on this layout, needing at most Shift
+        vk, shift = scan & 0xFF, bool((scan >> 8) & 1)
+        u32 = ctypes.windll.user32
+        sc = u32.MapVirtualKeyW(vk, 0)                   # with no scan code, Blender gets a key but no character
+        if shift:
+            u32.keybd_event(0x10, u32.MapVirtualKeyW(0x10, 0), 0, 0)
+        try:
+            u32.keybd_event(vk, sc, 0, 0)
+            time.sleep(0.01)
+            u32.keybd_event(vk, sc, 2, 0)
+        finally:
+            if shift:
+                u32.keybd_event(0x10, u32.MapVirtualKeyW(0x10, 0), 2, 0)
+        return
 
     class KEYBDINPUT(ctypes.Structure):
         _fields_ = [("wVk", wt.WORD), ("wScan", wt.WORD), ("dwFlags", wt.DWORD), ("time", wt.DWORD),

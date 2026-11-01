@@ -18,6 +18,7 @@ player and server didn't change.
 """
 from __future__ import annotations
 
+import re
 import threading
 import time
 from typing import Callable, Optional
@@ -29,6 +30,16 @@ from engine.schema.tutorial import Step
 
 NOTHING_TO_CLICK = ("shortcut", "wait", "look", "switch_app")
 SIGHT_ONLY_KINDS = ("canvas", "edge", "face")     # geometry has no name to check a box against
+
+
+def names_same_control(said: Optional[str], label: str) -> bool:
+    """A model's name for a box is often the label with more words round it: "Mesh menu item in the Add dropdown" is Mesh. Naming
+    the label and something else, as in "Mesh and Curve", says the box is on two things."""
+    words = re.findall(r"\w+", re.split(r"[(,;]", said or "")[0].casefold())      # its name, not its remarks on the box
+    want = re.findall(r"\w+", label.casefold())
+    if "and" in words or not want or not said:
+        return False
+    return any(words[i:i + len(want)] == want for i in range(len(words)))
 SEARCH_KINDS = ("button", "menu_item", "tab")     # what an app's command search can find
 DROP_ARROW_PX = 9     # the small dropdown arrow, this far past a ribbon button's icon
 TIP_MARGIN_PX = 24    # the mouse this close to a box counts as on it: model boxes can be loose
@@ -473,7 +484,7 @@ class Resolver:
         if said == "wait":
             self._checking = True
             return None
-        if said != "no":
+        if said != "no" or names_same_control(what, label):
             return box
         reject = getattr(self.vision, "reject", None)
         if reject is not None:

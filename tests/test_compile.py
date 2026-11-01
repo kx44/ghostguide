@@ -88,6 +88,13 @@ def test_web_keeps_the_main_text_and_images_in_place():
     assert "x = 1\ny = 2" in text
 
 
+def test_web_reads_a_page_where_every_line_is_a_heading():
+    html = ('<nav><ul><li>Home</li></ul></nav><main><h2 id="a"><div><div></div><span>Select the cube</span></div></h2>'
+            '<h2 id="b">Press x to delete it</h2></main>')
+    ev = web.from_html(html, None, lambda s: None)
+    assert [(i.kind, i.text, i.anchor) for i in ev.items] == [("text", "Select the cube", "#a"), ("text", "Press x to delete it", "#b")]
+
+
 def test_web_hash_changes_with_content_only():
     a = web.from_html(PAGE, None, lambda s: IMAGES.get(s))
     b = web.from_html(PAGE, "https://example.com/box", lambda s: IMAGES.get(s))
