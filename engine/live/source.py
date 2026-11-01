@@ -160,14 +160,8 @@ def page_link(url: Optional[str], anchor: Optional[str], heading: Optional[str] 
     return urlunparse(urlparse(url)._replace(fragment=":~:text=" + quote(words, safe="")))
 
 
-def section_words(anchor: Optional[str]) -> Optional[str]:
-    """A section's words, from an anchor made out of its heading. None for an anchor that only numbers it."""
-    words = re.sub(r"^[\d.\s]+", "", re.sub(r"^#", "", anchor or "").replace("-", " ")).strip()
-    return None if len(words.split()) < 2 or re.fullmatch(r"(step|part|section)\s*\d*", words, re.I) else words
-
-
 def step_words(step) -> list[str]:
-    """The names to look for on the page: a route's stops in order, then the control. "OK (green check)" is "OK"."""
+    """The names to look for in the text: a route's stops in order, then the control. "OK (green check)" is "OK"."""
     from engine.live.locate.menu import hop_label
 
     out: list[str] = []
@@ -176,6 +170,20 @@ def step_words(step) -> list[str]:
         if len(name) >= 2 and name.casefold() not in (x.casefold() for x in out):
             out.append(name)
     return out
+
+
+def figure_for(step, blocks: list[dict], anchor: Optional[str]) -> Optional[dict]:
+    """The picture that goes with this step: in its section, and when the section has several, the first after the words that
+    name the step's control. Authors put a picture after what it shows. Free, from the text alone, so it's a good guess."""
+    section = [b for b in blocks if anchor and b.get("anchor") == anchor]
+    pictures = [i for i, b in enumerate(section) if b["kind"] == "image" and (b.get("image") or b.get("web_image"))]
+    if not pictures:
+        return None
+    at = -1
+    for word in step_words(step):
+        said = re.compile(rf"\b{re.escape(word)}\b", re.I)
+        at = next((i for i, b in enumerate(section) if i > at and b["kind"] == "text" and said.search(b.get("text") or "")), at)
+    return section[next((i for i in pictures if i > at), pictures[-1])]
 
 
 def label(tut, step) -> str:
@@ -192,7 +200,19 @@ class Sources:
         self.refused: Optional[str] = None
         self.asked = False
         self.to_fetch: Optional[str] = None     # a page to try outside the player's lock (the server does it)
-        self._may_show: Optional[bool] = None
+        self._blocks: Optional[list[dict]] = None    # the reading, for the card's picture: every redraw asks
+
+    def picture(self, step) -> Optional[str]:
+        """The file address of this step's picture for its card, when this PC holds one. Never from the web: the card draws
+        on every step, and only what's on this PC goes there."""
+        src = self.tut.meta.source
+        if src.type == "video":
+            return None
+        if self._blocks is None:
+            self._blocks = _reading(held(src.hash, src.url)) or []
+        anchors = [b["anchor"] for b in self._blocks if b.get("anchor")]
+        found = figure_for(step, self._blocks, resolve_anchor(step.source.anchor, anchors))
+        return found.get("image") if found else None
 
     def _base(self, step, of: int, follow: bool) -> dict:
         return dict(n=step.n, of=of, title=step.title, tutorial=self.tut.meta.title, follow=follow)
@@ -236,26 +256,9 @@ class Sources:
                 return clip, lo
         return None, 0.0
 
-    def _real_page(self) -> Optional[str]:
-        """The page to show, when it's on the public web: a tutorial file is someone else's text, and it can't point this
-        window at the PC's own services or the local network."""
-        from engine.compile.adapters import SourceError
-        from engine.compile.adapters.web import guard_url
-
-        src = self.tut.meta.source
-        link = safe_link(src.url) if src.type == "web" else None
-        if link and self._may_show is None:
-            try:
-                guard_url(link)
-                self._may_show = True
-            except (SourceError, OSError, ValueError):
-                self._may_show = False
-        return link if link and self._may_show else None
-
     def _page(self, step, of: int, follow: bool) -> m.SourceView:
         src = self.tut.meta.source
         base = self._base(step, of, follow)
-        base.update(page=self._real_page(), section=section_words(step.source.anchor), words=step_words(step))
         blocks = _reading(held(src.hash, src.url))
         if blocks is None:
             link = page_link(src.url, step.source.anchor)
@@ -271,10 +274,12 @@ class Sources:
         anchor = resolve_anchor(step.source.anchor, anchors)
         heading = next((b["text"] for b in blocks if b["kind"] == "heading" and b.get("anchor") == anchor), None)
         note = None if anchor or not step.source.anchor else "This copy has no section matching this step, so here's the whole tutorial."
-        base["section"] = heading or base["section"]
+        figure = figure_for(step, blocks, anchor)
+        missing = any(b.get("web_image") for b in blocks)     # a saved copy that holds its pictures would put them on the cards too
         return m.SourceView(kind="text", where=heading, doc=str(src.hash or src.url), blocks=[m.SourceBlock(**b) for b in blocks],
-                            anchor=anchor, note=note, link=page_link(src.url, step.source.anchor, heading),
-                            link_label="Open in the browser", **base)
+                            figure=m.SourceBlock(**figure) if figure else None, anchor=anchor, note=note,
+                            link=page_link(src.url, step.source.anchor, heading), link_label="Open in the browser",
+                            choose="page" if missing else None, **base)
 
     def fetch(self, url: str) -> None:
         """One try, under our own name. Runs outside the player's lock. Afterwards view() has the words or the reason."""
@@ -317,4 +322,5 @@ class Sources:
             return view
         remember_reading(ev, src.hash, src.url)
         self.refused = None
+        self._blocks = None
         return self.view(step, of)

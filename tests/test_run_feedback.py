@@ -244,36 +244,76 @@ def test_a_route_that_dead_ended_offers_the_apps_own_search(monkeypatch):
     assert s.n not in r._gave_up
 
 
-# ---------- the real page first
-def test_a_web_tutorial_says_its_page_section_and_words(tmp_path, monkeypatch):
-    monkeypatch.setattr(source, "STORE", tmp_path)
-    monkeypatch.setattr("engine.compile.adapters.web.is_public_host", lambda h: True)
-    v = source.Sources(MUG).view(MUG.step(4), 45)
-    assert v.page == MUG.meta.source.url and v.words == ["View Orientation", "Front"]
+# ---------- a step's picture
+def _pic(n):
+    return {"kind": "image", "text": "", "anchor": "#a", "image": f"file:///p{n}.jpg"}
 
 
-def test_the_page_isnt_shown_when_its_on_this_pc_and_the_copy_still_is(tmp_path, monkeypatch):
-    monkeypatch.setattr(source, "STORE", tmp_path)
-    tut = MUG.model_copy(deep=True)
-    tut.meta.source.url = "http://localhost:8000/admin"
-    assert source.Sources(tut).view(tut.steps[0], 45).page is None
+def _said(text):
+    return {"kind": "text", "text": text, "anchor": "#a"}
 
 
-def test_a_saved_reading_gives_the_page_the_real_heading(tmp_path, monkeypatch):
-    monkeypatch.setattr(source, "STORE", tmp_path)
-    monkeypatch.setattr("engine.compile.adapters.web.is_public_host", lambda h: True)
-    html = "<article><h2>(1) Create a New Part</h2>" + TEXT + "</article>"
-    source.remember_reading(from_html(html, None, lambda s: None), MUG.meta.source.url)
-    v = source.Sources(MUG).view(MUG.step(1), 45)
-    assert v.kind == "text" and v.section == "(1) Create a New Part" and v.blocks
+def _step(label, path=None):
+    s = MUG.step(11).model_copy(deep=True)
+    s.target.label, s.target.menu_path = label, path
+    return s
+
+
+def test_a_section_with_one_picture_gives_every_step_that_picture():
+    blocks = [_said("Do this with Line."), _pic(1)]
+    assert source.figure_for(_step("Nothing named here"), blocks, "#a")["image"] == "file:///p1.jpg"
+
+
+def test_with_several_it_is_the_first_after_the_steps_words():
+    blocks = [_said("Pick Sketch."), _pic(1), _said("Now pick Fillet."), _pic(2), _said("Then Exit."), _pic(3)]
+    assert source.figure_for(_step("Sketch"), blocks, "#a")["image"] == "file:///p1.jpg"
+    assert source.figure_for(_step("Fillet"), blocks, "#a")["image"] == "file:///p2.jpg"
+    assert source.figure_for(_step("Exit"), blocks, "#a")["image"] == "file:///p3.jpg"
+
+
+def test_a_route_is_followed_in_order():
+    blocks = [_said("The Front Plane."), _pic(1), _said("View Orientation then Front."), _pic(2)]
+    assert source.figure_for(_step("Front", ["View Orientation", "Front"]), blocks, "#a")["image"] == "file:///p2.jpg"
+
+
+def test_no_section_or_no_picture_gives_nothing():
+    assert source.figure_for(_step("Line"), [_said("Line."), _pic(1)], None) is None
+    assert source.figure_for(_step("Line"), [_said("Line.")], "#a") is None
 
 
 def test_step_words_are_a_routes_stops_then_the_control():
-    s = MUG.step(29)
-    assert source.step_words(s) == ["Features", "Reference Geometry", "Plane"]
+    assert source.step_words(MUG.step(29)) == ["Features", "Reference Geometry", "Plane"]
     assert source.step_words(MUG.step(13))[0] == "OK"
 
 
-def test_section_words_skip_anchors_that_only_number_it():
-    assert source.section_words("#3-sketch-a-camping-mug-profile") == "sketch a camping mug profile"
-    assert source.section_words("#step-3") is None and source.section_words(None) is None
+def _saved_mug(tmp_path, monkeypatch, image):
+    monkeypatch.setattr(source, "STORE", tmp_path)
+    folder = tmp_path / "readings" / "h"
+    folder.mkdir(parents=True)
+    pic = {"image": "i.jpg"} if image else {"web_image": "https://site.example/a.png"}
+    (folder / "i.jpg").write_bytes(b"x")
+    (folder / "reading.json").write_text(json.dumps([
+        {"kind": "heading", "text": "(1) Create a New Part", "anchor": "#1-create-a-new-part"},
+        {"kind": "text", "text": "Words.", "anchor": "#1-create-a-new-part"},
+        {"kind": "image", "text": "", "anchor": "#1-create-a-new-part", **pic}]), encoding="utf-8")
+    source._remember({"reading": "h"}, MUG.meta.source.url)
+    return source.Sources(MUG)
+
+
+def test_the_card_gets_a_picture_held_on_this_pc(tmp_path, monkeypatch):
+    s = _saved_mug(tmp_path, monkeypatch, True)
+    assert s.picture(MUG.step(1)).startswith("file:")
+    view = s.view(MUG.step(1), 45)
+    assert view.figure.image and view.choose is None
+
+
+def test_a_picture_only_on_the_web_stays_off_the_card_and_offers_a_saved_copy(tmp_path, monkeypatch):
+    s = _saved_mug(tmp_path, monkeypatch, False)
+    assert s.picture(MUG.step(1)) is None
+    view = s.view(MUG.step(1), 45)
+    assert view.figure.web_image and view.choose == "page"
+
+
+def test_a_video_tutorials_card_has_no_picture():
+    tut = parse_file("tutorials/youtube-clone-vscode.md")
+    assert source.Sources(tut).picture(tut.step(1)) is None
