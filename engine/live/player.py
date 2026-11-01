@@ -16,7 +16,7 @@ from pydantic import ValidationError
 
 from engine import activity
 from engine.live import source as source_view
-from engine.live.execute import can_do, needs_confirm, plan as plan_ops, say_done
+from engine.live.execute import can_do, needs_confirm, plan as plan_ops, risky, say_done
 from engine.live.locate.pinned import Pin, Pins
 from engine.live.plan import Planner
 from engine.live.session import Event, Session
@@ -63,6 +63,7 @@ class Player:
         self.tracker = tracker
         self.folder_fn = folder_fn               # finds the working folder for `file` checks once the app is up
         self._hidden_scan: list[int] = []
+        self._programs_said = False
         # Finds targets live. Slow (a UIA walk), so it never runs inside handle(): the server calls
         # locate_current() outside its lock and apply_located() with the result, so buttons answer at once.
         self.locator = locator
@@ -237,9 +238,10 @@ class Player:
             return [m.Toast(text="There's nothing sure to act on for this step, so it's yours.", kind="warn")]
         stage = getattr(self.locator, "last_stage", "")
         vouched = box is not None and getattr(self.locator, "vouched", lambda b: False)(box) is True
-        if needs_confirm(step, stage, box, vouched) and step.n not in self.pins.steps and self._armed != step.n:
+        risk = risky(step)
+        if self._armed != step.n and (risk or (needs_confirm(step, stage, box, vouched) and step.n not in self.pins.steps)):
             self._armed = step.n
-            return self.current() + [m.Toast(text="Nothing has confirmed this outline yet. If it's on the right spot, press again.", ms=5000)]
+            return self.current() + [m.Toast(text=risk or "Nothing has confirmed this outline yet. If it's on the right spot, press again.", ms=5000)]
         self._armed = None
         ops = plan_ops(step, box, self._located_extra.get(step.n, {}).get("click_at"))
         why = executor.run(ops)
@@ -250,6 +252,15 @@ class Player:
             self._acted.add(step.n)
             self._did_it = (step.n, time.monotonic())
         return [m.Toast(text=say_done(step), ms=2000)]
+
+    def _programs_named(self) -> list[m._Msg]:
+        """A tutorial file chooses which programs it works in, so you hear which, once, before it starts."""
+        tut = self.session.tutorial
+        others = sorted({s.app for s in tut.steps if s.app and s.app.casefold() != tut.meta.app.casefold()})
+        if not others or self._programs_said:
+            return []
+        self._programs_said = True
+        return [m.Toast(text=f"This tutorial works in {', '.join([tut.meta.app, *others])}.", ms=7000)]
 
     def _look_ahead(self) -> None:
         """The next steps' controls, found before they show. The first step's too, while the start check holds it back."""
@@ -445,7 +456,7 @@ class Player:
         if t == "hello":
             self.displays = list(msg.displays)
             self._scheme_cache.clear()
-            return self.current()
+            return self.current() + self._programs_named()
         if t == "show_me":
             if s.finished or s.hidden or s.step is None:
                 return []
@@ -468,8 +479,7 @@ class Player:
         if t == "toggle_scheme":
             return self._toggle_scheme()
         if t == "toggle_local":
-            activity.set_local_only(not activity.local_only())
-            text = ("Nothing from your screen leaves this PC now." if activity.local_only()
+            text = ("Nothing from your screen leaves this PC now, and it stays that way next time." if activity.switch_local_only()
                     else "Models may look at this app again when a free check can't tell.")
             return self.current() + [m.Toast(text=text, ms=3500)]
         if t == "start_ok":

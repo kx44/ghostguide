@@ -165,11 +165,22 @@ def test_a_finder_look_is_stopped_by_the_gate(monkeypatch):
     from engine.live import windows
 
     class W:
+        hwnd = 1
         title = "secrets.yaml - proj - Visual Studio Code"
+
+    class Dialog:
+        title = ""
     monkeypatch.setattr(windows, "find", lambda part: W)
+    monkeypatch.setattr(windows, "program", lambda hwnd: windows.Program("code"))
+    monkeypatch.setattr(windows, "same_process", lambda hwnd: [Dialog])
     assert "secrets file" in cli._kept_on_pc("Visual Studio Code")
     W.title = "index.html - proj - Visual Studio Code"
     assert cli._kept_on_pc("Visual Studio Code") is None
+    Dialog.title = "Enter your password"          # its dialogs are in the picture too
+    assert "secrets file" in cli._kept_on_pc("Visual Studio Code")
+    Dialog.title = ""
+    monkeypatch.setattr(windows, "program", lambda hwnd: windows.Program("keepassxc"))
+    assert "password manager" in cli._kept_on_pc("Visual Studio Code")
     activity.set_local_only(True)
     assert "stay on this PC" in cli._kept_on_pc("Visual Studio Code")
 
@@ -660,3 +671,221 @@ def test_the_endpoint_takes_a_picture_of_a_sensible_size():
     h = _modal_helpers()
     assert h["acceptable"]("aGk=", "image/jpeg") and not h["acceptable"]("", "image/jpeg")
     assert not h["acceptable"]("aGk=", "text/html") and not h["acceptable"]("x" * (h["MAX_IMAGE_B64"] + 1), "image/png")
+
+
+# ---- what later features had worn down ----
+def test_a_box_check_counts_as_your_screen(tmp_path):
+    client(tmp_path).chat(**picture(tag="box-step-1"))
+    assert activity.read()[0]["screen"] is True and activity.pictures_sent() == 1
+    activity.set_local_only(True)
+    with pytest.raises(activity.LocalOnly):
+        client(tmp_path).chat(**picture(tag="box-step-1", png=b"other"))
+
+
+def test_a_window_name_is_whole_words():
+    from engine.live.windows import Win, pick
+
+    wins = [Win(1, "Bitwarden - Vault", (0, 0, 800, 600)), Win(2, "proj - Visual Studio Code", (0, 0, 800, 600))]
+    assert pick(wins, "e") is None and pick(wins, "") is None and pick(wins, " - ") is None
+    assert pick(wins, "Visual Studio Code").hwnd == 2 and pick(wins, "war") is None
+
+
+@pytest.mark.parametrize("label", ["e", "o", "isual"])
+def test_a_scrap_of_the_apps_title_isnt_the_app(label):
+    asked = []
+    s = step(kind="window", label=label)
+    t = _tracker(Ladder(glimmer=lambda st, png: asked.append(st) or Verdict("done")), s, app="proj - Visual Studio Code")
+    assert "isn't the tutorial's app" in t._kept_here(s) and not any(_ask(t, s) and asked)
+
+
+def test_a_watched_window_must_be_the_apps_program_and_is_the_one_the_rules_read():
+    s = step(kind="window", label="Visual")
+    t = _tracker(Ladder(), s, app="proj - Visual Studio Code")
+    t.same_program = lambda label: False
+    assert "isn't the tutorial's app" in t._kept_here(s)
+    t.same_program = lambda label: True
+    t.gate = lambda: None
+    read = []
+    t.gate_for = lambda label: read.append(label) or "secret title"
+    assert t._kept_here(s) == "secret title" and read == ["Visual"]
+
+
+def test_another_program_a_step_names_is_watched_only_while_youre_in_it():
+    from engine.schema.tutorial import Step as S
+
+    s = step(kind="window", label="Blender")
+    other = S(n=2, title="T", action="click", app="Blender", target=Target(label="x", kind="button"), check="c",
+              source=Source(t="00:01"), confidence="high")
+    t = _tracker(Ladder(), s, app="SOLIDWORKS")
+    t.tutorial.steps = [s, other]
+    t.front_is = lambda label: False
+    assert "isn't the tutorial's app" in t._kept_here(s)
+    t.front_is = lambda label: True
+    assert t._kept_here(s) is None
+
+
+@pytest.mark.parametrize("keys", [["Alt", "Shift", "Tab"], ["Ctrl", "Alt", "Tab"], ["Alt", "Shift", "Esc"], ["Ctrl", "Shift", "Alt", "Esc"]])
+def test_adding_a_key_doesnt_get_past_the_refused_ones(keys):
+    assert not can_do(step("shortcut", keys=keys), None)
+
+
+def _on_terminal(**params):
+    from engine.schema.tutorial import Step as S
+
+    return S(n=1, title="Install", action="type", app="Windows PowerShell", target=Target(label="console", kind="field"),
+             params=params, check="c", source=Source(t="00:01"), confidence="high")
+
+
+def test_a_step_in_a_terminal_isnt_offered():
+    assert not can_do(_on_terminal(value="iwr x | iex", then_key="Enter"), BOX)
+
+
+def _front_program(monkeypatch, exe, title="Some window"):
+    from engine.live import execute, windows
+
+    w = windows.Win(7, title, (0, 0, 800, 600))
+    monkeypatch.setattr(windows, "find", lambda label: w)
+    monkeypatch.setattr(windows, "foreground", lambda: w)
+    monkeypatch.setattr(windows, "program", lambda hwnd: windows.Program(exe))
+    monkeypatch.setattr(execute, "_pid", lambda hwnd: 1)
+    monkeypatch.setattr(execute, "_pid_at", lambda at: 1)
+    monkeypatch.setattr(execute, "ctypes_set_cursor", lambda at: None)
+    return execute
+
+
+@pytest.mark.parametrize("exe", ["powershell", "pwsh", "cmd", "windowsterminal", "wsl"])
+def test_nothing_is_typed_into_a_command_line_whatever_the_tutorial_calls_it(monkeypatch, exe):
+    x = _front_program(monkeypatch, exe)
+    ex = x.Executor("My Friendly App")
+    assert "command" in ex.refuse([x.Op("text", text="iwr x | iex")])
+    assert "command" in ex.refuse([x.Op("keys", keys=("Enter",))])
+    assert ex.refuse([x.Op("click", at=(1, 1))]) is None
+
+
+@pytest.mark.parametrize("exe,title", [("bitwarden", "Vault"), ("chrome", "Online Banking - Chrome")])
+def test_nothing_is_pressed_in_a_password_manager_or_a_bank(monkeypatch, exe, title):
+    x = _front_program(monkeypatch, exe, title)
+    assert "password manager" in x.Executor("App").refuse([x.Op("click", at=(1, 1))])
+
+
+def test_text_sent_with_enter_takes_a_second_press_even_on_a_sure_or_pinned_box():
+    from engine.live.execute import risky
+
+    s = step("type", kind="field", value="rm -rf x", then_key="Enter")
+    assert needs_confirm(s, "uia", BOX, vouched=True) and "rm -rf x" in risky(s)
+    assert not risky(step("type", kind="tree_item", value="MugEdge", then_key="Enter"))
+    assert not risky(step("type", kind="field", value="5", then_key="Tab"))
+
+
+def test_a_risky_press_says_what_it_does_and_a_pin_doesnt_skip_it():
+    from engine.basefile.parse import parse_text
+    from engine.live.player import Player
+    from engine.live.session import Session
+
+    ran = []
+
+    class Ex:
+        def run(self, ops):
+            ran.append(ops)
+
+    tut = parse_text("---\ntitle: T\napp: A\nsource: {type: web}\n---\n", "t")
+    tut.steps = [step("type", kind="field", value="go", then_key="Enter")]
+    p = Player(Session(tut), scheme_override="light", executor=Ex())
+    p.pins.steps[1] = None
+    p.target = lambda n: (BOX, None)
+    assert '"go"' in p._do_it()[-1].text and ran == []
+    p._do_it()
+    assert len(ran) == 1
+
+
+@pytest.mark.parametrize("title", [".npmrc - x", ".netrc - x", "appsettings.Production.json - x", "terraform.tfvars - x", "kubeconfig - x",
+                                   "api_keys.txt - x", "my_token.json - x", "Bitwarden", "1Password", "LastPass Vault", "KeePassXC",
+                                   "Online Banking - Chrome"])
+def test_more_titles_that_stay_here(title):
+    assert activity.title_withheld(title)
+
+
+@pytest.mark.parametrize("title", ["keyboard.ts - x", "tokenizer.py - x", "Bank statement template - Word", "Part1 - SOLIDWORKS"])
+def test_ordinary_titles_still_go(title):
+    assert activity.title_withheld(title) is None
+
+
+@pytest.mark.parametrize("field", ["meta", "step"])
+def test_a_file_naming_a_password_manager_wont_play(field):
+    from engine.basefile.parse import parse_file
+    from engine.basefile.validate import validate_tutorial
+
+    tut = parse_file("tutorials/youtube-clone-vscode.md")
+    if field == "meta":
+        tut.meta.app = "Bitwarden"
+    else:
+        tut.steps[0].app = "KeePassXC"
+    assert any("password manager" in e for e in validate_tutorial(tut).errors)
+
+
+def test_a_tutorial_naming_other_programs_says_which_once():
+    from engine.basefile.parse import parse_file
+    from engine.live.player import Player
+    from engine.live.session import Session
+
+    tut = parse_file("tutorials/youtube-clone-vscode.md")
+    p = Player(Session(tut), scheme_override="dark")
+    assert not [o for o in p.handle({"type": "hello"}) if "works in" in str(getattr(o, "text", ""))]
+    tut.steps[1].app = "Blender"
+    said = lambda: [o.text for o in p.handle({"type": "hello"}) if "works in" in str(getattr(o, "text", ""))]
+    assert "Blender" in said()[0] and said() == []
+
+
+@pytest.mark.parametrize("src", ["//attacker/share/x.jpg", r"\\attacker\share\x.jpg", "%5C%5Cattacker%5Cshare%5Cx.jpg", "C:/x.jpg", "/x.jpg", "../x.jpg"])
+def test_a_saved_pages_picture_is_never_looked_for_off_the_folder(tmp_path, monkeypatch, src):
+    from engine.compile.adapters.web import _local_loader
+
+    page = tmp_path / "page.html"
+    resolved, real = [], Path.resolve
+    monkeypatch.setattr(Path, "resolve", lambda self, *a, **k: resolved.append(str(self)) or real(self, *a, **k))
+    assert _local_loader(page)(src) is None
+    assert not [r for r in resolved if "attacker" in r]
+
+
+def test_a_picture_beside_the_page_still_loads(tmp_path):
+    from engine.compile.adapters.web import _local_loader
+
+    (tmp_path / "page_files").mkdir()
+    (tmp_path / "page_files" / "a b.jpg").write_bytes(b"pic")
+    assert _local_loader(tmp_path / "page.html")("page_files/a%20b.jpg?x=1") == b"pic"
+
+
+def test_the_switch_is_remembered_for_the_next_run():
+    assert activity.switch_local_only() is True and activity.SWITCH.exists()
+    assert activity.switch_local_only() is False and not activity.SWITCH.exists()
+
+
+def test_forget_covers_the_overlays_browser_data_and_not_its_settings(monkeypatch, tmp_path):
+    from engine import forget
+
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    places = [p for _, p in forget._places()]
+    assert tmp_path / "ghostguide-overlay" in places and tmp_path / "GhostGuide" / "Cache" in places
+    assert tmp_path / "GhostGuide" not in places
+
+
+def test_forget_carries_on_past_a_file_something_has_open(tmp_path, monkeypatch):
+    from engine import forget
+
+    (tmp_path / "held.txt").write_text("x", encoding="utf-8")
+    (tmp_path / "free.txt").write_text("x", encoding="utf-8")
+    real = Path.unlink
+
+    def unlink(self, *a, **k):
+        if self.name == "held.txt":
+            raise PermissionError(self)
+        real(self, *a, **k)
+    monkeypatch.setattr(Path, "unlink", unlink)
+    monkeypatch.setattr(forget, "kept", [])
+    forget.remove(tmp_path)
+    assert [p.name for p in tmp_path.iterdir()] == ["held.txt"] and [p.name for p in forget.kept] == ["held.txt"]
+
+
+def test_a_models_reason_stays_out_of_the_log():
+    src = (ROOT / "engine/server.py").read_text(encoding="utf-8")
+    assert 'said so" if v.stage in ("glimmer", "spark") else v.why' in src

@@ -30,10 +30,10 @@ flowchart LR
 | **What it looks at** | The app's own window and that app's dialogs and menus, using `PrintWindow`. Other windows on top aren't in the picture, and neither is the overlay. |
 | **Also** | A small ring of pixels around the target, measured to pick light or dark colours. It's thrown away at once and never sent. |
 | **Saved to disk?** | The live loop writes no screenshots. The check scripts under `tests/` do, into `cache/`, when you run them. |
-| **When it can go to a model** | Only if models are on and only with an app the tutorial works in in the picture: to find a control UI Automation can't see, to check a box found by sight, or to check a step that a rule and a pixel diff couldn't settle. While you follow a tutorial in one app, the next few steps' controls are looked for ahead of time, at most 60 looks a run, and this doesn't need the app in front. A step can name another program to work in (`app`); in such a tutorial, a window goes only while it's the one in front. A window a step only watches is never sent. So a tutorial file does choose which programs can be looked at while you're in them: the card always says which program a step is in. |
-| **What stops it** | Hide. *Keep my screen on this PC*. A window title that names a secrets file (`.env`, `id_rsa`, `*.pem`, `*.key`, `*.kdbx`, or the words secrets, credentials, password, private key). In each case the step falls back to free checks and the Next button. |
+| **When it can go to a model** | Only if models are on and only with an app the tutorial works in in the picture: to find a control UI Automation can't see, to check a box found by sight, or to check a step that a rule and a pixel diff couldn't settle. While you follow a tutorial in one app, the next few steps' controls are looked for ahead of time, at most 60 looks a run, and this doesn't need the app in front. A step can name another program to work in (`app`); in such a tutorial, a window goes only while it's the one in front. A window a step only watches is never sent, unless it belongs to the tutorial's own program. So a tutorial file does choose which programs can be looked at while you're in them: when it names more than one, a message says which as it opens, and the card always says which program a step is in. A file that names a password manager or a bank won't play. |
+| **What stops it** | Hide. *Keep my screen on this PC*. A window or one of its dialogs with a title that names a secrets file (`.env`, `.npmrc`, `.netrc`, `id_rsa`, `*.pem`, `*.key`, `*.kdbx`, `*.tfvars`, `kubeconfig`, `appsettings*.json`, a `token` file, or the words secrets, credentials, password, private key, API key). A password manager or an online banking page, by its title or its program. In each case the step falls back to free checks and the Next button. |
 
-The title rule is a guard for the common case. It reads the title only, so a secret that's visible in a file with an ordinary name isn't caught. If you have one on screen, use the tray switch.
+The title rule is a guard for the common case. It knows the names above and reads the title only, so a secret that's visible in a file with an ordinary name isn't caught. If you have one on screen, use the tray switch.
 
 ### Your mouse and keyboard
 
@@ -50,11 +50,11 @@ GhostGuide watches input with Windows Raw Input, a copy of events that sits outs
 |---|---|---|
 | **Meta API**: Muse Spark 1.3 | A picture of the app, and the step's title, label and description | `FINDER_VISION=on`: a control can't be found by name. `CHECK_MODELS=on`: last rung of a step check |
 | **Meta API**: Muse Wonder | A picture of the app and the same text | `FINDER_VISION=on`: nothing else found the control. At most once per step |
-| **Your Modal deployment**: Muse Glimmer | A JPEG of the app and the step's check sentence, over https with a token | `CHECK_MODELS=on`: a rule and a pixel diff couldn't tell |
+| **Your Modal deployment**: Muse Glimmer, on a GPU in Asia-Pacific as `deploy/modal_glimmer.py` is set up | A JPEG of the app and the step's check sentence, or a close-up of a box found by sight, over https with a token | `CHECK_MODELS=on`: a rule and a pixel diff couldn't tell, or a box needs a second look |
 | **Meta API**: Spark, Voice Transcribe | The tutorial you're importing: its text, frames and narration | When you import a tutorial, not while you follow one |
 | **YouTube or Vimeo, or a web page** | An ordinary download of the link you gave, or of the page a tutorial names, under GhostGuide's own name | When you import, or open a step's source. A site that refuses is told apart and not retried |
 
-**Spark Contributor.** Meta's cheaper Contributor rate comes with Meta being allowed to train on what's sent. Pictures of your screen never go there unless you set `SCREENS_MAY_TRAIN=on`. `engine compile --tune` uses it for tutorials, which you ask for by name. Read Meta's and Modal's own terms for how they treat what they receive; this page can only say what GhostGuide sends.
+**Spark Contributor.** Meta's cheaper Contributor rate comes with Meta being allowed to train on what's sent. Pictures of your screen never go there unless you set `SCREENS_MAY_TRAIN=on`. `engine compile --tune` uses it for tutorials, which you ask for by name. Every compile also uses it once per app, to look up the app's command search, and all that sends is the app's name and version. Read Meta's and Modal's own terms for how they treat what they receive; this page can only say what GhostGuide sends.
 
 **The activity log.** `cache/logs/activity.jsonl` gets one line per send: when, to which host, which model, how many pictures, how many bytes. It never holds a picture, a prompt or a typed value. `python -m engine activity` prints it. The tray's menu shows the count for this run.
 
@@ -63,12 +63,12 @@ GhostGuide watches input with Windows Raw Input, a copy of events that sits outs
 It sends real clicks and keys, so it has the tightest limits.
 
 - **It's a button.** It has no hotkey and never runs by itself. It's only offered for buttons, menus, fields and shortcuts, and never for drawing on the canvas.
-- **A box only sight has found takes a second press,** so you can look at the outline first; the button says so. A box the app's tooltip, a model's second look or a remembered look has confirmed runs on the first press. Any key that deletes always takes a second press.
+- **A box only sight has found takes a second press,** so you can look at the outline first; the button says so. A box the app's tooltip, a model's second look or a remembered look has confirmed runs on the first press. Any key that deletes and any text sent with Enter always take a second press, and the message says what's about to be typed. Ending a rename with Enter doesn't.
 - **It only acts on the app.** The app must be the front window and own the spot it would click. That's re-checked before each input and before each typed character, so if you switch windows mid-text, typing stops.
-- **It won't do everything a tutorial file asks.** It refuses to press keys that leave the app (Alt+Tab, Alt+Esc, Ctrl+Esc, Ctrl+Shift+Esc, Alt+Space, Ctrl+Alt+Del). It refuses to type a value with control characters, including line breaks, or longer than 200 characters; those stay on the card to copy. The only keys allowed after typing are Enter and Tab.
+- **It won't do everything a tutorial file asks.** It refuses to press keys that leave the app (Alt+Tab, Alt+Esc, Ctrl+Esc, Ctrl+Shift+Esc, Alt+Space, Ctrl+Alt+Del, and those with other keys added). It types nothing into a command line, whatever the tutorial calls it: a command stays on the card for you to read, copy and run. It presses nothing in a password manager or an online banking page. It refuses to type a value with control characters, including line breaks, or longer than 200 characters; those stay on the card to copy. The only keys allowed after typing are Enter and Tab.
 - **It's on the record.** Each act goes in the activity log as the step and the kinds of input, not the text.
 
-It's only wired up for apps without a full accessibility rule pack: SolidWorks today, not VS Code.
+It's wired up for every app but VS Code, where filling a field would replace the file, and command lines.
 
 ### Tutorial files and pages are someone else's text
 
@@ -79,7 +79,7 @@ A tutorial, whether you compiled it or were sent it, is treated as untrusted.
 - **Windows are locked down.** Each one is sandboxed with context isolation and no Node in the page. None can navigate or open another window. Every permission request (camera, microphone, screen) is denied.
 - **Only web links reach your browser,** checked in both the engine and the overlay's main process.
 - **A saved page's missing pictures can load from the site.** When a saved page didn't keep a picture, the source window shows it from the address the page gives, over https, with no referrer. So that site sees your IP address, as it would in a browser. These pictures never go to a model.
-- **A saved page's pictures must sit beside it,** or inside it, for a page saved as one file. A page can't point at another file on your disk to get it sent to a model.
+- **A saved page's pictures must sit beside it,** or inside it, for a page saved as one file. A page can't point at another file on your disk to get it sent to a model, or at a network share, which would make Windows connect to it and offer your login.
 - **This PC and its network aren't fetched.** A link to `localhost`, a private address or a `.local` name is refused, on each redirect as well. Pages stop at 8 MB and pictures at 20 MB.
 - **A model's answer can't run anything.** Live, its only tools are `point_at`, `draw_line`, `menu_path` and `not_found`, which become something to draw. Compiled, its answer has to pass the same checks as any tutorial file. A route from Muse Wonder goes to your local map marked unreviewed.
 
@@ -106,11 +106,13 @@ It doesn't authenticate other programs running under your account. Those can alr
 | `cache/sources/` | Tutorial clips and readings, for the source view |
 | `cache/compiled/` | What compiling read: the tutorial's frames and text |
 | `cache/cassettes/` | Recorded model answers, in `record` mode. Pictures are replaced by a hash |
-| `cache/logs/` | Spend, activity, scores, and `engine.log`: what the finder and checks said on the last run, not what's on screen |
+| `cache/logs/` | Spend, activity, scores, and `engine.log`: how the finder and checks went on the last run. A rule's reason is kept and a model's isn't, though a model's short name for a control it says a box is on can appear |
 | `%APPDATA%\GhostGuide\appmaps\` | Where this app's buttons are, relative to its window, with a 16×16 grey thumbnail of each to tell neighbours apart |
 | `%APPDATA%\GhostGuide\overlay-settings.json` | Whether the shortcuts panel is open |
+| `cache/screen-stays-here` | There while *Keep my screen on this PC* is on, so it stays on next time |
+| `%APPDATA%\ghostguide-overlay\`, or `Cache`, `Code Cache`, `Network`, `Local Storage` and `Session Storage` in `%APPDATA%\GhostGuide\` for a built copy | The overlay's browser data, including pictures from web pages the source window showed |
 
-`python -m engine forget` lists these and `--yes` removes them, apart from the settings file. Two things stay: the spend log, because the budget cap adds it up, and your tutorial files. It removes links without following them.
+`python -m engine forget` lists these and `--yes` removes them, apart from the settings file and the switch. Two more things stay: the spend log, because the budget cap adds it up, and your tutorial files. It removes links without following them. A file something still has open stays, and it says how many, so close GhostGuide first.
 
 ### The Modal endpoint
 

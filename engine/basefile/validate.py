@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Union
 
+from engine.activity import is_sensitive_app
 from engine.basefile.parse import ParseError, parse_file
 from engine.schema.tutorial import Tutorial
 
@@ -49,8 +50,13 @@ def validate_tutorial(tut: Tutorial, name: str = "<tutorial>") -> Report:
     if url and url != "TBD" and not re.match(r"https?://[^\s/]+", url, re.I):
         r.errors.append(f"source.url {url[:60]!r} must be a web link")
 
+    if is_sensitive_app(tut.meta.app):
+        r.errors.append(f"app {tut.meta.app!r} is a password manager or a bank, which GhostGuide won't work in")
+
     for i, s in enumerate(tut.steps, start=1):
         at = f"step {s.n}"
+        if is_sensitive_app(s.app):
+            r.errors.append(f"{at}: app {s.app!r} is a password manager or a bank, which GhostGuide won't work in")
         if s.n != i:
             r.errors.append(f"{at}: steps must be numbered 1..N in order (expected {i})")
         if not s.title.strip():

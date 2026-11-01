@@ -15,7 +15,7 @@ import socket
 from dataclasses import dataclass, field
 from html import unescape
 from html.parser import HTMLParser
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Callable, Optional
 from urllib.parse import unquote, urljoin, urlparse
 
@@ -277,8 +277,11 @@ def _local_loader(html_path: Path) -> Callable[[str], Optional[bytes]]:
     def load(src: str) -> Optional[bytes]:
         if src.startswith(("http:", "https:", "data:", "file:")):
             return None     # a saved page keeps what it needs beside it; nothing more is fetched
+        name = unquote(src.split("?")[0])
+        if PureWindowsPath(name).anchor or name.startswith(("/", "\\")):
+            return None     # resolving a network path would already connect to that machine, and offer it your login
         folder = html_path.parent.resolve()
-        p = (folder / unquote(src.split("?")[0])).resolve()
+        p = (folder / name).resolve()
         # Beside the page only: `src` is the page's text, and these pictures go to a model.
         return p.read_bytes() if p.is_relative_to(folder) and p.is_file() else None
     return load

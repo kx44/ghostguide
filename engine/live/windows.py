@@ -29,6 +29,7 @@ KIND_PROGRAMS = {
     "browser": ("chrome", "msedge", "firefox", "brave", "opera"),
     "terminal": ("windowsterminal", "powershell", "pwsh", "cmd", "conhost"),
 }
+SHELL_PROGRAMS = KIND_PROGRAMS["terminal"] + ("wt", "openconsole", "powershell_ise", "wsl", "bash", "mintty", "alacritty", "wezterm-gui", "putty")
 KIND_ALIASES = {"windows terminal": "terminal", "powershell": "terminal", "windows powershell": "terminal",
                 "command prompt": "terminal", "cmd": "terminal", "web browser": "browser"}
 SAME_APP = {"vs code": "Visual Studio Code", "vscode": "Visual Studio Code", "code": "Visual Studio Code"}     # what titles say
@@ -54,6 +55,18 @@ class Win:
 class Program:
     exe: str = ""                        # file name without .exe, lower case
     description: str = ""                # what the file calls itself: "Microsoft Word" for WINWORD.EXE
+
+
+def names_in(name: str, title: str) -> bool:
+    """The whole name, in whole words: a tutorial's "e" isn't every window with an e in its title."""
+    name = name.strip()
+    return sum(c.isalnum() for c in name) >= 2 and re.search(rf"(?<!\w){re.escape(name)}(?!\w)", title, re.I) is not None
+
+
+def is_terminal(app: str) -> bool:
+    """A name that means a command line."""
+    low = app.strip().casefold()
+    return KIND_ALIASES.get(low, low) == "terminal"
 
 
 def foreign_browser(title: str, wanted: str) -> bool:
@@ -109,7 +122,7 @@ def pick(wins: list[Win], label: str, program_of: Optional[Callable[[Win], Progr
             return found
     names = APP_KINDS.get(kind, (label,))
     titled = [w for w in usable if not foreign_browser(w.title, label)]
-    found = next((w for w in titled if any(n.casefold() in w.title.casefold() for n in names)), None)
+    found = next((w for w in titled if any(names_in(n, w.title) for n in names)), None)
     if found or program_of is None:
         return found
     return next((w for w in titled if program_is(label, program(w))), None)
@@ -232,7 +245,9 @@ def same_process(hwnd: int) -> list[Win]:
         if p.value == pid.value:
             r = frame(int(h))
             if r[2] > 4 and r[3] > 4:
-                out.append(Win(hwnd=int(h), title="", rect=r))
+                buf = ctypes.create_unicode_buffer(256)
+                u32.GetWindowTextW(h, buf, 256)
+                out.append(Win(hwnd=int(h), title=buf.value, rect=r))
         return True
 
     u32.EnumWindows(proto(cb), 0)
@@ -363,6 +378,14 @@ def use_front(label: str) -> Optional[str]:
 
 def find(label: str) -> Optional[Win]:
     return pick(top_windows(), label, lambda w: program(w.hwnd), bound_to(label))
+
+
+def same_program(label: str, app: str) -> bool:
+    """Does this name find a window of that app's own program, and not just another window whose title has the words in it?"""
+    w, a = find(label), find(app)
+    if w is None or a is None:
+        return False
+    return w.hwnd == a.hwnd or (bool(program(w.hwnd).exe) and program(w.hwnd).exe == program(a.hwnd).exe)
 
 
 def in_front(label: str) -> bool:

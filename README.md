@@ -125,7 +125,7 @@ GhostGuide can see an app's window and press keys in it, so its limits are in th
 - **Compile scores are short of their targets** in the table above. Compiled steps can need fixing by hand, and the base file is meant to be readable for that.
 - **The compiled mug hasn't finished in one clean run,** only in pieces. Sight can still put an outline on the wrong small icon.
 - **The mug's runs had help a person wouldn't.** A script drew the sketch geometry. In those runs the handle comes out as a separate body, cause not found.
-- **Do it for me doesn't draw,** and only runs in SOLIDWORKS so far.
+- **Do it for me doesn't draw,** and doesn't run in VS Code or a command line.
 - **The Modal endpoint can be woken by anyone who has its URL,** though they get no answer. See the [privacy page](docs/privacy-and-security.md#the-modal-endpoint).
 - **Not a sandbox.** A tutorial can still give bad advice. Treat one from a stranger as you would any code from the internet.
 

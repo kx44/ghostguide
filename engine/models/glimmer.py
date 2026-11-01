@@ -85,7 +85,7 @@ def spark_contributor(client=None, model: str = config.SPARK_CONTRIBUTOR) -> Cal
 
 
 def as_jpeg(png: bytes, quality: int = 85) -> bytes:
-    """Less than half the bytes of the PNG; the upload to Modal (us-east) is part of every check's time."""
+    """Less than half the bytes of the PNG; the upload to Modal is part of every check's time."""
     import io
     from PIL import Image
 

@@ -320,6 +320,7 @@ class Tracker:
         self.gate: Optional[Callable[[], Optional[str]]] = None    # why the app's window mustn't go to a model now, or None
         self.gate_for: Optional[Callable[[str], Optional[str]]] = None    # …for another app a step names
         self.front_is: Optional[Callable[[str], bool]] = None      # is this app the one you're in?
+        self.same_program: Optional[Callable[[str], bool]] = None  # does this name find a window of the app's own program?
         self.ladder.clock = clock
         self.showing_since = clock()              # when the step on screen came up
 
@@ -436,15 +437,23 @@ class Tracker:
         """A step may watch any window it names, but only the apps the tutorial works in go to a model."""
         if activity.local_only():
             return "set to stay on this PC"
-        if step.target.kind == "window" and step.action != "shortcut" and not self._tutorial_app(step.target.label):
-            return "it isn't the tutorial's app"
+        if step.target.kind == "window" and step.action != "shortcut":
+            if not self._tutorial_app(step.target.label):
+                return "it isn't the tutorial's app"
+            if self.gate_for is not None:         # the window this step's picture is of, not the app's
+                return self.gate_for(step.target.label)
         if step.app and self.gate_for is not None:
             return self.gate_for(step.app)
         return self.gate() if self.gate is not None else None
 
     def _tutorial_app(self, label: str) -> bool:
         low = label.casefold()
-        return low in self.app_window.casefold() or any(s.app and s.app.casefold() == low for s in self.tutorial.steps)
+        if any(s.app and s.app.casefold() == low for s in self.tutorial.steps):
+            return self.front_is is None or self.front_is(label)      # never a picture of a window you've left
+        if self.same_program is not None:
+            return self.same_program(label)
+        from engine.live.windows import names_in
+        return names_in(label, self.app_window)
 
     def _ask_model(self, step: Step, w: _StepWatch, now: float, img, for_model) -> Verdict:
         """The window changed and no rule can tell, so look. Models are slow and cost money, and this runs every

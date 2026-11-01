@@ -269,7 +269,8 @@ async def serve(player: Optional[Player], port: int = DEFAULT_PORT, record: Opti
             # through this very loop, so on the loop itself that waits two seconds for nothing and then fails.
             out = await asyncio.to_thread(p.apply_checked, checked)
         v = p.tracker.cache.get(checked[0]) if checked else None
-        said = (checked[0], v.result, v.why) if v else None
+        # A model's reason can describe what's on your screen, so it stays out of the log.
+        said = (checked[0], v.result, f"{v.stage} said so" if v.stage in ("glimmer", "spark") else v.why) if v else None
         if said != last_check:
             log(f"  check step {said[0]}: {said[1]} ({said[2]})" if said else "  check: -")
             last_check = said

@@ -8,5 +8,6 @@ def _activity_log(tmp_path, monkeypatch):
 
     monkeypatch.setattr(activity, "LOG", tmp_path / "activity.jsonl")
     monkeypatch.setattr(activity, "_pictures", 0)
+    monkeypatch.setattr(activity, "SWITCH", tmp_path / "screen-stays-here")
     monkeypatch.setattr(activity, "_local_only", False)
     monkeypatch.setattr(activity, "_withheld_t", {})

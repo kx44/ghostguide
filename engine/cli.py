@@ -79,7 +79,7 @@ def cmd_activity(args) -> int:
 
 def cmd_forget(args) -> int:
     """What this PC holds for GhostGuide, and removing it."""
-    from engine.forget import holdings, remove
+    from engine.forget import holdings, kept, remove
 
     items = holdings()
     total = sum(i["bytes"] for i in items)
@@ -91,7 +91,7 @@ def cmd_forget(args) -> int:
         return 0
     for i in items:
         remove(Path(i["path"]))
-    print("Removed.")
+    print(f"Removed, apart from {len(kept)} files something still has open. Close GhostGuide and run this again." if kept else "Removed.")
     return 0
 
 
@@ -162,7 +162,13 @@ def _kept_on_pc(window: str):
     if activity.local_only():
         return "set to stay on this PC"
     w = windows.find(window)
-    return activity.title_withheld(w.title) if w else None
+    if w is None:
+        return None
+    p = windows.program(w.hwnd)
+    if activity.is_sensitive_app(p.exe) or activity.is_sensitive_app(p.description):
+        return "it's a password manager or a bank"
+    # Its dialogs and menus are in the same picture.
+    return next(filter(None, map(activity.title_withheld, [w.title, *(o.title for o in windows.same_process(w.hwnd))])), None)
 
 
 def _is_vscode(app: str) -> bool:
@@ -189,7 +195,7 @@ def _across_apps(player, tut, locator) -> None:
 
     def executor_for(step):
         app = step.app or locator.window
-        return None if _is_vscode(app) else Executor(app)
+        return None if _is_vscode(app) or windows.is_terminal(app) else Executor(app)
 
     player.executor_for = executor_for
     player.use_window = windows.use_front
@@ -299,7 +305,7 @@ def _for_hard_apps(player, tut, locator, args) -> None:
                              "ok": False, "use_window": True})
         return items
 
-    player.executor = Executor(window)
+    player.executor = None if windows.is_terminal(window) else Executor(window)
     player.start_items = start_items
     player.use_window = windows.use_front
     player.window_name = window
@@ -380,6 +386,8 @@ def _tracker(tut, app_window: str, args):
     tracker = Tracker(tut, app_window, Path(args.folder) if args.folder else None, dump,
                       ladder=Ladder(glimmer=glimmer, spark=spark), idle_s=watcher.recent.idle_s, grab=grab)
     tracker.gate = lambda: _kept_on_pc(app_window)
+    tracker.gate_for = _kept_on_pc
+    tracker.same_program = lambda label: windows.same_program(label, app_window)
     return tracker, folder_fn
 
 
@@ -510,7 +518,7 @@ class _Both:
 
 
 def _log_to_file() -> None:
-    """cache/logs/engine.log: this run only. What each step's finder and check said, never what's on the screen."""
+    """cache/logs/engine.log: this run only. How each step's finder and check went. A model's reasons for a check aren't kept."""
     try:
         config.LOGS.mkdir(parents=True, exist_ok=True)
         sys.stdout = _Both(sys.stdout, (config.LOGS / "engine.log").open("w", encoding="utf-8"))

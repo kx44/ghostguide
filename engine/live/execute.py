@@ -14,6 +14,8 @@ import time
 from dataclasses import dataclass
 from typing import Optional
 
+from engine.activity import is_sensitive_app
+from engine.live.windows import SHELL_PROGRAMS, is_terminal
 from engine.schema.messages import Box
 from engine.schema.tutorial import Step
 
@@ -67,7 +69,9 @@ def unsafe(step: Step) -> Optional[str]:
     keys = _step_keys(step)
     if keys is not None and not isinstance(keys, list):
         return "its keys aren't a list"       # `keys: Esc` read letter by letter would be a chord of E, S and C
-    if keys and _key_set(keys) in NEVER_KEYS:
+    if step.app and is_terminal(step.app):
+        return "a command is yours to read and run"
+    if keys and any(never <= _key_set(keys) for never in NEVER_KEYS):
         return "it would switch away from the app"
     if keys and len(keys) > 1 and not _key_set(keys) & MODIFIERS:
         return "those are separate keys, not one press"
@@ -96,12 +100,25 @@ def can_do(step: Step, box: Optional[Box]) -> bool:
     return box is not None or bool(step.target.shortcut)     # no box, but one key press does the same
 
 
-def needs_confirm(step: Step, stage: str, box: Optional[Box] = None, vouched: bool = False) -> bool:
-    """A shortcut needs no box; UIA's box is exact; so is a box the app's tooltip, a second look or a remembered look has
-    vouched for. Anything else found by sight or memory waits for a second press. So does a key that deletes, wherever it
-    came from."""
+def risky(step: Step) -> Optional[str]:
+    """What this press would do that's worth a second look, however sure the box is: a key that deletes, or text sent with
+    Enter, which is how a command runs. Ending a rename with Enter is neither. → what to say, or None."""
+    from engine.live.locate.uia import in_tree
+
     keys = _step_keys(step)
     if keys and _key_set(keys) & {"del"}:
+        return "That key deletes. If it's what you want, press again."
+    if step.action == "type" and str(step.params.get("then_key", "")).strip().casefold() in ("enter", "return"):
+        if not (step.target.kind == "tree_item" or in_tree(step.target.where)):
+            return f"This types \"{_value(step)}\" and presses Enter. If it's what you want, press again."
+    return None
+
+
+def needs_confirm(step: Step, stage: str, box: Optional[Box] = None, vouched: bool = False) -> bool:
+    """A shortcut needs no box; UIA's box is exact; so is a box the app's tooltip, a second look or a remembered look has
+    vouched for. Anything else found by sight or memory waits for a second press. So does anything `risky`, wherever it
+    came from."""
+    if risky(step):
         return True
     if box is None or vouched or stage in SURE_STAGES or step.action == "shortcut":
         return False
@@ -177,6 +194,11 @@ class Executor:
         fg = windows.foreground()
         if fg is None or _pid(fg.hwnd) != pid:
             return f"Bring {self.app_window} to the front first, so nothing goes to another window."
+        p = windows.program(fg.hwnd)
+        if any(op.kind != "click" for op in ops) and p.exe in SHELL_PROGRAMS:
+            return "That's a command line: a command is yours to read and run. Copy it from the card."
+        if is_sensitive_app(fg.title) or is_sensitive_app(p.exe) or is_sensitive_app(p.description):
+            return "That's a password manager or a bank, so nothing is pressed in it for you."
         for op in ops:
             if op.kind == "click":
                 # From there, not from here: the cursor is on our card, whose overlay takes the mouse until it leaves.
