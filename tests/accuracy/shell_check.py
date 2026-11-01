@@ -490,11 +490,14 @@ def main(argv=None) -> int:
         pics = "(()=>{const t=document.getElementById('text');return {shown:[...t.querySelectorAll('img')].filter(i=>i.complete&&i.naturalWidth>0).length,waiting:[...t.querySelectorAll('img')].filter(i=>!i.complete).length,said:[...t.querySelectorAll('p')].filter(p=>p.textContent.startsWith('A picture goes here')).length}})()"
         p = wait(lambda: (lambda v: v if v and not v["waiting"] else None)(src.js(pics)), 20) or src.js(pics)
         record("text: each picture shows, or says the site hasn't sent it", p["shown"] + p["said"] >= 10 and not p["waiting"], **p)
-        if p["said"]:
-            click_in_source(src, "#pics")
-            q = wait(lambda: (lambda v: v if v and v["shown"] >= 10 and not v["waiting"] else None)(src.js(pics)), 30) or src.js(pics)
-            record("text: Load the page's pictures brings them in", q["shown"] >= 10, **q)
-            bring_probe()
+        click_in_source(src, "#page")
+        record("text: Show the page opens a window of its own", bool(wait(lambda: next((w for w in windows.top_windows() if w.title == "GhostGuide: page"), None), 15)))
+        site = wait(lambda: page("engineersrule"), 20)
+        seen = wait(lambda: (lambda v: v if v and v["shown"] and v["at"] > 0 else None)(site.js("({shown:[...document.images].filter(i=>i.complete&&i.naturalWidth>200).length,at:scrollY})")), 25) if site else None
+        record("text: and its pictures show, at the step's section", bool(seen) and seen["shown"] > 0 and seen["at"] > 0, seen=seen)
+        shot("5b-page")
+        if site:
+            site.close()
         shot("5-text")
         bring_probe()
         hotkey("right")     # past the start check
@@ -508,6 +511,7 @@ def main(argv=None) -> int:
         src.close()
         hotkey("o")
         wait(lambda: not source_open(), 4)
+        record("text: closing the source closes the page", not any(w.title == "GhostGuide: page" for w in windows.top_windows()))
 
         # ---------- the tray ----------
         rig.start_engine(VIDEO, "tray")

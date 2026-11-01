@@ -51,7 +51,8 @@ class Recorder:
 
 
 async def serve(player: Optional[Player], port: int = DEFAULT_PORT, record: Optional[Path] = None,
-                log=print, inputs=None, importer: Optional[Callable] = None, opener: Optional[Callable] = None) -> None:
+                log=print, inputs=None, importer: Optional[Callable] = None, opener: Optional[Callable] = None,
+                on_end: Optional[Callable[[], None]] = None) -> None:
     """`inputs`: a live/inputs.Recent fed by the input watcher; a click or a pause after typing wakes the
     step check at once instead of at the next tick. `player` may be None until a tutorial is opened.
     `importer(msg, progress)` compiles and returns a CompileDone; `opener(path)` returns (Player, inputs)."""
@@ -286,6 +287,8 @@ async def serve(player: Optional[Player], port: int = DEFAULT_PORT, record: Opti
                  asyncio.create_task(round_loop(poke_check, check_round))]
         try:
             await ended
+            if on_end is not None:        # a read of a window can be mid-way, and must not keep the port or the process
+                on_end()
         finally:
             for t in tasks:
                 t.cancel()

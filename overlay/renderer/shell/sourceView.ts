@@ -1,6 +1,7 @@
 // The source window: the step's clip, its section of the text, or why neither is on this PC. It only shows what the
 // engine sends. The tutorial's words go in as text, never as HTML. The one thing that loads from the web is a picture a
-// saved page didn't keep, from the address the page gives for it, with no referrer.
+// saved page didn't keep, from the address the page gives for it, with no referrer. Show the page opens the real one in a
+// window of its own, which is the way to see pictures a site won't send to anything else.
 import type { SourceBlock, SourceBridge, SourceViewMsg } from "../../shared/messages";
 
 declare global { interface Window { ghostSource: SourceBridge } }
@@ -11,8 +12,6 @@ const player = $<HTMLVideoElement>("player");
 let view: SourceViewMsg | undefined;
 let doc: string | undefined;
 let stopAt: number | undefined;         // pause here, unless you've moved past it yourself
-let missing: { p: HTMLElement; b: SourceBlock }[] = [];      // pictures the site wouldn't send so far
-let visited = false;                    // you've asked for the page once this run
 
 function shown(id: "video" | "text" | "none") {
   for (const k of ["video", "text", "none"] as const) $(k).hidden = k !== id;
@@ -47,11 +46,8 @@ function block(b: SourceBlock): HTMLElement {
     img.alt = b.text;
     img.addEventListener("error", () => {
       const p = document.createElement("p");
-      p.textContent = visited ? "The site didn't send this picture. Open in the browser to see it."
-                              : "A picture goes here, but the site hasn't sent it. Load the page's pictures below.";
-      if (!visited) missing.push({ p, b });
+      p.textContent = "A picture goes here, but the site didn't send it. Show the page below to see it.";
       img.replaceWith(p);
-      $("pics").hidden = visited;
     }, { once: true });
     return img;
   }
@@ -64,8 +60,6 @@ function block(b: SourceBlock): HTMLElement {
 function renderText(blocks: SourceBlock[]) {
   const box = $("text");
   box.textContent = "";
-  missing = [];
-  $("pics").hidden = true;
   let sec: HTMLElement | undefined, at: string | undefined;
   for (const b of blocks) {
     if (!sec || b.anchor !== at) {
@@ -100,6 +94,7 @@ function render(m: SourceViewMsg) {
   $("note").hidden = !m.note;
   $("note").textContent = m.note ?? "";
   $("replay").hidden = m.kind !== "video";
+  $("page").hidden = m.kind !== "text" || !m.link;
   $("link").hidden = !m.link;
   $("link").textContent = m.link_label ?? "Open in the browser";
   $("link").classList.toggle("pri", m.kind === "none");
@@ -123,18 +118,7 @@ function render(m: SourceViewMsg) {
 
 bridge.on(render);
 $("replay").addEventListener("click", () => { if (view?.video) cue(view, true); });
-$("pics").addEventListener("click", async () => {
-  if (!view?.link) return;
-  const btn = $<HTMLButtonElement>("pics");
-  btn.disabled = true;
-  btn.textContent = "Loading the page…";
-  await bridge.loadPictures(view.link);
-  visited = true;
-  btn.disabled = false;
-  btn.textContent = "Load the page's pictures";
-  btn.hidden = true;
-  for (const { p, b } of missing.splice(0)) p.replaceWith(block(b));    // now from the same address, with the visit behind them
-});
+$("page").addEventListener("click", () => { if (view?.link) bridge.showPage(view.link, view.where); });
 $("link").addEventListener("click", () => { if (view?.link) bridge.openLink(view.link); });
 $("choose").addEventListener("click", () => { if (view?.choose) bridge.choose(view.choose); });
 $("close").addEventListener("click", () => bridge.close());

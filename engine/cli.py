@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import glob
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -475,11 +476,16 @@ def _serve(player, args) -> int:
     _log_to_file()
     try:
         asyncio.run(serve(player, port=args.port, record=Path(args.record) if args.record else None,
-                          inputs=getattr(args, "_inputs", None), importer=_importer, opener=opener))
+                          inputs=getattr(args, "_inputs", None), importer=_importer, opener=opener, on_end=_ended))
     except KeyboardInterrupt:
         pass
-    print("Ended. Your place is kept, and this window can be closed.")
     return 0
+
+
+def _ended() -> None:
+    """The person ended it. Everything worth keeping is saved as it happens."""
+    print("Ended. Your place is kept, and this window can be closed.")
+    os._exit(0)
 
 
 class _Both:
