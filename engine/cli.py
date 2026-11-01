@@ -269,6 +269,7 @@ def _finder(app: str, window, args):
         vision = SparkVision(app, grab=grab_for_model, regions=solidworks)
         wonder = Wonder(app, version=version or "", grab=grab_for_model, store=store)
         box_check = BoxCheck(app, list(check_stages()), grab_for_model)      # off with the step checks: `nogpu`
+        vision.keep_first_box = bool(list(check_stages())) and not solidworks
     print(f"  app map: {store.builtin_path or 'no built-in map'} + local {store.local_path}")
 
     def clicked(box, since: float) -> bool:

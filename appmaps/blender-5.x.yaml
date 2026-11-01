@@ -44,6 +44,10 @@ Modifiers:
   where: "The blue wrench icon in the vertical row of tabs at the left edge of the Properties editor, on the right of the window"
   aliases: []
   source: Blender 5.2 manual
+Thickness:
+  where: "The number box to the right of the word Thickness, in the Solidify panel. Point at the box, not the word"
+  aliases: []
+  source: Checked on screen, Blender 5.2.1 (barrel run, 2 Nov 2026)
 Eye:
   where: "The eye icon at the right of the Outliner row named in the step"
   aliases: []

@@ -173,6 +173,7 @@ class SparkVision:
         self.regions = regions
         self.clock = clock
         self.max_calls = max_calls
+        self.keep_first_box = False  # a box check follows, so a closer look's miss needn't throw the first box away
         self.last_how = ""
         self.last_line: Optional[Line] = None
         self.last_route: Optional[dict] = None
@@ -392,5 +393,9 @@ class SparkVision:
                 memo.box = to_screen(call, ZOOM, (origin[0] + x0, origin[1] + y0))
                 memo.conf, memo.how = call.confidence, f"vision: Spark pointed, zoomed in ({call.confidence})"
                 return
-        # Close up, it isn't there: the first look was at something else. A miss, which gets another try.
+        # Close up, it can't say: short plain words look like nothing at twice the size. The first box stands, low, and the
+        # box check after this decides. With no box check, it's a miss, which gets another try.
+        if self.keep_first_box:
+            memo.conf, memo.how = "low", "vision: the closer look couldn't say, so the first box stands"
+            return
         memo.box, memo.conf, memo.how = None, "", "vision: the closer look didn't find it"

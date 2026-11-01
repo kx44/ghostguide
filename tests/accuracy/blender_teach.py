@@ -18,7 +18,6 @@ MESH = (385, 112, 225, 24)
 CYLINDER = (640, 254, 200, 24)
 SHADING = (2062, 80, 26, 24)
 POPOVER = {"MatCap": (2013, 215, 116, 28), "Shadow": (1898, 908, 22, 22), "Cavity": (1925, 982, 22, 22)}
-MODES = {"Edge Select": (249, 79, 24, 24), "Face Select": (276, 79, 24, 24)}
 
 
 def main() -> int:
@@ -57,15 +56,6 @@ def main() -> int:
         draw.rectangle((b[0], b[1], b[0] + b[2], b[1] + b[3]), outline=(255, 0, 0), width=2)
     shot.crop((1500, 60, 2560, 1040)).save(config.CACHE / "screenshots" / "blender" / "teach2.png")
     d.hover(1090, 720, settle=0.8)
-    d.keys("Tab", settle=1.0)
-    for label, box in MODES.items():
-        teach(label, box)
-    shot = ImageGrab.grab()
-    draw = ImageDraw.Draw(shot)
-    for b in MODES.values():
-        draw.rectangle((b[0], b[1], b[0] + b[2], b[1] + b[3]), outline=(255, 0, 0), width=1)
-    shot.crop((0, 50, 700, 130)).resize((1400, 160)).save(config.CACHE / "screenshots" / "blender" / "teach3.png")
-    d.keys("Tab", settle=1.0)
     return 0
 
 

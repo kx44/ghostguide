@@ -22,6 +22,7 @@ from engine import config
 from engine.basefile.parse import parse_file
 from engine.dpi import make_dpi_aware
 from engine.live import windows
+from tests.accuracy import blender_teach
 from tests.accuracy import mug_walk as mw
 from tests.accuracy import sw_drive as d
 
@@ -34,22 +35,27 @@ u32 = ctypes.windll.user32
 KEEP_MOUSE = {15, 16, 17, 38}     # a Blender popover closes when the mouse leaves it
 TOP_CUT, BOTTOM_CUT = (1058, 702), (1058, 826)
 TOP_RING, BOTTOM_RING = (1058, 695), (1058, 834)
-THICKNESS = (2406, 580)           # the first number in a Solidify panel, measured
+FIELDS = {"Thickness": (2406, 580), "Vertices": (375, 1012)}      # in their panels, measured
+CANVAS = {1: (1090, 720), 7: (1090, 720), 22: (1075, 770), 26: (1058, 650)}
 
 
 def show_off() -> None:
     """The finished thing, framed and turning, as anyone looks at what they've just made."""
     d.hover(*viewport(), settle=0.3)
-    d.keys("A", settle=0.5)
-    u32.keybd_event(0x6E, 0, 0, 0)     # numpad full stop: frame what's selected
-    u32.keybd_event(0x6E, 0, 2, 0)
-    time.sleep(1.5)
     d.keys("Alt", "A", settle=1.0)
-    for _ in range(26):
-        u32.keybd_event(0x66, 0, 0, 0)  # numpad 6: orbit
-        u32.keybd_event(0x66, 0, 2, 0)
-        time.sleep(0.35)
+    for _ in range(9):
+        u32.mouse_event(0x0800, 0, 0, 120, 0)     # wheel: closer; the view turns about the barrel
+        time.sleep(0.15)
     time.sleep(1.0)
+    x, y = 300, 700
+    u32.SetCursorPos(x, y)
+    time.sleep(0.2)
+    u32.mouse_event(0x20, 0, 0, 0, 0)             # middle button held: orbit
+    for i in range(240):
+        u32.SetCursorPos(x + i * 5, y)
+        time.sleep(0.03)
+    u32.mouse_event(0x40, 0, 0, 0, 0)
+    time.sleep(1.5)
 
 
 def viewport() -> tuple[int, int]:
@@ -70,13 +76,13 @@ def press(*names: str) -> None:
 def click_with(keys: tuple[str, ...], x: int, y: int) -> None:
     d.hover(x, y, settle=0.3)
     for k in keys:
-        u32.keybd_event(VK[k], 0, 0, 0)
+        u32.keybd_event(VK[k], u32.MapVirtualKeyW(VK[k], 0), 0, 0)
         time.sleep(0.15)
     try:
         d.click(x, y, settle=0.8)
     finally:
         for k in reversed(keys):
-            u32.keybd_event(VK[k], 0, 2, 0)
+            u32.keybd_event(VK[k], u32.MapVirtualKeyW(VK[k], 0), 2, 0)
 
 
 OUTLINER_TOP, OUTLINER_ROW, NAME_X, EYE_X = 184, 29, 2260, 2498
@@ -139,6 +145,11 @@ def act(step, w: mw.Walk) -> dict:
             press("Esc")
             press("Esc")
             time.sleep(1.5)
+            if attempt == 0 and step.target.label == "Cylinder":      # the finder lost a hop: what a person does, reading the card's route
+                d.click(398, 91, settle=0.8)
+                d.hover(490, 124, settle=1.0)
+                d.click(740, 266, settle=1.2)
+                return {**out, "how": "followed the card's route by hand: the finder lost a hop", "lost_hop": True}
         return {**out, "missing": "the route didn't get to its last chip"}
     if step.action == "type":
         value = str(step.params.get("value", ""))
@@ -147,12 +158,21 @@ def act(step, w: mw.Walk) -> dict:
             time.sleep(0.8)
             return {**out, "how": f"typed {value} into the open menu"}
         if step.target.kind != "canvas":
-            if out.get("do_it"):
+            if out.get("do_it") and step.target.label != "Thickness":     # sight boxes that word, and Ctrl+A over a modifier applies it
                 return {**out, **w.do_it(n), "how": "Do it for me"}
-            if b is None and step.target.label != "Thickness":
+            at = FIELDS.get(step.target.label) if b is None or step.target.label == "Thickness" else mw.box_center(b)
+            if at is None:
                 return {**out, "missing": "no box to type into"}
-            d.click(*(mw.box_center(b) if b else THICKNESS), count=2, settle=0.6)
+            hide = step.target.label in FIELDS      # a card with nothing to point at can sit on the field
+            if hide:
+                d.keys("Ctrl", "Alt", "H", settle=1.0)
+            d.click(*at, count=2, settle=0.6)
             d.keys("Ctrl", "A", settle=0.2)
+            d.text(value)
+            d.keys(str(step.params.get("then_key", "Enter")), settle=0.8)
+            if hide:
+                d.keys("Ctrl", "Alt", "H", settle=1.0)
+            return {**out, "how": f"typed {value} in a measured field" if hide else f"typed {value}"}
         d.text(value)
         d.keys(str(step.params.get("then_key", "Enter")), settle=0.8)
         return {**out, "how": f"typed {value}"}
@@ -160,6 +180,13 @@ def act(step, w: mw.Walk) -> dict:
         d.click(*viewport(), settle=0.5)
         d.click(*viewport(), settle=0.8)
         return {**out, "how": "placed the cut in the middle of the object"}
+    if b is None and n in CANVAS:      # sight misses geometry sometimes: measured in this view, as a sketch is in mug_walk
+        at = CANVAS[n]
+        if kind in VK:
+            click_with((kind,), *at)
+        else:
+            d.click(*at, settle=0.8)
+        return {**out, "how": "clicked it, measured: sight missed it"}
     if b is None:
         short = out.get("shortcut")
         if short and "," not in short and " or " not in short:
@@ -197,6 +224,9 @@ def main(argv=None) -> int:
         raise SystemExit("Blender didn't open")
     time.sleep(4 if fresh else 1)
     d.front()
+    if fresh:
+        blender_teach.main()        # a warm map: the first run on a PC has to find all of this by sight
+        d.hover(*viewport(), settle=0.3)
     mw.TUTORIAL = TUTORIAL
     eng = mw.Engine(restart=fresh)
     rows = []

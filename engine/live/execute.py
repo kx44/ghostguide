@@ -278,7 +278,7 @@ def _click(op: Op) -> None:
     time.sleep(0.12)                                            # let the app's hover catch up, or it ignores the click
     try:
         for v in mods:
-            u32.keybd_event(v, 0, 0, 0)
+            u32.keybd_event(v, u32.MapVirtualKeyW(v, 0), 0, 0)      # with no scan code, Blender doesn't see Shift
         for _ in range(op.count):
             u32.mouse_event(down, 0, 0, 0, 0)
             time.sleep(0.04)                                    # a press and release in the same instant can be dropped
@@ -286,7 +286,7 @@ def _click(op: Op) -> None:
             time.sleep(0.05)
     finally:
         for v in reversed(mods):
-            u32.keybd_event(v, 0, 2, 0)
+            u32.keybd_event(v, u32.MapVirtualKeyW(v, 0), 2, 0)
 
 
 def _keys(keys: tuple[str, ...]) -> None:
@@ -294,9 +294,9 @@ def _keys(keys: tuple[str, ...]) -> None:
     u32 = ctypes.windll.user32
     vks = [_vk(k) for k in keys]
     for v in vks:
-        u32.keybd_event(v, 0, 0, 0)
+        u32.keybd_event(v, u32.MapVirtualKeyW(v, 0), 0, 0)
     for v in reversed(vks):
-        u32.keybd_event(v, 0, 2, 0)
+        u32.keybd_event(v, u32.MapVirtualKeyW(v, 0), 2, 0)
 
 
 def _text(text: str, still_ok=lambda: True, send=None) -> bool:
