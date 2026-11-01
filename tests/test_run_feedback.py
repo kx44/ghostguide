@@ -304,16 +304,93 @@ def test_the_card_gets_a_picture_held_on_this_pc(tmp_path, monkeypatch):
     s = _saved_mug(tmp_path, monkeypatch, True)
     assert s.picture(MUG.step(1)).startswith("file:")
     view = s.view(MUG.step(1), 45)
-    assert view.figure.image and view.choose is None
+    assert view.figure.image
 
 
-def test_a_picture_only_on_the_web_stays_off_the_card_and_offers_a_saved_copy(tmp_path, monkeypatch):
+def test_a_picture_only_on_the_web_stays_off_the_card(tmp_path, monkeypatch):
     s = _saved_mug(tmp_path, monkeypatch, False)
     assert s.picture(MUG.step(1)) is None
     view = s.view(MUG.step(1), 45)
-    assert view.figure.web_image and view.choose == "page"
+    assert view.figure.web_image and view.choose is None
 
 
 def test_a_video_tutorials_card_has_no_picture():
     tut = parse_file("tutorials/youtube-clone-vscode.md")
     assert source.Sources(tut).picture(tut.step(1)) is None
+
+
+# ---------- a page saved as one file
+def _single_file(path, html, pictures):
+    from email.message import EmailMessage
+    msg = EmailMessage()
+    msg["Subject"] = "saved"
+    msg.make_mixed()
+    page = EmailMessage()
+    page.set_content(html, subtype="html")
+    page["Content-Location"] = "https://site.example/article"
+    msg.attach(page)
+    for where, data in pictures.items():
+        pic = EmailMessage()
+        pic.set_content(data, maintype="image", subtype="png")
+        pic["Content-Location"] = where
+        msg.attach(pic)
+    path.write_bytes(msg.as_bytes())
+
+
+def _png():
+    import io
+
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.effect_noise((400, 300), 60).convert("RGB").save(buf, "PNG")
+    return buf.getvalue()
+
+
+PAGE = ("<article><h2>Make the part</h2>" + TEXT + '<img src="https://site.example/a-1024.png" '
+        'srcset="https://site.example/a-1024.png 1024w, https://site.example/a-300.png 300w" width="660" height="354">' + TEXT + "</article>")
+
+
+def test_a_single_file_page_gives_its_own_pictures(tmp_path):
+    from engine.compile.adapters.web import from_file
+    f = tmp_path / "page.mhtml"
+    _single_file(f, PAGE, {"https://site.example/a-1024.png": _png()})
+    pics = [i for i in from_file(f).items if i.kind == "image"]
+    assert len(pics) == 1 and pics[0].image
+
+
+def test_it_takes_whichever_size_the_browser_kept(tmp_path):
+    from engine.compile.adapters.web import from_file
+    f = tmp_path / "page.mhtml"
+    _single_file(f, PAGE, {"https://site.example/a-300.png": _png()})
+    assert [i for i in from_file(f).items if i.kind == "image"][0].image
+
+
+def test_a_single_file_page_never_fetches(tmp_path, monkeypatch):
+    from engine.compile.adapters import web
+    monkeypatch.setattr(web, "fetch_limited", lambda *a, **k: pytest.fail("fetched"))
+    f = tmp_path / "page.mhtml"
+    _single_file(f, PAGE, {})
+    assert not [i for i in web.from_file(f).items if i.kind == "image" and i.image]
+
+
+def test_a_file_that_holds_no_page_says_what_to_save(tmp_path):
+    from engine.compile.adapters import SourceError
+    from engine.compile.adapters.web import from_file
+    f = tmp_path / "page.mhtml"
+    f.write_text("not a saved page", encoding="utf-8")
+    with pytest.raises(SourceError, match="Single File"):
+        from_file(f)
+
+
+def test_a_saved_challenge_page_is_explained(tmp_path):
+    from engine.compile.adapters import SourceBlocked
+    from engine.compile.adapters.web import from_file
+    f = tmp_path / "saved.html"
+    f.write_text("<html><title>Just a moment...</title></html>", encoding="utf-8")
+    with pytest.raises(SourceBlocked, match="security check"):
+        from_file(f)
+
+
+def test_a_compile_of_a_single_file_page_is_read_as_a_web_page():
+    from engine.compile.pipeline import WEB_FILES
+    assert ".mhtml" in WEB_FILES and ".mht" in WEB_FILES

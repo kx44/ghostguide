@@ -100,7 +100,6 @@ function render(m: SourceViewMsg) {
   $("link").textContent = m.link_label ?? "Open in the browser";
   $("link").classList.toggle("pri", m.kind === "none");
   $("choose").hidden = !m.choose;
-  $("choose").textContent = m.choose === "video" ? "Choose the video file…" : "Choose a saved copy…";
   if (m.kind === "video") {
     shown("video");
     cue(m, !m.follow || before === undefined);

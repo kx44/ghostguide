@@ -44,9 +44,8 @@ export class SourceWindow {
     });
     ipcMain.on("source:link", (e, url) => { if (e.sender === this.win?.webContents && isWebLink(url)) void shell.openExternal(url); });
     ipcMain.on("source:close", () => this.close());
-    ipcMain.on("source:choose", async (_e, kind: "video" | "page") => {
-      const extensions = kind === "video" ? ["mp4", "mkv", "webm", "mov", "avi"] : ["html", "htm", "txt", "md"];
-      const opts = { properties: ["openFile" as const], filters: [{ name: kind === "video" ? "Video" : "Saved page or text", extensions }] };
+    ipcMain.on("source:choose", async () => {
+      const opts = { properties: ["openFile" as const], filters: [{ name: "Video", extensions: ["mp4", "mkv", "webm", "mov", "avi"] }] };
       const got = this.win ? await dialog.showOpenDialog(this.win, opts) : await dialog.showOpenDialog(opts);
       if (!got.canceled && got.filePaths[0]) this.onChosen(got.filePaths[0]);
     });

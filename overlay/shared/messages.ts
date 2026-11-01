@@ -114,7 +114,7 @@ export interface SourceViewMsg {
   message?: string;        // why the source isn't here
   link?: string;           // http(s) only
   link_label?: string;
-  choose?: "video" | "page";
+  choose?: "video";
 }
 
 export type ToOverlay = GuideMsg | ClearMsg | StateMsg | ToastMsg | ShowMeMsg | MarkMsg | StartCheckMsg | CompileProgressMsg | CompileDoneMsg | SourceViewMsg;
@@ -164,7 +164,7 @@ export interface ShellInfo { keyBar: boolean; keys: KeyHint[] }
 export interface SourceBridge {
   on(cb: (m: SourceViewMsg) => void): void;
   openLink(url: string): void;
-  choose(kind: "video" | "page"): void;
+  choose(kind: "video"): void;
   close(): void;
 }
 

@@ -224,7 +224,7 @@ class SourceView(_Msg):          # shell/sourceView.ts
     message: Optional[str] = None       # why the source isn't here
     link: Optional[str] = None          # http(s) only
     link_label: Optional[str] = None
-    choose: Optional[Literal["video", "page"]] = None    # offer to pick a copy on this PC
+    choose: Optional[Literal["video"]] = None    # offer to pick the video file on this PC
 
 
 ToOverlay = Union[Guide, Clear, State, Toast, ShowMe, Mark, StartCheck, CompileProgress, CompileDone, SourceView]

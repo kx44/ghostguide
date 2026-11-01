@@ -199,7 +199,7 @@ def test_a_site_that_refuses_gets_a_clear_message_and_no_second_try(monkeypatch,
     v = s.view(_step(n=2, anchor="#2-then-that"), 5)
     assert v.kind == "none" and says in v.message and "example.com" in v.message
     assert s.to_fetch is None and len(asked) == 1
-    assert v.link == PAGE_URL + "#:~:text=then%20that" and v.choose == "page"
+    assert v.link == PAGE_URL + "#:~:text=then%20that" and v.choose is None
 
 
 def test_a_page_asked_about_while_loading_is_not_asked_again():
@@ -210,31 +210,13 @@ def test_a_page_asked_about_while_loading_is_not_asked_again():
     assert v.kind == "loading" and s.to_fetch is None
 
 
-def test_pasted_text_from_another_pc_offers_a_copy():
+def test_pasted_text_from_another_pc_says_so():
     v = sv.Sources(_tut("text", None)).view(_step(anchor="#x"), 5)
-    assert v.kind == "none" and v.link is None and v.choose == "page" and s_no_fetch(v)
+    assert v.kind == "none" and v.link is None and v.choose is None and s_no_fetch(v)
 
 
 def s_no_fetch(v) -> bool:
     return "isn't on this PC" in v.message
-
-
-def test_choosing_a_saved_page_after_a_refusal(tmp_path):
-    s = sv.Sources(_tut())
-    s.refused = "no"
-    page = tmp_path / "saved.html"
-    page.write_text("<html><body><article><h2>Part two</h2><p>" + "words " * 40 + "</p></article></body></html>", encoding="utf-8")
-    v = s.choose(str(page), _step(anchor="#part-two"), 5)
-    assert v.kind == "text" and v.anchor == "#part-two"
-
-
-def test_a_challenge_page_saved_by_mistake_is_explained(tmp_path):
-    s = sv.Sources(_tut())
-    s.refused = "no"
-    page = tmp_path / "saved.html"
-    page.write_text("<html><title>Just a moment...</title></html>", encoding="utf-8")
-    v = s.choose(str(page), _step(anchor="#x"), 5)
-    assert v.kind == "none" and "security check" in v.note
 
 
 def test_a_broken_index_is_nothing_held():

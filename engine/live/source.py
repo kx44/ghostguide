@@ -3,7 +3,7 @@
 A video opens at the step's `source.t`, a web page or text at its `source.anchor`. Nothing here is committed: tutorial
 files only say *what* the source is, and what this PC holds is kept in the cache as the compile reads it. On a PC
 that has none of it (a fresh clone), a video gets a link at the right moment, a web page gets one polite try, and a site
-that refuses gets a clear message, a link and the choice of a saved copy.
+that refuses gets a clear message and a link.
 """
 from __future__ import annotations
 
@@ -22,7 +22,6 @@ TAIL_S = 1.0
 MIN_CLIP_S = 6.0    # a keyframe's time can be a single moment: still show the action
 FETCH_TIMEOUT_S = 8
 VIDEO_FILES = (".mp4", ".mkv", ".webm", ".mov", ".avi")
-PAGE_FILES = (".html", ".htm", ".txt", ".md")
 
 
 # ---------- what this PC holds ----------
@@ -263,23 +262,21 @@ class Sources:
         if blocks is None:
             link = page_link(src.url, step.source.anchor)
             if self.refused:
-                return m.SourceView(kind="none", message=self.refused, link=link, link_label="Open in the browser", choose="page", **base)
+                return m.SourceView(kind="none", message=self.refused, link=link, link_label="Open in the browser", **base)
             if safe_link(src.url):
                 if not self.asked:
                     self.asked, self.to_fetch = True, src.url
                 return m.SourceView(kind="loading", message="Reading the page…", link=link, link_label="Open in the browser", **base)
             return m.SourceView(kind="none", message="The tutorial's text isn't on this PC. It was imported somewhere else, "
-                                "and only its steps came along. Choose a copy to read it here.", choose="page", **base)
+                                "and only its steps came along.", **base)
         anchors = [b["anchor"] for b in blocks if b.get("anchor")]
         anchor = resolve_anchor(step.source.anchor, anchors)
         heading = next((b["text"] for b in blocks if b["kind"] == "heading" and b.get("anchor") == anchor), None)
         note = None if anchor or not step.source.anchor else "This copy has no section matching this step, so here's the whole tutorial."
         figure = figure_for(step, blocks, anchor)
-        missing = any(b.get("web_image") for b in blocks)     # a saved copy that holds its pictures would put them on the cards too
         return m.SourceView(kind="text", where=heading, doc=str(src.hash or src.url), blocks=[m.SourceBlock(**b) for b in blocks],
                             figure=m.SourceBlock(**figure) if figure else None, anchor=anchor, note=note,
-                            link=page_link(src.url, step.source.anchor, heading), link_label="Open in the browser",
-                            choose="page" if missing else None, **base)
+                            link=page_link(src.url, step.source.anchor, heading), link_label="Open in the browser", **base)
 
     def fetch(self, url: str) -> None:
         """One try, under our own name. Runs outside the player's lock. Afterwards view() has the words or the reason."""
@@ -293,34 +290,20 @@ class Sources:
             remember_reading(ev, src.hash, src.url)
         except SourceBlocked:
             self.refused = (f"This page isn't saved on this PC, and {host} doesn't allow automatic reading. "
-                            "Open it in the browser, or choose a copy you saved.")
+                            "Open it in the browser.")
         except SourceError:
             self.refused = f"This page isn't saved on this PC, and {host} can't be reached right now."
         except Exception as e:    # a malformed link in a file, a full disk: a message, never "Reading the page…" for ever
             self.refused = f"This page isn't saved on this PC, and it couldn't be read here ({type(e).__name__})."
 
     def choose(self, path: str, step, of: int) -> m.SourceView:
-        """A copy the person picked: a video, a saved page or a text file. Goes with this tutorial from now on."""
+        """The video file the person picked. Goes with this tutorial from now on."""
         p = Path(path)
         src = self.tut.meta.source
         suffix = p.suffix.casefold()
-        wanted = VIDEO_FILES if src.type == "video" else PAGE_FILES
-        if not p.is_file() or suffix not in wanted:
+        if src.type != "video" or not p.is_file() or suffix not in VIDEO_FILES:
             view = self.view(step, of)
-            view.note = f"That isn't a {'video' if src.type == 'video' else 'saved page or text'} file."
+            view.note = "That isn't a video file."
             return view
-        if src.type == "video":
-            remember_video(p, 0.0, src.hash, src.url)
-            return self.view(step, of)
-        from engine.compile.adapters import SourceError, text, web
-
-        try:
-            ev = web.from_file(p, web_images=True) if suffix in (".html", ".htm") else text.from_file(p)
-        except SourceError as e:
-            view = self.view(step, of)
-            view.note = str(e)
-            return view
-        remember_reading(ev, src.hash, src.url)
-        self.refused = None
-        self._blocks = None
+        remember_video(p, 0.0, src.hash, src.url)
         return self.view(step, of)

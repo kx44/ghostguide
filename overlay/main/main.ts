@@ -223,7 +223,7 @@ app.whenReady().then(() => {
   ipcMain.on("import:close", () => importWin?.close());
   ipcMain.handle("import:pick", async () => {
     const opts = { properties: ["openFile" as const], filters: [
-      { name: "Tutorials", extensions: ["html", "htm", "txt", "md", "mp4", "mkv", "webm", "mov", "avi"] }] };
+      { name: "Tutorials", extensions: ["html", "htm", "mhtml", "mht", "txt", "md", "mp4", "mkv", "webm", "mov", "avi"] }] };
     const got = importWin ? await dialog.showOpenDialog(importWin, opts) : await dialog.showOpenDialog(opts);
     return got.canceled ? undefined : got.filePaths[0];
   });

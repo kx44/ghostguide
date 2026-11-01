@@ -5,6 +5,8 @@ and don't retry in disguise.
 """
 from __future__ import annotations
 
+import email
+import email.policy
 import hashlib
 import io
 import ipaddress
@@ -33,6 +35,8 @@ USER_AGENT = "GhostGuide/0.1 (tutorial importer)"
 MAX_PAGE_BYTES = 8 * 2 ** 20
 MAX_IMAGE_BYTES = 20 * 2 ** 20
 MAX_REDIRECTS = 5
+SINGLE_FILES = (".mhtml", ".mht")
+MAX_SINGLE_FILE_BYTES = 200 * 1024 * 1024
 CHALLENGE = ("just a moment", "performing security verification", "verify you are human", "enable javascript and cookies")
 
 
@@ -44,6 +48,7 @@ class _Block:
     src: Optional[str] = None
     anchor: Optional[str] = None
     web: Optional[str] = None       # the picture's address on the site, for a saved page that didn't keep it
+    others: tuple[str, ...] = ()    # its other sizes: a browser saves whichever one it showed
 
 
 def web_address(a: dict, min_side: int) -> Optional[str]:
@@ -120,7 +125,8 @@ class _Reader(HTMLParser):
                 src = a.get("src") or a.get("data-src") or ""
                 if src:
                     self._flush()
-                    self.page.blocks.append(_Block("image", a.get("alt", "").strip(), self._path(), src=src, web=web_address(a, MIN_IMAGE_SIDE)))
+                    self.page.blocks.append(_Block("image", a.get("alt", "").strip(), self._path(), src=src, web=web_address(a, MIN_IMAGE_SIDE),
+                                                   others=tuple(p.split()[0] for p in a.get("srcset", "").split(",") if p.split())))
             elif tag == "br" and self.open_block:
                 self.buf.append("\n")
             return
@@ -292,7 +298,8 @@ def _web_loader(base: str) -> Callable[[str], Optional[bytes]]:
     return load
 
 
-def from_html(html: str, url: Optional[str], load_image: Callable[[str], Optional[bytes]], web_images: bool = False) -> Evidence:
+def from_html(html: str, url: Optional[str], load_image: Callable[[str], Optional[bytes]], web_images: bool = False,
+              offline: bool = False) -> Evidence:
     """`web_images`: for the source view, a picture that isn't here keeps its web address. Never for a compile: nothing goes
     to a model that wasn't saved with the page."""
     if looks_blocked(200, html):
@@ -316,6 +323,8 @@ def from_html(html: str, url: Optional[str], load_image: Callable[[str], Optiona
             digest.update(b.text.encode())
         else:
             data = load_image(b.src or "")
+            for other in b.others if offline else ():
+                data = data or load_image(other)
             jpeg = to_jpeg(data) if data else None
             if jpeg:
                 items.append(Item("image", b.text, anchor=anchor, image=jpeg))
@@ -333,6 +342,32 @@ def from_url(url: str) -> Evidence:
     return from_html(fetch_page(url), url, _web_loader(url))
 
 
+def _from_single_file(path: Path, web_images: bool) -> Evidence:
+    """A page saved as one file (Chrome's "Webpage, Single File"): the page and its pictures together, as the browser held them
+    when it was saved. So nothing is fetched, and a site that refuses automatic reading doesn't come into it."""
+    if path.stat().st_size > MAX_SINGLE_FILE_BYTES:
+        raise SourceError(f"{path.name} is too big to read.")
+    msg = email.message_from_bytes(path.read_bytes(), policy=email.policy.default)
+    html, base = None, ""
+    pictures: dict[str, bytes] = {}
+    for part in msg.walk():
+        if part.is_multipart():
+            continue
+        where = str(part.get("Content-Location") or "")
+        if part.get_content_type() == "text/html" and html is None:
+            html, base = part.get_content(), where
+        elif part.get_content_maintype() == "image" and where:
+            pictures[where] = part.get_payload(decode=True) or b""
+    if html is None:
+        raise SourceError(f"{path.name} doesn't hold a page. Save it from your browser as \"Webpage, Single File\".")
+
+    def load(src: str) -> Optional[bytes]:
+        return pictures.get(src) or pictures.get(urljoin(base, src))
+    return from_html(html, None, load, web_images, offline=True)
+
+
 def from_file(path: Path, web_images: bool = False) -> Evidence:
     path = Path(path)
+    if path.suffix.casefold() in SINGLE_FILES:
+        return _from_single_file(path, web_images)
     return from_html(path.read_text(encoding="utf-8", errors="replace"), None, _local_loader(path), web_images)

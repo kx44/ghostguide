@@ -35,7 +35,7 @@ SCORES = config.LOGS / "scores.jsonl"
 VIDEO_HOSTS = re.compile(r"^https?://([\w-]+\.)?(youtube\.com|youtu\.be|vimeo\.com)/", re.I)
 VIDEO_FILES = (".mp4", ".mkv", ".webm", ".mov", ".avi")
 TEXT_FILES = (".txt", ".md")
-WEB_FILES = (".html", ".htm")
+WEB_FILES = (".html", ".htm", ".mhtml", ".mht")
 
 # Share of the progress bar each stage ends at.
 STAGES = {"read": 0.25, "extract": 0.65, "merge": 0.84, "explain": 0.9, "enrich": 0.96, "save": 1.0}

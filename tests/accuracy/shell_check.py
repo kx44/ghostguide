@@ -453,7 +453,7 @@ def main(argv=None) -> int:
         wait(source_open, 15)
         src = source_page()
         said = wait(lambda: (lambda t: t if t and "automatic reading" in t or (t and "reached" in t) else None)(src.js("document.getElementById('message').innerText")), 15)
-        record("fresh clone, refusing site: explained, with a link and a saved copy", bool(said) and bool(src.js("!document.getElementById('link').hidden && !document.getElementById('choose').hidden")), message=said)
+        record("fresh clone, refusing site: explained, with a link", bool(said) and bool(src.js("!document.getElementById('link').hidden && document.getElementById('choose').hidden")), message=said)
         shot("4-refused")
         src.close()
         hotkey("o")
