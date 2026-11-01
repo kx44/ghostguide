@@ -28,7 +28,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-from engine import config
+from engine import activity, config
 
 OUT = config.CACHE / "screenshots" / "shell"
 LOGS = config.LOGS
@@ -149,6 +149,7 @@ def main(argv=None) -> int:
     if idle_s() < IDLE_S and not args.force:
         print(f"Someone used this PC {idle_s():.0f} s ago. Not taking the mouse.")
         return 3
+    switch_was = activity.SWITCH.exists()      # this presses the tray's switch, which is remembered for your next run
 
     import uiautomation as auto
     from PIL import ImageGrab
@@ -583,6 +584,7 @@ def main(argv=None) -> int:
     finally:
         rig.stop()
         probe_proc.terminate()
+        activity.SWITCH.touch() if switch_was else activity.SWITCH.unlink(missing_ok=True)
         (LOGS / "shell_check.json").write_text(json.dumps(results, indent=1, ensure_ascii=False), encoding="utf-8")
     done = [r for r in results if r["ok"] is not None]
     print(f"\n{sum(1 for r in done if r['ok'])} of {len(done)} passed; {len(results) - len(done)} need a look")

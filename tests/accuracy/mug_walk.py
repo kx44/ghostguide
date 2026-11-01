@@ -235,7 +235,7 @@ class Walk:
             self.e.send("do_it")
             self.wait(lambda: len(self.e.toasts) > said, 6)
             said = len(self.e.toasts)
-            if self.e.toasts and "Check the outline" not in self.e.toasts[-1]:
+            if self.e.toasts and "press again" not in self.e.toasts[-1]:
                 break
         if self.e.current == n and self.e.toasts and "nothing sure" in self.e.toasts[-1]:
             return self.click_target(n)
