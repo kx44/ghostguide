@@ -40,7 +40,7 @@ flowchart LR
   O --> A["Your real app"]
 ```
 
-**Compile once.** A source becomes a base file: what to do, on which control, described by meaning and never by screen position, plus how to tell it's done. Replies are cached, so a tutorial is only paid for once. See [the format](docs/base-format.md).
+**Compile once.** A source becomes a base file: what to do, on which control, described by meaning and never by screen position, plus how to tell it's done. The model's replies are saved, so compiling the same tutorial again costs nothing. See [the format](docs/base-format.md).
 
 **Play live.** For each step, the engine tries the cheapest way first and stops at the first sure answer:
 
@@ -60,7 +60,7 @@ flowchart TD
   D --> check
 ```
 
-Your clicks are never blocked, Next always works, and Skip never pretends a step was checked.
+GhostGuide never stops you clicking. You can always press Next to move on, and a step you skip is marked as skipped, not as done.
 
 ## What the models do
 
@@ -71,7 +71,7 @@ Your clicks are never blocked, Next always works, and Skip never pretends a step
 | **Muse Voice Transcribe** | Meta API | A video's narration when captions can't be had |
 | **Muse Glimmer** (open weights) | Your own Modal GPU, via [`deploy/modal_glimmer.py`](deploy/modal_glimmer.py) | "Here's the screen, is this step done?" for what a rule can't see, such as geometry appearing. It runs off the PC, because locally it took about 23 s a check on a 12 GB laptop GPU |
 
-No model runs on your PC.
+The models all run online, so you don't need a graphics card.
 
 ## Measured results
 
