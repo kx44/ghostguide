@@ -6,7 +6,7 @@ GhostGuide reads an existing tutorial, a YouTube video or a web article, and com
 
 It's built on Meta's models for the Meta Global AI Developer Hackathon, in the *Push the Frontier* theme. Most of what it does live is plain code; models step in when that can't tell.
 
-> Windows only. Tested with VS Code 1.14x and SOLIDWORKS 2026 on one PC. See [Limits](#limits-stated-plainly).
+> Windows only. Tested with VS Code 1.14x, SOLIDWORKS 2026 and Blender 5.2 on one PC. See [Limits](#limits-stated-plainly).
 
 ## How it works
 
@@ -61,10 +61,13 @@ From `tests/accuracy/`, on one PC at 2560×1600 and 150 %, with scripts driving 
 | Compiled video against its hand-written reference | **0.74** step match (target 0.85, missed); typed text 0.97 |
 | Compiled article against its reference | **0.71** raw (target 0.70, met), 0.73 allowing for what the app changed since 2016 (target 0.80, missed) |
 | Compiled video, playing live | 18 of 18 targets found, no check failed |
-| Hand-written VS Code tutorial through the real overlay | Every step moved on by itself; hide and resume landed on the right step |
+| Hand-written VS Code tutorial through the real overlay | 29 of 29 checks. Every step moved on by itself; hide and resume landed on the right step |
+| Compiled Blender barrel from a blog post, 57 steps | 57 of 57 on one part, 25 moved on by themselves, 32 needed Next. A script clicked 7 outliner rows and 2 fields at measured positions, followed one route by hand and placed the loop cuts, and the compiled file was corrected by hand first |
 | Hand-written SOLIDWORKS mug, 45 steps, model checks off | Finished on one part, twice in a row. 28 steps moved on by themselves, 17 needed Next. A script drew the canvas geometry |
 | Spark on the SOLIDWORKS ribbon, cropped and zoomed | 9 of 9 (5 of 9 on the whole window) |
-| Glimmer step checks, measured 31 Oct on Modal | 8 of 9 right, 3.4–5.4 s each; the miss is a handle in hidden-lines view |
+| Glimmer step checks on Modal | 9 of 9 right, 3.2–4.3 s each, 20.7 s on the first call while the GPU wakes |
+| Overlay's own controls, through the real window | 52 of 52 scripted, 1 left for the eye (tray focus). Run it alone: other programs taking focus fail it |
+| Unit tests | 600 passed |
 
 ## Run it
 
@@ -88,6 +91,12 @@ SOLIDWORKS maximised, no document open. The VS Code tutorial needs its start sta
 
 ```bash
 scripts\dev.bat tutorials\youtube-clone-vscode.md --restart --window "youtube-clone - Visual Studio Code"
+```
+
+The compiled tutorials in `tutorials/compiled/` play the same way, for example Blender's barrel, starting from Blender's default scene:
+
+```bash
+scripts\dev.bat tutorials\compiled\blender-barrel.compiled.md --restart
 ```
 
 **Import your own:**
@@ -121,10 +130,14 @@ GhostGuide can see an app's window and press keys in it, so its limits are in th
 ## Limits, stated plainly
 
 - **Windows only,** and tuned on one PC at one scale. A second monitor and other display scales haven't been checked properly. Only a US keyboard is tested, and Ctrl+Alt is AltGr on many layouts.
-- **Two apps have rule packs:** VS Code and SOLIDWORKS 2026. Others fall back on names and aliases, then vision, which costs money and is less sure.
+- **Two apps have rule packs:** VS Code and SOLIDWORKS 2026. Blender has a built-in map but no rules. Others fall back on names and aliases, then vision, which costs money and is less sure. A tutorial can name a different app per step and move between them.
 - **Compile scores are short of their targets** in the table above. Compiled steps can need fixing by hand, and the base file is meant to be readable for that.
 - **The compiled mug hasn't finished in one clean run,** only in pieces. Sight can still put an outline on the wrong small icon.
 - **The mug's runs had help a person wouldn't.** A script drew the sketch geometry. In those runs the handle comes out as a separate body, cause not found.
+- **The hand-written mug hasn't finished with model checks on.** The best run stopped at step 18 of 45.
+- **Blender's run had help too,** listed in the results above, so a person following it would meet more "Not found" cards. Finding Add › Mesh › Cylinder is unreliable, many steps never check done, and a card with nothing to point at can cover the operator panel.
+- **Do it for me's Ctrl+A can hit a Blender hotkey if its click misses a field.** Don't use it on field steps there.
+- **Roblox Studio hasn't been walked end to end,** only five chosen steps of its 67.
 - **Do it for me doesn't draw,** and doesn't run in VS Code or a command line.
 - **The Modal endpoint can be woken by anyone who has its URL,** though they get no answer. See the [privacy page](docs/privacy-and-security.md#the-modal-endpoint).
 - **Not a sandbox.** A tutorial can still give bad advice. Treat one from a stranger as you would any code from the internet.
@@ -135,7 +148,7 @@ GhostGuide can see an app's window and press keys in it, so its limits are in th
 engine/      Python: the compiler (compile/), the live loop (live/), the one door to the models (models/)
 overlay/     Electron + TypeScript: draws what the engine says, decides nothing
 appmaps/     What's known about each app's controls, from its docs: no positions
-tutorials/   Two hand-written reference tutorials, and what the compiler made of their sources
+tutorials/   Two hand-written reference tutorials; compiled/ holds what the compiler made of real sources
 deploy/      Muse Glimmer on Modal
 docs/        The base format; privacy and security
 tests/       Unit tests; accuracy/ drives the real apps
@@ -145,3 +158,6 @@ Tutorial sources stay the authors'. Videos and saved pages are never committed: 
 
 - Video: [How To Design A YouTube Clone With HTML/CSS](https://www.youtube.com/watch?v=rhPSo4_Tgi0), Web Dev Simplified
 - Article: [10 Steps to Creating Your First Product in SOLIDWORKS](https://www.engineersrule.com/10-steps-creating-first-product-solidworks/), Simon Martin, Engineers Rule
+- Blog post: [Blender Barrel](https://sites.google.com/view/game-dev-guide/home/blender/blender-barrel), Game Dev Journey
+- Video: [ABSOLUTE Beginner Basics.. Roblox Studio For Noobs 2025](https://www.youtube.com/watch?v=-5OOovmkJss), RoBuilder
+- Docs: [Virtual Environments and Packages](https://docs.python.org/3/tutorial/venv.html), the Python tutorial

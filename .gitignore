@@ -16,6 +16,10 @@ __pycache__/
 node_modules/
 overlay/out/
 dist/
+@AutomationLog.txt
+
+# Screenshots for the accuracy checks can show anything on screen
+tests/fixtures/screens/*.png
 
 # Editor / OS
 .obsidian/workspace.json

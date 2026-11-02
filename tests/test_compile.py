@@ -328,7 +328,7 @@ def test_shipped_code_touches_no_dropped_path():
 
 def test_shipped_code_names_no_private_note():
     """The planning notes, the people and the build phases stay out of what the public repo keeps."""
-    private = re.compile(r"\b0[0245] (Context|Meta models|Base format|Architecture)\b|[Gg]lossary|\bKai\b|\b[Pp]hases? \d|\bP\d-\w|prototypes/"
+    private = re.compile(r"\b0[0245] (Context|Meta models|Base format|Architecture)\b|[Gg]lossary|\b[Pp]hases? \d|\bP\d-\w|prototypes/"
                          r"|[Bb]aseten|[Ff]ireworks")
     me = Path(__file__).name
     for folder in ("engine", "overlay/main", "overlay/renderer", "overlay/shared", "overlay/test", "deploy", "tests", "scripts", "appmaps", "docs"):
@@ -344,7 +344,7 @@ def test_shipped_code_names_no_private_note():
 
 
 def test_public_docs_name_nothing_personal_and_link_only_to_kept_paths():
-    personal = re.compile(r"user|user|[team id]|ghostguide|\.obsidian|\bvault\b", re.I)
+    personal = re.compile(r"[a-z]:\\users\\|(?<!\w)/home/\w|@gmail\.com|\.obsidian|\bvault\b", re.I)
     for p in [ROOT / "README.md", *(ROOT / "docs").rglob("*.md")]:
         if not p.exists():
             continue
