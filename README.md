@@ -8,6 +8,27 @@ It's built on Meta's models for the Meta Global AI Developer Hackathon, in the *
 
 > Windows only. Tested with VS Code 1.14x, SOLIDWORKS 2026 and Blender 5.2 on one PC. See [Limits](#limits-stated-plainly).
 
+![GhostGuide in Blender: the step's card points at the default cube, then at the Add Modifier menu](docs/demo.gif)
+
+*A blog post's Blender tutorial, playing over Blender itself.*
+
+<!-- Demo video: add the link here once it's uploaded -->
+
+## Quick start
+
+You can try it without a key. On Windows, with [Python 3.10+](https://www.python.org/downloads/), [Node 22](https://nodejs.org/) and [Blender](https://www.blender.org/download/) installed:
+
+```bash
+git clone https://github.com/kx44/ghostguide.git
+cd ghostguide
+py -m pip install pydantic pyyaml httpx websockets pillow uiautomation yt-dlp imageio-ffmpeg numpy pytest
+cd overlay && npm install && cd ..
+copy .env.example .env
+scripts\dev.bat tutorials\compiled\blender-barrel.compiled.md --restart
+```
+
+Open Blender's default scene first. Steps come up over it one at a time, and Ctrl+Alt+→ moves on. Without a key, each card shows the step and its menu route but can't point at the control, because Blender draws its own buttons, which Windows can't read. With your own Meta key and `FINDER_VISION=on`, it finds them on your screen, as in the GIF. VS Code and SOLIDWORKS controls can be found without a key. [Run it](#run-it) has the details, and [Bring your own keys](#bring-your-own-keys) also lets you compile your own tutorials.
+
 ## How it works
 
 ```mermaid
@@ -139,6 +160,24 @@ py -m pytest -q
 
 `tests/accuracy/` holds the Windows checks that drive the real apps. They take the mouse and keyboard.
 
+## Troubleshooting
+
+| What you see | What to do |
+|---|---|
+| Nothing is drawn over the app | Look at the engine's window. It should say `engine listening on ws://127.0.0.1:8765`, then `overlay connected`. If it closed or shows an error, another engine may still be running: close every GhostGuide window and start again |
+| "Can't find *the app*. Open it and click on it…" | Click inside the app, or press **Use this window** on the card. GhostGuide remembers your choice |
+| "Not found (…). You can still do it by hand; Next moves on." | Do the step yourself, then press Ctrl+Alt+→. Finding by sight needs a Meta key and `FINDER_VISION=on` |
+| The outline sits beside the control | Display scaling other than 150 % and second monitors aren't well tested. Try the app on the main monitor, maximised |
+| VS Code steps never move on by themselves | Turn on `"editor.accessibilitySupport": "on"` in the folder's `.vscode/settings.json`, so the editor's text can be read |
+| A web page won't import | The site refuses automatic reading. Scroll to the bottom of the page, save it with Ctrl+S → Webpage, Single File, and drop the file in |
+| `META_API_KEY is not set` | Put your key in `.env`, or set `MODEL_MODE=replay` to make no paid calls |
+| "This would pass the spending cap (BUDGET_USD)…" | Your own cap stopped it. Raise `BUDGET_USD` in `.env` only if you mean to spend more. `py -m engine spend` shows the total |
+| The first Glimmer check takes about 20 s | The GPU is waking up. Later checks take 3 to 5 s |
+| Ctrl+Alt shortcuts do nothing | On many non-US keyboards Ctrl+Alt is AltGr. Only a US layout is tested, so switch to one while you use GhostGuide |
+| Want to start a tutorial over | Add `--restart` to the command |
+
+`cache/logs/engine.log` shows how each step's finding and checking went in the last run. `py -m engine activity` lists everything that left your PC.
+
 ## Privacy and security
 
 GhostGuide can see an app's window and press keys in it, so its limits are in the code, with tests: [docs/privacy-and-security.md](docs/privacy-and-security.md).
@@ -172,11 +211,26 @@ overlay/     Electron + TypeScript: draws what the engine says, decides nothing
 appmaps/     What's known about each app's controls, from its docs: no positions
 tutorials/   Two hand-written reference tutorials; compiled/ holds what the compiler made of real sources
 deploy/      Muse Glimmer on Modal
-docs/        The base format; privacy and security
+docs/        The base format; privacy and security; the demo GIF
 tests/       Unit tests; accuracy/ drives the real apps
 ```
 
-Tutorial sources stay the authors'. Videos and saved pages are never committed: the files link to them.
+## Contributing
+
+Issues and pull requests are welcome. Before a pull request, run the checks:
+
+```bash
+py -m pytest -q
+cd overlay && npm run typecheck && npm run unit
+```
+
+- **A new tutorial:** write it in the [base format](docs/base-format.md), or compile one with `py -m engine compile`, then check it with `py -m engine validate "tutorials/*.md"`. Link to the source and credit its author. Don't commit the video or saved page.
+- **A new app:** add `appmaps/<app>-<version>.yaml` with facts from the app's own docs, such as names, aliases and menu routes. Never add screen positions: positions GhostGuide learns stay on your PC, in `%APPDATA%/GhostGuide/appmaps/`.
+- **Never commit** `.env`, `cache/` or screenshots of your screen.
+
+## Credits
+
+The tutorials belong to their authors. GhostGuide links to them, and never commits their videos or saved pages.
 
 - Video: [How To Design A YouTube Clone With HTML/CSS](https://www.youtube.com/watch?v=rhPSo4_Tgi0), Web Dev Simplified
 - Article: [10 Steps to Creating Your First Product in SOLIDWORKS](https://www.engineersrule.com/10-steps-creating-first-product-solidworks/), Simon Martin, Engineers Rule
