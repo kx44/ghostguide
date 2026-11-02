@@ -32,7 +32,7 @@ Open Blender's default scene first. Steps come up over it one at a time, and Ctr
 ## How it works
 
 ```mermaid
-flowchart LR
+flowchart TD
   S["A tutorial<br/>video, web page or text"] -.->|"once"| C["Compiler<br/>Transcribe, Spark 1.3"]
   C -.-> B["Base file<br/>steps as Markdown + YAML"]
   B --> E["Engine (Python)<br/>finds, checks, moves on"]
