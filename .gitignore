@@ -1,6 +1,5 @@
 # Source videos and big binaries
 sources/
-tools/.bin/
 tutorials/source/
 
 # Secrets
@@ -22,8 +21,6 @@ dist/
 tests/fixtures/screens/*.png
 
 # Editor / OS
-.obsidian/workspace.json
 .vscode/
 Thumbs.db
 
-video/public/generated/
