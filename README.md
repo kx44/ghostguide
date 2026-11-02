@@ -60,7 +60,7 @@ flowchart TD
   D --> check
 ```
 
-GhostGuide never stops you clicking. You can always press Next to move on, and a step you skip is marked as skipped, not as done.
+GhostGuide is only an overlay, so your clicks go straight through to the app. You can always press Next to move on, and a step you skip is marked as skipped, not as done.
 
 ## What the models do
 
