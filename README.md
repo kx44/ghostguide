@@ -71,15 +71,37 @@ From `tests/accuracy/`, on one PC at 2560×1600 and 150 %, with scripts driving 
 
 ## Run it
 
-You need Windows, Python 3.10+ and Node 22.
+### What to install
+
+| You need | Get it from | What for |
+|---|---|---|
+| Windows | | GhostGuide reads and draws over Windows apps. It doesn't run on macOS or Linux |
+| Python 3.10+ | [python.org](https://www.python.org/downloads/) | The engine. The `py` command comes with it |
+| Node 22 | [nodejs.org](https://nodejs.org/) | The overlay. `npm install` fetches Electron |
+| Git | [git-scm.com](https://git-scm.com/downloads) | To clone this repo |
+| The tutorial's app | Its maker | For example VS Code, SOLIDWORKS or Blender. GhostGuide runs over your own copy |
 
 ```bash
+git clone https://github.com/kx44/ghostguide.git
+cd ghostguide
 py -m pip install pydantic pyyaml httpx websockets pillow uiautomation yt-dlp imageio-ffmpeg numpy pytest
 cd overlay && npm install && cd ..
 copy .env.example .env
 ```
 
-The recorded and rule-based parts run with no keys. To compile tutorials or use model looks, put your Meta API key in `.env` and set `MODEL_MODE=live`. `BUDGET_USD` caps what the engine may spend: each call is refused if its worst case would pass it. For Glimmer, the setup steps are at the top of `deploy/modal_glimmer.py`.
+### Bring your own keys
+
+**This repo comes with no API key and no shared service. Everything you turn on runs on your own accounts, and you pay for what you use.** Keys go in your `.env`, which git ignores. Never commit it or share it.
+
+| What you want | What you need | In `.env` | Cost to you |
+|---|---|---|---|
+| Play the tutorials in this repo, with rules and pixel checks | Nothing | Leave as copied | Free |
+| Compile your own tutorials; find controls by sight | A Meta API key from [dev.meta.ai](https://dev.meta.ai) | `META_API_KEY=your key`, `MODEL_MODE=live`, `FINDER_VISION=on` | Meta's prices. A first compile was about $0.25 for an article and $0.62 for a 9-minute video |
+| Muse Glimmer step checks | A [Modal](https://modal.com) account, with the steps at the top of [`deploy/modal_glimmer.py`](deploy/modal_glimmer.py) (`py -m pip install modal`, then `py -m modal setup`) | `CHECK_MODELS=on`, `GLIMMER_MODAL_URL=your endpoint`, `GLIMMER_MODAL_TOKEN=your token` | Modal's GPU prices, about $2.24 an hour while it's up. It stops after five idle minutes |
+
+`BUDGET_USD` caps what the engine may spend with Meta, $4 by default: each call is refused if its worst case would pass it. It doesn't cap Modal, so check that on Modal's dashboard. `MODEL_MODE=replay`, the default, never calls a paid API. Without a key, compiling and finding by sight aren't available, and a step only rules can't check needs Next.
+
+### Use it
 
 **Follow a tutorial:**
 
@@ -161,3 +183,7 @@ Tutorial sources stay the authors'. Videos and saved pages are never committed: 
 - Blog post: [Blender Barrel](https://sites.google.com/view/game-dev-guide/home/blender/blender-barrel), Game Dev Journey
 - Video: [ABSOLUTE Beginner Basics.. Roblox Studio For Noobs 2025](https://www.youtube.com/watch?v=-5OOovmkJss), RoBuilder
 - Docs: [Virtual Environments and Packages](https://docs.python.org/3/tutorial/venv.html), the Python tutorial
+
+## License
+
+The code is under the [MIT License](LICENSE). The tutorials' own content still belongs to their authors, linked above, and the licence doesn't cover it.
