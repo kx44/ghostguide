@@ -12,7 +12,7 @@ It's built on Meta's models for the Meta Global AI Developer Hackathon, in the *
 
 *A blog post's Blender tutorial, playing over Blender itself.*
 
-<!-- Demo video: add the link here once it's uploaded -->
+**[▶ Watch the 3-minute demo on YouTube](https://www.youtube.com/watch?v=O9_6drakB3w)**
 
 ## Quick start
 
